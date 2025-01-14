@@ -17,8 +17,18 @@ Update env:
 conda env update --file local.yml --prune
 ```
 ## Installing
+After installing you should be able to `import peepholelib` and its submodules
+
 ```sh
 pip install .
+```
+
+## Developing
+Add the following line at the beginning of your scrip to be able to import the library without installing it.
+This is useful if your are developing code for the library or using a shared `venv`.
+```sh
+import sys
+sys.path.insert(0, '<cloning path>/peepholelib')
 ```
 
 ## Deep K-NN
