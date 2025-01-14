@@ -31,10 +31,8 @@ class CoreVectors():
         self._actds = {}
         
         # set in normalize_corevectors() 
-        self._norm_wrt = None
         self._norm_mean = None 
         self._norm_std = None 
-        self._is_normalized = None
         
         # Set on __enter__() and __exit__()
         # read before each function
@@ -47,60 +45,41 @@ class CoreVectors():
     def normalize_corevectors(self, **kwargs):
         self.check_uncontexted()
 
-        wrt = kwargs['wrt']
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
+        from_file = Path(kwargs['from_file']) if 'from_file' in kwargs else None
+        wrt = kwargs['wrt'] if 'wrt' in kwargs else None
+        to_file = Path(kwargs['to_file']) if 'to_file' in kwargs  else None
+        target_layers = kwargs['target_layers'] if 'target_layers' in kwargs  else None
+
+        if wrt == None and from_file == None:
+            raise RuntimeError(f'Specify `wrt` or `from_file`.')
         
-        if wrt not in self._corevds:
-            raise RuntimeError(f'{wrt} not in data. Choose from {self._corevds.keys()}')
-        
-        file_path = self.path/(self.name.name+'.normalization')
-        
-        if file_path.exists():
-            means, stds, is_normed, _wrt = torch.load(file_path)
-            if _wrt != wrt:
-                raise RuntimeError(f"Seems like there are corevectors normalized w.r.t. {_wrt}, which is different from the requested {wrt}. Unormalization and re-normalization is not implemented. Submit a PR if you contribute to it =). Doing nothing.")
-        else:
-            is_normed = {} 
-
-        # check for layers to be normalized for each dataloader
-        layers_to_norm = {}
-        cnt = 0
-        for ds_key in self._corevds:
-            layers_to_norm[ds_key] = []
-            if not ds_key in is_normed:
-                is_normed[ds_key] = []
-            for lk in self._model.get_target_layers():
-                if not lk in is_normed[ds_key]:
-                    layers_to_norm[ds_key].append(lk)
-                    cnt += 1
-        if verbose: print('Layers to norm: ', layers_to_norm)
-
-        if cnt == 0:
-            if verbose: print('All corevectors seems to be normalized. Doing nothing')
-            self._norm_mean = means
-            self._norm_std = stds
-            return
-        elif verbose: print(f'New unormalized layers: {layers_to_norm}. Running normalization.')
-
-        means = self._corevds[wrt]['coreVectors'].mean(dim=0)
-        stds = self._corevds[wrt]['coreVectors'].std(dim=0)
-
-        # TODO: It is excessive to renormalize all layers again (including the ones already normalized). Gotta change the logic to normalize only the ones in `layers_to_norm` 
+        if from_file != None:
+            if verbose: print(f'Loading normalization from {from_file}')
+            means, stds = torch.load(from_file)
+        else: # wrt will not be None
+            if verbose: print(f'Computing normalization from {wrt}')
+            means = self._corevds[wrt]['coreVectors'].mean(dim=0)
+            stds = self._corevds[wrt]['coreVectors'].std(dim=0)
+            
+        if target_list != None:
+            means = {key: means[key] for key in target_list}
+            stds = {key: stds[key] for key in target_list}
+            
         for ds_key in self._corevds:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
                 batch['coreVectors'] = (batch['coreVectors'] - means)/stds
+        
+        if to_file != None:
+            to_file.parent.mkdir(parents=True, exist_ok=True)
+            torch.save((means, stds), to_file)
 
-            is_normed[ds_key] = list(set(layers_to_norm[ds_key]).union(is_normed[ds_key])) 
-
-        if not file_path.exists(): torch.save((means, stds, is_normed, wrt), file_path)
         self._norm_mean = means
         self._norm_std = stds
-        self._is_normalized = is_normed
-        self._norm_wrt = wrt 
 
         return
 
@@ -138,6 +117,7 @@ class CoreVectors():
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         loaders = kwargs['loaders']
+        norm_file = Path(kwargs['norm_file']) if 'norm_file' in kwargs else None 
 
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
@@ -149,18 +129,12 @@ class CoreVectors():
 
             self._n_samples[ds_key] = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', self._n_samples[ds_key])
-        
-        norm_file_path = self.path/(self.name.name+'.normalization')
-        if norm_file_path.exists():
+       
+        if norm_file != None:
             if verbose: print('Loading normalization info.')
-            # TODO: should save and load these as non-tensor within tensordict
-            means, stds, is_normed, wrt = torch.load(norm_file_path)
+            means, stds = torch.load(norm_file_path)
             self._norm_mean = means 
             self._norm_std = stds
-            self._is_normalized = is_normed
-            self._norm_wrt = wrt
-        else:
-            if verbose: print('No normalization info found')
 
         return
     
