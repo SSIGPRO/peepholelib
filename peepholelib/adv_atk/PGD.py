@@ -7,7 +7,7 @@ from tensordict import MemoryMappedTensor as MMT
 from pathlib import Path as Path
 import abc 
 
-from adv_atk.attacks_base import AttackBase
+from .attacks_base import AttackBase
 from tqdm import tqdm
 
 

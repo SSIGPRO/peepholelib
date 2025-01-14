@@ -63,9 +63,12 @@ class CoreVectors():
             means = self._corevds[wrt]['coreVectors'].mean(dim=0)
             stds = self._corevds[wrt]['coreVectors'].std(dim=0)
             
-        if target_list != None:
-            means = {key: means[key] for key in target_list}
-            stds = {key: stds[key] for key in target_list}
+        if target_layers != None:
+            keys_to_pop = tuple(means.keys()-target_layers)
+
+            for k in keys_to_pop:
+                means.pop(k,default=None)
+                stds.pop(k,default=None)
             
         for ds_key in self._corevds:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
