@@ -7,7 +7,7 @@ from tensordict import MemoryMappedTensor as MMT
 from pathlib import Path as Path
 import abc 
 
-from adv_atk.attacks_base import AttackBase
+from .attacks_base import AttackBase
 from tqdm import tqdm
 
 
@@ -51,13 +51,13 @@ class myDeepFool(AttackBase):
             for ds_key in self._loaders:
                 self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
         else:
-            self.atk_path.mkdir(parents=True, exist_ok=True)
             
             self.atk = torchattacks.DeepFool(model=self.model,
                                              steps=self.steps,
                                              overshoot=self.overshoot)
 
     def get_ds_attack(self):
+        self.atk_path.mkdir(parents=True, exist_ok=True)
 
         attack_TensorDict = {}
         

@@ -63,7 +63,6 @@ class myPGD(AttackBase):
                     print(f"File not found: {e}. Please check if the dataset has been generated correctly.")
                 # self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
         else:
-            self.atk_path.mkdir(parents=True, exist_ok=True)
             
             self.atk = torchattacks.PGD(model=self.model, 
                                         eps=self.eps, 
@@ -77,6 +76,8 @@ class myPGD(AttackBase):
                 self.atk.get_least_likely_label
             
     def get_ds_attack(self):
+        
+        self.atk_path.mkdir(parents=True, exist_ok=True)
     
         attack_TensorDict = {}
         
