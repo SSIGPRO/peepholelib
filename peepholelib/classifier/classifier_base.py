@@ -25,9 +25,26 @@ def trim_corevectors(**kwargs):
     peep_size = kwargs['peep_size']
     return data['coreVectors'][layer][:,0:peep_size]
 
+def map_labels(**kwargs):
+    """
+    Maps original labels to superclasses if a mapping_dict exists.
+    """
+    labels = kwargs['data']
+    mapping_dict = kwargs.get('label_mapping', None)
+
+    if mapping_dict is None:
+        return labels
+        
+    mapped_labels = []
+    for label in labels:
+        for new_label, old_labels in mapping_dict.items():
+            if label in old_labels:
+                mapped_labels.append(new_label)
+    return torch.tensor(mapped_labels)
+
 def null_parser(**kwargs):
     data = kwargs['data']
-    return data['data'] 
+    return data
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
@@ -37,6 +54,8 @@ class ClassifierBase: # quella buona
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
         self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+        self.superclass_parser = kwargs['superclass_parser'] if 'superclass_parser' in kwargs else null_parser 
+        self.superclass_kwargs = kwargs['superclass_kwargs'] if 'superclass_kwargs' in kwargs and 'superclass_parser' in kwargs else dict() 
 
         # set in fit()
         self._fit_dl = None
@@ -78,7 +97,8 @@ class ClassifierBase: # quella buona
         for batch in tqdm(self._fit_dl, disable=not verbose):
             data = self.parser(data=batch, **self.parser_kwargs).to(self.device)
             preds = self._classifier.predict(data)
-            labels = batch['label']
+            # labels = batch['label']
+            labels = self.superclass_parser(data=batch['label'], **self.superclass_kwargs)
             for p, l in zip(preds, labels):
                 _empp[int(p), int(l)] += 1
         
