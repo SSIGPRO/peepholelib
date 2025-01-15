@@ -1,6 +1,7 @@
-from adv_atk import runutils_cw, attacks_base
+from .runutils_cw import *
+# import runutils_cw
 from tqdm import tqdm
-from adv_atk.attacks_base import AttackBase
+from .attacks_base import AttackBase
 from pathlib import Path as Path
 import abc 
 import numpy as np
@@ -264,8 +265,14 @@ class L2Adversary(object):
         # the type annotations here are used only for type hinting and do
         # not indicate the actual type (cuda or cpu); same applies to all codes
         # below
-        inputs = runutils_cw.make_cuda_consistent(model, inputs)[0]  # type: torch.FloatTensor
-        targets = runutils_cw.make_cuda_consistent(model, targets)[0]  # type: torch.FloatTensor
+        ###-------
+        # MODIFICA
+        ###-------
+        # inputs = runutils_cw.make_cuda_consistent(model, inputs)[0]  # type: torch.FloatTensor
+        # targets = runutils_cw.make_cuda_consistent(model, targets)[0]  # type: torch.FloatTensor
+
+        inputs = make_cuda_consistent(model, inputs)[0]  # type: torch.FloatTensor
+        targets = make_cuda_consistent(model, targets)[0]  # type: torch.FloatTensor
 
         # run the model a little bit to get the `num_classes`
         num_classes = model(Variable(inputs[0][None, :], requires_grad=False)).size(1)  # type: int
@@ -297,8 +304,11 @@ class L2Adversary(object):
         # the one-hot encoding of `targets`
         targets_oh = torch.zeros(targets.size() + (num_classes,))# type: torch.FloatTensor
         targets_oh = targets_oh.to(device)
-        
-        targets_oh = runutils_cw.make_cuda_consistent(model, targets_oh)[0]
+        ###-------
+        # MODIFICA
+        ###-------   
+        # targets_oh = runutils_cw.make_cuda_consistent(model, targets_oh)[0]
+        targets_oh = make_cuda_consistent(model, targets_oh)[0]
         targets_oh.scatter_(1, targets.unsqueeze(1), 1.0)
         targets_oh_var = Variable(targets_oh, requires_grad=False)
 
@@ -311,7 +321,12 @@ class L2Adversary(object):
         # For init_rand = True the perturbation is initialized as Normal noise
         if self.init_rand:
             nn.init.normal(pert_tanh, mean=0, std=1e-3)
-        pert_tanh = runutils_cw.make_cuda_consistent(model, pert_tanh)[0]
+
+        ###-------
+        # MODIFICA
+        ###-------
+        # pert_tanh = runutils_cw.make_cuda_consistent(model, pert_tanh)[0]
+        pert_tanh = make_cuda_consistent(model, pert_tanh)[0]
         pert_tanh_var = Variable(pert_tanh, requires_grad=True)
 
         optimizer = optim.Adam([pert_tanh_var], lr=self.optimizer_lr)
@@ -324,7 +339,11 @@ class L2Adversary(object):
                 scale_consts_np = upper_bounds_np
             scale_consts = torch.from_numpy(np.copy(scale_consts_np)).float()  # type: torch.FloatTensor
             scale_consts = scale_consts.to(device)
-            scale_consts = runutils_cw.make_cuda_consistent(model, scale_consts)[0]
+            ###-------
+            # MODIFICA
+            ###-------
+            # scale_consts = runutils_cw.make_cuda_consistent(model, scale_consts)[0]
+            scale_consts = make_cuda_consistent(model, scale_consts)[0]
             scale_consts_var = Variable(scale_consts, requires_grad=False)
             # print('Using scale consts:', list(scale_consts_np))  # FIXME
 
@@ -599,7 +618,7 @@ class myCW(AttackBase):
             for ds_key in self._loaders:
                 self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
         else:
-            self.atk_path.mkdir(parents=True, exist_ok=True)
+            
             targeted = False if self.mode == None else True
             
             self.atk = L2Adversary(targeted=targeted, 
@@ -613,6 +632,7 @@ class myCW(AttackBase):
                                    init_rand=False)
             
     def get_ds_attack(self):
+        self.atk_path.mkdir(parents=True, exist_ok=True)
     
         attack_TensorDict = {}
         
