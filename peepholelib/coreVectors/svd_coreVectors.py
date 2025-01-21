@@ -105,8 +105,11 @@ def get_coreVectors(self, **kwargs):
                     acts_pad = pad(acts, pad=padding, mode=pad_mode)
 
                     acts_flat = acts_pad.flatten(start_dim=1)
-                    ones = torch.ones(n_act, 1)
-                    _acts = torch.hstack((acts_flat, ones)).to(device)
+                    if layer.bias is None:
+                        _acts = acts_flat.to(device)
+                    else:
+                        ones = torch.ones(n_act, 1)
+                        _acts = torch.hstack((acts_flat, ones)).to(device)
                     phs = (reduct_m@_acts.T).T
                     cvs_data['coreVectors'][lk] = phs.cpu()
 

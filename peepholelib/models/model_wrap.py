@@ -143,12 +143,13 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - key_list (list): list of filtered keys from the state dict
         '''
         key_list = kwargs['target_layers']
-
+        print("key_list: ", key_list)
         _dict = {}
-
         for _str in key_list:
             layer = self.get_layer(layername=_str)
+            print("layer: ", layer)
             if layer != None:
+                print("dentro do if. layer: ", layer)
                 _dict[_str] = layer
 
         self._target_layers = _dict
@@ -217,9 +218,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         '''
         temp = self._model
         layer_name = kwargs['layername']
-
         keys = layer_name.split(".")
-        
         for p in keys:
             #check that all the strings in parts are actually keys of the dict temp._modules
             if p not in temp._modules.keys():

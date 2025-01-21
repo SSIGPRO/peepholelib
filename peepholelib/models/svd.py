@@ -1,4 +1,3 @@
-# python stuff
 import numpy as np
 from warnings import warn
 from pathlib import Path
@@ -8,7 +7,16 @@ import torch
 from tensordict import TensorDict
 from tensordict import MemoryMappedTensor as MMT
 
-def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1), device='cpu', verbose=False, warns=True):
+def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
+    if not isinstance(layer, torch.nn.Conv2d):
+        raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
+
+    weight = layer.weight
+    bias = layer.bias
+    groups = layer.groups
+    stride = layer.stride
+    padding = layer.padding
+    dilation = layer.dilation
 
     if dilation != (1,1):
         raise RuntimeError('This functions does not account for dilation, if you extendent it, please send us a PR ;).')
@@ -22,43 +30,65 @@ def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1)
     Hk = weight.shape[2]
     Wk = weight.shape[3]
     kernel = weight
+    kernel_size = Hk*Wk
+    input_size = Hin*Win
+    print(f"cin: {Cin}, cout: {Cout}, groups: {groups}")
+    # divide the input channels and output channels in groups, if groups > 1
+    assert Cin % groups == 0, "Cin must be divisible by groups"
+    assert Cout % groups == 0, "Cout must be divisible by groups"
+    Cin_g = Cin // groups  
+    Cout_g = Cout // groups 
+    if verbose:
+        print(" bias:", bias.shape if bias is not None else None)
+        print(f"nº of Cin per group: {Cin_g}, nº of Cout per group: {Cout_g}")
+        print(f"kernel height: {Hk}, kernel width: {Wk}, kernel size: {kernel_size}")
+        print(f"input height: {Hin}, input width: {Win}, input size: {input_size}")
 
     Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
     Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
+    output_size = Hout*Wout
 
-    shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win+1))
+    shape_out = torch.Size((Cout*output_size, Cin*input_size + (0 if bias is None else 1)))
     
-    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(Hk*Wk*Cin+1)).int()
+    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
     nnz = crow[-1]
     
     # getting columns
-    cols = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk+1, dtype=torch.int)
-    data = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk+1)
+    cols = torch.zeros(Cout*output_size, Cin*kernel_size + (0 if bias is None else 1), dtype=torch.int)
+    data = torch.zeros(Cout*output_size, Cin*kernel_size + (0 if bias is None else 1))
     
-    base_row = torch.zeros(Cin*Hk*Wk, dtype=torch.int)
-    for cin in range(Cin):
-        c_shift = cin*(Hin*Win)
+    base_row = torch.zeros(Cin_g*kernel_size, dtype=torch.int)
+    for cin in range(Cin_g):
+        c_shift = cin*input_size
         for hk in range(Hk):
             h_shift = hk*Win
             for wk in range(Wk):
-                idx = cin*Hk*Wk+hk*Wk+wk
+                idx = cin*kernel_size+hk*Wk+wk
                 w_shift = wk
                 base_row[idx] = c_shift+h_shift+w_shift
-        
-    for cout in range(Cout): 
-        k = kernel[cout]
-        _d = torch.hstack((k.flatten(), bias[cout]))
-        for ho in range(Hout):
-            h_shift = ho*Win*stride[0]
-            for wo in range(Wout):
-                w_shift = wo*stride[1]
-                idx = cout*Hout*Wout+ho*Wout+wo
-                shift = h_shift+w_shift
-                cols[idx,:-1] = base_row+shift
-                data[idx] = _d
+    
+    for group_id in range(groups):
+        # range to process within group
+        start_index_in = group_id * Cin_g
+        start_index_out = group_id * Cout_g
+        end_index_in = (group_id + 1) * Cin_g
+        end_index_out = (group_id + 1) * Cout_g
+        if verbose: print(f" Group {group_id}: from index {start_index_in} to {end_index_in}")
+        group_offset = start_index_in * input_size # for correct aligment w/input 
 
-    # add bias as the last column                    
-    cols[:,-1] = Cin*Hin*Win
+        for cout in range(start_index_out, end_index_out): 
+            k =  kernel[cout, :, :, :].flatten() 
+            for ho in range(Hout):
+                h_shift = ho*Win*stride[0]
+                for wo in range(Wout):
+                    w_shift = wo*stride[1]
+                    idx = cout*output_size+ho*Wout+wo
+                    shift = h_shift+w_shift+group_offset
+                    cols[idx, start_index_in * kernel_size : end_index_in * kernel_size] = base_row+shift
+                    data[idx, start_index_in * kernel_size : end_index_in * kernel_size] = k
+                    if bias is not None:
+                        cols[idx, -1] = Cin * Hin * Win  
+                        data[idx, -1] = bias[cout]
 
     cols = cols.flatten()
     data = data.flatten()
@@ -68,6 +98,7 @@ def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1)
 
 def get_svds(self, **kwargs):
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    device = kwargs['device'] if 'device' in kwargs else 'cpu'
     path = Path(kwargs['path'])
     name = Path(kwargs['name'])
 
@@ -99,12 +130,7 @@ def get_svds(self, **kwargs):
             print('conv layer')
             in_shape = self._hooks[lk].in_shape
             
-            # Apply padding
-            stride = layer.stride 
-            dilation = layer.dilation
-            padding = layer.padding
-
-            W_ = c2s(in_shape, weight, bias, stride=stride, padding=padding, dilation=dilation) 
+            W_ = c2s(in_shape, layer, device=device) 
             U, s, V = torch.svd_lowrank(W_, q=300)
             Vh = V.T
 
