@@ -21,25 +21,16 @@ class Cifar(DatasetBase):
             self.dataset = kwargs['dataset']
         else:
             self.dataset = 'CIFAR10'
-        print('dataset: %s'%self.dataset)
+        print('dataset: %s' % self.dataset)
 
-        if 'dataset_config' in kwargs:
-            self.config = kwargs['dataset_config']
-        else:
-            if self.dataset == 'CIFAR10':
-                self.config= {
-                        'num_classes': 10,
-                        'input_ch': 3,
-                        'means': (0.424, 0.415, 0.384),
-                        'stds': (0.283, 0.278, 0.284)
-                        }
-            elif self.dataset == 'CIFAR100':
-                self.config = {
-                        'num_classes': 100,       
-                        'input_ch': 3, 
-                        'means': (0.438, 0.418, 0.377), 
-                        'stds': (0.300, 0.287, 0.294)
-                        }
+        # raise error if the dataset is not CIFAR
+        if "cifar" not in self.dataset.lower():
+            raise ValueError("Dataset must be CIFAR")
+
+        '''
+        CIFAR10 num_classes: 10
+        CIFAR100 num_classes: 100
+        '''
         return
     
     def load_data(self, **kwargs):
@@ -47,12 +38,14 @@ class Cifar(DatasetBase):
         Load and prepare data for a specified portion of a dataset.
         
         Args:
-        - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100' or 'imagenet-1k').
+        - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100').
         - batch_size (int): The batch size for DataLoader.
         - data_kwargs (dict): Additional keyword arguments for DataLoader.
         - seed (int): Random seed for reproducibility (default: 42).
         - data_augmentation (bool): Flag indicating whether to apply data 
         augmentation (default: False).
+        - original_transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
+        - augmentation_transform (torchvision.transforms.Compose): Custom transform to apply to the augmented dataset. (default: CIFAR10/CIFAR100 transform)
         
         Returns:
         - dict: containing a DataLoader for 'train', 'val', 'test', and a dictionary mapping class indices to class names for 'classes'.
@@ -77,17 +70,25 @@ class Cifar(DatasetBase):
         seed = kwargs['seed']
 
         data_augmentation = kwargs['data_augmentation'] if 'data_augmentation' in kwargs else False
-        
+
         # set torch seed
         torch.manual_seed(seed)
 
         # original dataset without augmentation
-        original_transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(self.config['means'], self.config['stds'])
-        ])
-        
+        # accepts custom transform if provided in kwargs
+        if 'original_transform' in kwargs:
+            original_transform = kwargs['original_transform']
+            
+        # default transform (CIFAR10 / CIFAR100)    
+        else: 
+            if self.dataset == 'CIFAR10': normalize_transform = transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284))
+            else: normalize_transform = transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294)) # CIFAR100
+            original_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                normalize_transform
+            ])
+
         # Test dataset is loaded directly
         test_dataset = datasets.__dict__[self.dataset](
             root=self.data_path,
@@ -113,15 +114,19 @@ class Cifar(DatasetBase):
         # set validation dataset transform
         val_dataset.dataset.transform = original_transform
         
-        # Apply the transformation accoding to data augmentation 
+        # Apply the transformation according to data augmentation 
         if data_augmentation:
-            autoaugment_transform = transforms.Compose([
+            # accepts custom augmentation transform if provided in kwargs
+            # default transform is CIFAR10 / CIFAR100 AutoAugment
+            if self.dataset == 'CIFAR10': normalize_transform = transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284))
+            else: normalize_transform = transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294)) # CIFAR100
+            augmentation_transform = kwargs.get('augmentation_transform', transforms.Compose([
                 transforms.RandomResizedCrop(224),
                 transforms.AutoAugment(policy=AutoAugmentPolicy.CIFAR10), 
                 transforms.ToTensor(),
-                transforms.Normalize(self.config['means'], self.config['stds'])
-            ])
-            train_dataset.dataset.transform = autoaugument_transform 
+                normalize_transform
+            ]))
+            train_dataset.dataset.transform = augmentation_transform 
         else:
             train_dataset.dataset.transform = original_transform
      
