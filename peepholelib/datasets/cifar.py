@@ -41,7 +41,7 @@ class Cifar(DatasetBase):
         - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100').
         - batch_size (int): The batch size for DataLoader.
         - data_kwargs (dict): Additional keyword arguments for DataLoader.
-        - seed (int): Random seed for reproducibility (default: 42).
+        - seed (int): Random seed for reproducibility.
         - data_augmentation (bool): Flag indicating whether to apply data 
         augmentation (default: False).
         - original_transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
@@ -76,8 +76,7 @@ class Cifar(DatasetBase):
 
         # original dataset without augmentation
         # accepts custom transform if provided in kwargs
-        if 'original_transform' in kwargs:
-            original_transform = kwargs['original_transform']
+        if 'original_transform' in kwargs: original_transform = kwargs['original_transform']
             
         # default transform (CIFAR10 / CIFAR100)    
         else: 
