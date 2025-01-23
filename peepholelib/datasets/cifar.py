@@ -1,5 +1,6 @@
 # Our stuff
 from .dataset_base import DatasetBase
+from .transforms import vgg16_cifar100
 
 # General python stuff
 from pathlib import Path as Path
@@ -10,7 +11,7 @@ from torch.utils.data import random_split, DataLoader
 
 # CIFAR from torchvision
 from torchvision import transforms, datasets
-from torchvision.transforms import AutoAugment, AutoAugmentPolicy
+
 
 class Cifar(DatasetBase):
     def __init__(self, **kwargs):
@@ -69,30 +70,20 @@ class Cifar(DatasetBase):
         data_kwargs = kwargs['data_kwargs']
         seed = kwargs['seed']
 
-        data_augmentation = kwargs['data_augmentation'] if 'data_augmentation' in kwargs else False
-
-        # set torch seed
-        torch.manual_seed(seed)
+        augmentation_transform = kwargs['augmentation_transform'] if 'augmentation_transform' in kwargs else None
 
         # original dataset without augmentation
         # accepts custom transform if provided in kwargs
-        if 'original_transform' in kwargs: original_transform = kwargs['original_transform']
+        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_cifar100
             
-        # default transform (CIFAR10 / CIFAR100)    
-        else: 
-            if self.dataset == 'CIFAR10': normalize_transform = transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284))
-            else: normalize_transform = transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294)) # CIFAR100
-            original_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                normalize_transform
-            ])
+        # set torch seed
+        torch.manual_seed(seed)
 
         # Test dataset is loaded directly
         test_dataset = datasets.__dict__[self.dataset](
             root=self.data_path,
             train=False,
-            transform=original_transform,
+            transform=transform,
             download=True
         )
         
@@ -100,7 +91,7 @@ class Cifar(DatasetBase):
         _train_data = datasets.__dict__[self.dataset]( 
             root=self.data_path,
             train=True,
-            transform=None, #original_transform,
+            transform=None, #transform,
             download=True
         )
         
@@ -111,23 +102,13 @@ class Cifar(DatasetBase):
         )
         
         # set validation dataset transform
-        val_dataset.dataset.transform = original_transform
+        val_dataset.dataset.transform = transform
         
         # Apply the transformation according to data augmentation 
-        if data_augmentation:
-            # accepts custom augmentation transform if provided in kwargs
-            # default transform is CIFAR10 / CIFAR100 AutoAugment
-            if self.dataset == 'CIFAR10': normalize_transform = transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284))
-            else: normalize_transform = transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294)) # CIFAR100
-            augmentation_transform = kwargs.get('augmentation_transform', transforms.Compose([
-                transforms.RandomResizedCrop(224),
-                transforms.AutoAugment(policy=AutoAugmentPolicy.CIFAR10), 
-                transforms.ToTensor(),
-                normalize_transform
-            ]))
+        if augmentation_transform != None:
             train_dataset.dataset.transform = augmentation_transform 
         else:
-            train_dataset.dataset.transform = original_transform
+            train_dataset.dataset.transform = transform
      
         # Save datasets as objects in the class
         self._train_ds = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, **data_kwargs)
