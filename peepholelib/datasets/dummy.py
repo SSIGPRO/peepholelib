@@ -11,7 +11,6 @@ class Dummy(DatasetBase):
     def __init__(self, **kwargs):
         DatasetBase.__init__(self, **kwargs)
 
-		# # se passato in input la dim del dataset - def: 4 img
 		# if 'dataset_dim' in kwargs:
 		# 	self.dataset_dim = kwargs['dataset_dim']
 		# else:
@@ -21,7 +20,6 @@ class Dummy(DatasetBase):
         self.test_split = 2
         self.val_split = 3
 
-        # se passato in input la dim dei tensori - def: 5x5
         if 'tensor_dim' in kwargs:
             self.tensor_dim = kwargs['tensor_dim']
         else:
