@@ -58,6 +58,8 @@ class CoreVectors():
         if from_file != None:
             if verbose: print(f'Loading normalization from {from_file}')
             means, stds = torch.load(from_file)
+            means = means.detach().cpu()
+            stds = stds.detach().cpu()
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt]['coreVectors'].mean(dim=0)
@@ -75,6 +77,7 @@ class CoreVectors():
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
+                        
                 batch['coreVectors'] = (batch['coreVectors'] - means)/stds
         
         if to_file != None:
