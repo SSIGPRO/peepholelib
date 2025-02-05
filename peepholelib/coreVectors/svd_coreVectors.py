@@ -3,6 +3,8 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
+import torchvision
+from torchvision.models.vision_transformer import VisionTransformer
 from tensordict import TensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
@@ -79,8 +81,16 @@ def get_coreVectors(self, **kwargs):
             layer = model._target_layers[lk]
             if isinstance(layer, torch.nn.Linear):
                 for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
+                    # check if its ViT model
+                    if isinstance(model._model, VisionTransformer):
+                        if len(act_data['in_activations'][lk].shape) == 3:
+                            acts = act_data['in_activations'][lk][:, 0, :] # take 0-th patch
+                        elif len(act_data['in_activations'][lk].shape) == 2:
+                            acts = act_data['in_activations'][lk]
+                    else:
+                        acts = act_data['in_activations'][lk]
+                    
                     n_act = act_data['in_activations'][lk].shape[0]
-                    acts = act_data['in_activations'][lk]
                     acts_flat = acts.flatten(start_dim=1)
                     ones = torch.ones(n_act, 1)
                     _acts = torch.hstack((acts_flat, ones)).to(device)
