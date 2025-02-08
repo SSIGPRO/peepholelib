@@ -24,7 +24,7 @@ def viz_singular_values(wrap, dir_path):
         plt.close(fig)
 
 
-def viz_compare(wrap, dir_path):        #TODO log scale
+def viz_compare(wrap, dir_path):        #TODO log scale + remove self_attention.out_proj layer
 
     # create folder / check if folder already exist
     dir_path = Path(dir_path)
@@ -65,7 +65,7 @@ def viz_compare(wrap, dir_path):        #TODO log scale
         plt.close(fig)
 
 
-def viz_compare_per_layer_type(wrap, dir_path):
+def viz_compare_per_layer_type(wrap, dir_path):         #TODO remove self_attention.out_proj layer
 
     # create folder / check if folder already exist
     dir_path = Path(dir_path)
