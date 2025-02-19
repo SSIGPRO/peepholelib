@@ -22,8 +22,9 @@ def trim_corevectors(**kwargs):
     """
     data = kwargs['data']
     layer = kwargs['layer']
+    label = kwargs['label']
     peep_size = kwargs['peep_size']
-    return data['coreVectors'][layer][:,0:peep_size]
+    return data['coreVectors'][layer][:,0:peep_size], data[label]
 
 def null_parser(**kwargs):
     data = kwargs['data']
@@ -76,10 +77,11 @@ class ClassifierBase: # quella buona
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
         for batch in tqdm(self._fit_dl, disable=not verbose):
-            data = self.parser(data=batch, **self.parser_kwargs).to(self.device)
+            data, label = self.parser(data=batch, **self.parser_kwargs)
+            data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
-            labels = batch['label']
-            for p, l in zip(preds, labels):
+            # labels = batch['label']
+            for p, l in zip(preds, label):
                 _empp[int(p), int(l)] += 1
         
         # normalize to get empirical posteriors

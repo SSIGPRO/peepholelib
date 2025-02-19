@@ -86,6 +86,7 @@ class Peepholes:
                 dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                 for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
                     data_in, data_t = batch
+                    print(data_in)
                     cp = self._classifier.classifier_probabilities(batch=data_in, verbose=verbose).to(self.device)
                     lp = cp@_empp
                     lp /= lp.sum(dim=1, keepdim=True)
