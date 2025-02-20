@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.layer = kwargs['layer']
+        self.layers = kwargs['layers']                  # list of peep layers
         self.path = Path(kwargs['path'])
         self.name = Path(kwargs['name'])
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
@@ -25,7 +25,7 @@ class Peepholes:
         # create folder
         self.path.mkdir(parents=True, exist_ok=True)
 
-        self._classifier = kwargs['classifier'] 
+        self._classifiers = kwargs['classifiers']       # dict -> one classifier per layer
 
         # computed in get_peepholes
         self._phs = {} 
@@ -48,51 +48,54 @@ class Peepholes:
         '''
         self.check_uncontexted()
 
-        if self._classifier._empp == None:
-            raise RuntimeError('No prediction probabilities. Please run classifier.compute_empirical_posteriors() first.')
-        _empp = self._classifier._empp.to(self.device)
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        dls = kwargs['loaders']
-
-        layer = self.layer 
+        dls = kwargs['loaders'] 
 
         for ds_key in dls:
             bs = dls[ds_key].batch_size
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name.name+'.'+ds_key)
-           
+            
+            # create/load PersistentTensorDict file
             if file_path.exists():
                 if verbose: print(f'File {file_path} exists. Loading from disk.')
                 self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
                 n_samples = len(self._phs[ds_key])
                 if verbose: print('loaded n_samples: ', n_samples)
             else:
-                n_samples = len(dls[ds_key].dataset)
+                n_samples = len(dls[ds_key].dataset)    # esempio: test set 10.000
                 if verbose: print('loader n_samples: ', n_samples) 
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
             #-----------------------------------------
             # Pre-allocate peepholes
             #-----------------------------------------
-            if not layer in self._phs[ds_key]:
-                if verbose: print('allocating peepholes for layer: ', layer)
-                self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
-                
-             
-                #----------------------------------------- 
-                # computing peepholes
-                #-----------------------------------------
-                if verbose: print('\n ---- computing peepholes \n')
-                dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-                for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
-                    data_in, data_t = batch
-                    cp = self._classifier.classifier_probabilities(batch=data_in, verbose=verbose).to(self.device)
-                    lp = cp@_empp
-                    lp /= lp.sum(dim=1, keepdim=True)
-                    data_t[layer]['peepholes'] = lp.cpu()
-            else:
-                if verbose: print('Peepholes for {layer} already present. Skipping.')
+            for layer in self.layers:
+
+                # check for the classifier existence for each peep layer
+                if self._classifiers[layer]._empp == None:
+                    raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
+                _empp = self._classifiers[layer]._empp.to(self.device)
+
+
+                if not layer in self._phs[ds_key]:
+                    if verbose: print('allocating peepholes for layer: ', layer)
+                    self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
+                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifiers[layer].nl_model))
+                    
+                    #----------------------------------------- 
+                    # computing peepholes
+                    #-----------------------------------------
+                    if verbose: print('\n ---- computing peepholes \n')
+                    dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
+                    for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
+                        data_in, data_t = batch
+                        cp = self._classifiers[layer].classifier_probabilities(batch=data_in, verbose=verbose).to(self.device)
+                        lp = cp@_empp
+                        lp /= lp.sum(dim=1, keepdim=True)
+                        data_t[layer]['peepholes'] = lp.cpu()
+                else:
+                    if verbose: print('Peepholes for {layer} already present. Skipping.')
         return 
 
     def get_scores(self, **kwargs):
