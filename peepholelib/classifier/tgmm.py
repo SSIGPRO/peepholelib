@@ -15,9 +15,14 @@ logging.getLogger("pytorch_lightning.accelerators.cuda").setLevel(logging.CRITIC
 class GMM(ClassifierBase): # quella buona
     def __init__(self, **kwargs):
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
-        ClassifierBase.__init__(self, **kwargs)
         
-        self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
+        load = kwargs['load']# if 'load' in kwargs else False
+        
+        ClassifierBase.__init__(self, **kwargs)
+
+        if not load:
+            self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
+        
 
     def fit(self, **kwargs):
         '''
