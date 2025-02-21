@@ -7,6 +7,12 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
+def binary_classification(output):
+    return torch.sigmoid(output).squeeze().cpu() > 0.5
+
+def multilabel_classification(output):
+    return torch.argmax(output,axis=1).cpu()
+
 def get_activations(self, **kwargs):
     self.check_uncontexted()
     model = self._model
@@ -14,7 +20,8 @@ def get_activations(self, **kwargs):
     hooks = model.get_hooks()
 
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    parser_pred = kwargs['parser_pred'] if 'parser_pred' in kwargs else multilabel_classification
 
     if not self._corevds:
         raise RuntimeError('No data found. Please run get_coreVec_dataset() first.')
@@ -104,7 +111,8 @@ def get_activations(self, **kwargs):
             
             # do not save predictions and results if it is already there
             if not has_pred:
-                predicted_labels = y_predicted.argmax(axis = 1).cpu()
+                predicted_labels = parser_pred(y_predicted)
+            
                 cvs_data['pred'] = predicted_labels
                 cvs_data['result'] = predicted_labels == cvs_data['label']
             
