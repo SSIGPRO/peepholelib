@@ -26,6 +26,7 @@ class Peepholes:
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._classifier = kwargs['classifier'] 
+        self.filter_nan = kwargs['filter_nan'] if 'filter_nan' in kwargs else False
 
         # computed in get_peepholes
         self._phs = {} 
@@ -77,7 +78,11 @@ class Peepholes:
             if not layer in self._phs[ds_key]:
                 if verbose: print('allocating peepholes for layer: ', layer)
                 self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
+                if self.filter_nan:
+                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model-1))
+                else:
+                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
+                
              
                 #----------------------------------------- 
                 # computing peepholes
@@ -86,7 +91,6 @@ class Peepholes:
                 dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                 for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
                     data_in, data_t = batch
-                    print(data_in)
                     cp = self._classifier.classifier_probabilities(batch=data_in, verbose=verbose).to(self.device)
                     lp = cp@_empp
                     lp /= lp.sum(dim=1, keepdim=True)
@@ -184,7 +188,7 @@ class Peepholes:
         m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
 
         for i, ds_key in enumerate(self._phs.keys()):
-            if verbose: print('Evaluating {ds_key}')
+            if verbose: print(f'Evaluating {ds_key}')
             results = cv_dls[ds_key].dataset['result']
             scores = self._phs[ds_key][layer]['score_'+score_type]
             oks = (scores[results == True]).detach().cpu().numpy()

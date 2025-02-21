@@ -70,7 +70,7 @@ class ClassifierBase: # quella buona
             raise RuntimeError('No fitting dataloader. Please run fit() first.')
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        mapping = kwargs['mapping'] if 'mapping' in kwargs else False
+        filter_nan = kwargs['filter_nan'] if 'filter_nan' in kwargs else False
 
         # if mapping:
         #     invalid = mapping['non-valid']
@@ -82,6 +82,7 @@ class ClassifierBase: # quella buona
         _empp = torch.zeros(self.nl_class, self.nl_model)
 
         # iterate over _fit_data
+        
         if verbose: print('Computing empirical posterior')
         for batch in tqdm(self._fit_dl, disable=not verbose):
             data, label = self.parser(data=batch, **self.parser_kwargs)
@@ -89,11 +90,11 @@ class ClassifierBase: # quella buona
             preds = self._classifier.predict(data)
             # labels = batch['label']
             for p, l in zip(preds, label):
-                    _empp[int(p), int(l)] += 1
-        if mapping:
-            _empp = _empp[:,:-1]
-        
-        
+                _empp[int(p), int(l)] += 1
+                        
+        if filter_nan:
+            _empp = _empp[:, :-1]
+       
         # normalize to get empirical posteriors
         _empp /= _empp.sum(dim=1, keepdim=True)
 
