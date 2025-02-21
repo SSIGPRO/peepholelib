@@ -36,8 +36,7 @@ class GMM(ClassifierBase): # quella buona
         data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
 
         if verbose: print('Fitting GMM')
-        print(data)
-        print(len(data))
+        
         self._classifier.fit(data)
         
         self._fit_dl = _dl

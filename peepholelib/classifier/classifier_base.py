@@ -70,7 +70,7 @@ class ClassifierBase: # quella buona
             raise RuntimeError('No fitting dataloader. Please run fit() first.')
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        # mapping = kwargs['mapping'] if 'mapping' in kwargs else False
+        mapping = kwargs['mapping'] if 'mapping' in kwargs else False
 
         # if mapping:
         #     invalid = mapping['non-valid']
@@ -90,7 +90,9 @@ class ClassifierBase: # quella buona
             # labels = batch['label']
             for p, l in zip(preds, label):
                     _empp[int(p), int(l)] += 1
-        _empp = _empp[:,:-1]
+        if mapping:
+            _empp = _empp[:,:-1]
+        
         
         # normalize to get empirical posteriors
         _empp /= _empp.sum(dim=1, keepdim=True)
@@ -98,5 +100,5 @@ class ClassifierBase: # quella buona
         # replace NaN with 0
         _empp = torch.nan_to_num(_empp)
         self._empp = _empp
-        # print(self._empp.shape())
+        
         return 
