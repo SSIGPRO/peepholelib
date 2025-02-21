@@ -95,7 +95,7 @@ class Peepholes:
                         lp /= lp.sum(dim=1, keepdim=True)
                         data_t[layer]['peepholes'] = lp.cpu()
                 else:
-                    if verbose: print('Peepholes for {layer} already present. Skipping.')
+                    if verbose: print(f'Peepholes for {layer} already present. Skipping.')
         return 
 
     def get_scores(self, **kwargs):
@@ -107,7 +107,9 @@ class Peepholes:
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 32
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
-        layer = self.layer 
+        
+        
+        #layer = self.layer 
 
         if self._phs == None:
             raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
@@ -121,37 +123,38 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            if layer not in self._phs[ds_key]:
-                raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
-            
-            if 'peepholes' not in self._phs[ds_key][layer]:
-                raise ValueError(f"Peepholes do not exist in layer {layer}. Please run get_peepholes() first.")
-            
-            #-----------------------------------------
-            # Check if scores already exist
-            #-----------------------------------------
-            if 'score_max' in self._phs[ds_key][layer] and 'score_entropy' in self._phs[ds_key][layer]:
-                if verbose: print(f"Scores already computed for layer {layer}. Skipping computation.")
-                continue 
+            for layer in self.layers:
+                if layer not in self._phs[ds_key]:
+                    raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
+                
+                if 'peepholes' not in self._phs[ds_key][layer]:
+                    raise ValueError(f"Peepholes do not exist in layer {layer}. Please run get_peepholes() first.")
+                    
+                #-----------------------------------------
+                # Check if scores already exist
+                #-----------------------------------------
+                if 'score_max' in self._phs[ds_key][layer] and 'score_entropy' in self._phs[ds_key][layer]:
+                    if verbose: print(f"Scores already computed for layer {layer}. Skipping computation.")
+                    continue 
 
-            #-----------------------------------------
-            # Pre-allocate scores
-            #-----------------------------------------
-            if verbose: print('Allocating scores for layer:', layer)
-            self._phs[ds_key][layer].batch_size = torch.Size((n_samples,))
-            self._phs[ds_key][layer]['score_max'] = MMT.empty(shape=(n_samples,))
-    
-            self._phs[ds_key][layer]['score_entropy'] = MMT.empty(shape=(n_samples,))
-             
-            #-----------------------------------------
-            # Compute scores
-            #-----------------------------------------
-            if verbose: print('\n ---- Computing scores \n')
-            _dl = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x: x)
-            for batch in tqdm(_dl, disable=not verbose, total=len(_dl)):
-                peepholes = batch[layer]['peepholes']
-                batch[layer]['score_max'] = torch.max(peepholes, dim=1).values
-                batch[layer]['score_entropy'] = torch.sum(peepholes * torch.log(peepholes + 1e-12), dim=1)
+                #-----------------------------------------
+                # Pre-allocate scores
+                #-----------------------------------------
+                if verbose: print('Allocating scores for layer:', layer)
+                self._phs[ds_key][layer].batch_size = torch.Size((n_samples,))
+                self._phs[ds_key][layer]['score_max'] = MMT.empty(shape=(n_samples,))
+        
+                self._phs[ds_key][layer]['score_entropy'] = MMT.empty(shape=(n_samples,))
+                
+                #-----------------------------------------
+                # Compute scores
+                #-----------------------------------------
+                if verbose: print('\n ---- Computing scores \n')
+                _dl = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x: x)
+                for batch in tqdm(_dl, disable=not verbose, total=len(_dl)):
+                    peepholes = batch[layer]['peepholes']
+                    batch[layer]['score_max'] = torch.max(peepholes, dim=1).values
+                    batch[layer]['score_entropy'] = torch.sum(peepholes * torch.log(peepholes + 1e-12), dim=1)
     
         return
     
@@ -173,56 +176,58 @@ class Peepholes:
     def evaluate_dists(self, **kwargs):
         self.check_uncontexted()
          
-        layer = self.layer 
+        # layer = self.layer 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
         cv_dls = kwargs['coreVectors']
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
-        print('\n-------------\nEvaluating Distributions\n-------------\n') 
-        
-        n_dss = len(self._phs.keys())
-        fig, axs = plt.subplots(1, n_dss+1, sharex='all', sharey='all', figsize=(4*(1+n_dss), 4))
-        
-        m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
+        for layer in self.layers:
+            print(f'\n-------------\nEvaluating Distributions for layer {layer}\n-------------\n') 
+            
+            n_dss = len(self._phs.keys())
+            fig, axs = plt.subplots(1, n_dss+1, sharex='all', sharey='all', figsize=(4*(1+n_dss), 4))
+            
+            m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
 
-        for i, ds_key in enumerate(self._phs.keys()):
-            if verbose: print(f'Evaluating {ds_key}')
-            results = cv_dls[ds_key].dataset['result']
-            scores = self._phs[ds_key][layer]['score_'+score_type]
-            oks = (scores[results == True]).detach().cpu().numpy()
-            kos = (scores[results == False]).detach().cpu().numpy()
+            for i, ds_key in enumerate(self._phs.keys()):       # train val test
+                if verbose: print(f'Evaluating {ds_key}')
+                results = cv_dls[ds_key].dataset['result']
+                scores = self._phs[ds_key][layer]['score_'+score_type]
+                oks = (scores[results == True]).detach().cpu().numpy()
+                kos = (scores[results == False]).detach().cpu().numpy()
 
-            m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-            m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
+                m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
+                m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
 
 
-            #--------------- 
-            # plotting
-            #---------------
-            ax = axs[i+1]
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: '+score_type)
+                #--------------- 
+                # plotting
+                #---------------
+                ax = axs[i+1]
+                sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
+                sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
+                ax.set_xlabel('score: '+score_type)
+                ax.set_ylabel('%')
+                ax.title.set_text(ds_key)
+                ax.legend(title='dist')
+            
+            # plot train and test distributions
+            ax = axs[0]
+            scores = self._phs['train'][layer]['score_'+score_type].detach().cpu().numpy()
+            sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='train n=%d'%len(scores), alpha=0.5)
+            scores = self._phs['val'][layer]['score_'+score_type].detach().cpu().numpy()
+            sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='val n=%d'%len(scores), alpha=0.5)
             ax.set_ylabel('%')
-            ax.title.set_text(ds_key)
-            ax.legend(title='dist')
-        
-        # plot train and test distributions
-        ax = axs[0]
-        scores = self._phs['train'][layer]['score_'+score_type].detach().cpu().numpy()
-        sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='train n=%d'%len(scores), alpha=0.5)
-        scores = self._phs['val'][layer]['score_'+score_type].detach().cpu().numpy()
-        sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='val n=%d'%len(scores), alpha=0.5)
-        ax.set_ylabel('%')
-        ax.set_xlabel('score: '+score_type)
-        ax.legend(title='datasets')
+            ax.set_xlabel('score: '+score_type)
+            ax.legend(title='datasets')
+            
+            plt.savefig((self.path/('peepholes.'+layer)).as_posix()+'.png', dpi=300, bbox_inches='tight')
+            plt.close()
 
-        plt.savefig((self.path/self.name).as_posix()+'.png', dpi=300, bbox_inches='tight')
-        plt.close()
+            if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
 
-        if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
-        return m_ok, s_ok, m_ko, s_ko
+        return m_ok, s_ok, m_ko, s_ko   # a chi?
 
     def evaluate(self, **kwargs): 
         self.check_uncontexted()
