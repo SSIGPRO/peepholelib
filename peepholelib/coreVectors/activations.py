@@ -21,7 +21,7 @@ def get_activations(self, **kwargs):
 
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    parser_pred = kwargs['parser_pred'] if 'parser_pred' in kwargs else multilabel_classification
+    pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
 
     if not self._corevds:
         raise RuntimeError('No data found. Please run get_coreVec_dataset() first.')
@@ -111,7 +111,7 @@ def get_activations(self, **kwargs):
             
             # do not save predictions and results if it is already there
             if not has_pred:
-                predicted_labels = parser_pred(y_predicted)
+                predicted_labels = pred_fn(y_predicted)
             
                 cvs_data['pred'] = predicted_labels
                 cvs_data['result'] = predicted_labels == cvs_data['label']
