@@ -63,7 +63,7 @@ class Peepholes:
                 n_samples = len(self._phs[ds_key])
                 if verbose: print('loaded n_samples: ', n_samples)
             else:
-                n_samples = len(dls[ds_key].dataset)    # esempio: test set 10.000
+                n_samples = len(dls[ds_key].dataset)
                 if verbose: print('loader n_samples: ', n_samples) 
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
@@ -107,9 +107,6 @@ class Peepholes:
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 32
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
-        
-        
-        #layer = self.layer 
 
         if self._phs == None:
             raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
@@ -143,7 +140,6 @@ class Peepholes:
                 if verbose: print('Allocating scores for layer:', layer)
                 self._phs[ds_key][layer].batch_size = torch.Size((n_samples,))
                 self._phs[ds_key][layer]['score_max'] = MMT.empty(shape=(n_samples,))
-        
                 self._phs[ds_key][layer]['score_entropy'] = MMT.empty(shape=(n_samples,))
                 
                 #-----------------------------------------
@@ -175,8 +171,7 @@ class Peepholes:
     
     def evaluate_dists(self, **kwargs):
         self.check_uncontexted()
-         
-        # layer = self.layer 
+        
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
         cv_dls = kwargs['coreVectors']
         score_type = kwargs['score_type']
@@ -227,7 +222,7 @@ class Peepholes:
 
             if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
 
-        return m_ok, s_ok, m_ko, s_ko   # a chi?
+        return m_ok, s_ok, m_ko, s_ko
 
     def evaluate(self, **kwargs): 
         self.check_uncontexted()
@@ -297,6 +292,37 @@ class Peepholes:
 
         self._loaders = _loaders 
         return self._loaders
+
+    def save_classifiers(self, **kwargs):
+        '''
+        Save the classifiers temporarily stored in self.classifiers (dict) into the Tendordict in self._phs
+        '''
+        self.check_uncontexted()
+
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
+
+        if verbose: print(f'\n ---- Saving the classifiers\n')
+
+        # funziona come se stessi salvando nel campo degli scores
+        # ?? it's the same classifier for eache ds? -> since tGMM is trained on 'train' split
+        for ds_key in self._phs.keys():
+            for layer in self.layers:
+
+                if 'classifier' not in self._phs[ds_key][layer]:
+                    if verbose: print(f'Saving classifier for layer {layer}')
+                    #self._phs[ds_key][layer]['classifier'] = self._classifiers[layer]
+                    self._phs[ds_key][layer].set_non_tensor("classifier", self._classifiers[layer])
+                else:
+                    if verbose: print(f'Classifier for {layer} already present. Skipping.')
+
+        return
+
+    def get_classifiers(self, **kwargs):
+        '''
+        Get the classifiers from the TensorDict and set to self.classifiers (list)
+        '''
+        # get classifiers from self._phs[ds_key][layer]['score_entropy'] and put them in self.classifiers (as a dict)
+        return
 
     def __enter__(self):
         self._is_contexted = True
