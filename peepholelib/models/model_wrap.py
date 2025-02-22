@@ -111,7 +111,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
         # take the checkpoint and the state_dict from the saved file
         self._checkpoint = torch.load(file, map_location=self.device)
         if 'state_dict' in self._checkpoint:
-            print('ciao')
             self._state_dict = self._checkpoint['state_dict']
         else:
             self._state_dict = self._checkpoint  # Assume the entire model's state dictionary is stored directly
