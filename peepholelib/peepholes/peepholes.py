@@ -26,7 +26,6 @@ class Peepholes:
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._classifier = kwargs['classifier'] 
-        self.filter_nan = kwargs['filter_nan'] if 'filter_nan' in kwargs else False
 
         # computed in get_peepholes
         self._phs = {} 
@@ -78,10 +77,7 @@ class Peepholes:
             if not layer in self._phs[ds_key]:
                 if verbose: print('allocating peepholes for layer: ', layer)
                 self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                if self.filter_nan:
-                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model-1))
-                else:
-                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
+                self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
                 
              
                 #----------------------------------------- 
