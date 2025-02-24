@@ -22,13 +22,13 @@ def trim_corevectors(**kwargs):
     """
     data = kwargs['data']
     layer = kwargs['layer']
-    label = kwargs['label']
+    label = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     peep_size = kwargs['peep_size']
     return data['coreVectors'][layer][:,0:peep_size], data[label]
 
 def null_parser(**kwargs):
     data = kwargs['data']
-    return data['data'] 
+    return data['data'], data['label'] 
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
