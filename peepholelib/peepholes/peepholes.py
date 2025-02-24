@@ -78,6 +78,7 @@ class Peepholes:
                 if verbose: print('allocating peepholes for layer: ', layer)
                 self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
                 self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifier.nl_model))
+                
              
                 #----------------------------------------- 
                 # computing peepholes
@@ -183,7 +184,7 @@ class Peepholes:
         m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
 
         for i, ds_key in enumerate(self._phs.keys()):
-            if verbose: print('Evaluating {ds_key}')
+            if verbose: print(f'Evaluating {ds_key}')
             results = cv_dls[ds_key].dataset['result']
             scores = self._phs[ds_key][layer]['score_'+score_type]
             oks = (scores[results == True]).detach().cpu().numpy()

@@ -88,6 +88,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
 
     def set_model(self, **kwargs):
+
         '''
         Set a nn as a model and apply the loaded checkpoint from a file.
         
@@ -105,7 +106,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
         path = Path(kwargs['path'])
         name = Path(kwargs['name'])
         file = path/name
-        
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
         # take the checkpoint and the state_dict from the saved file

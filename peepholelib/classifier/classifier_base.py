@@ -22,12 +22,13 @@ def trim_corevectors(**kwargs):
     """
     data = kwargs['data']
     layer = kwargs['layer']
+    label = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     peep_size = kwargs['peep_size']
-    return data['coreVectors'][layer][:,0:peep_size]
+    return data['coreVectors'][layer][:,0:peep_size], data[label]
 
 def null_parser(**kwargs):
     data = kwargs['data']
-    return data['data'] 
+    return data['data'], data['label'] 
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
@@ -74,18 +75,21 @@ class ClassifierBase: # quella buona
         _empp = torch.zeros(self.nl_class, self.nl_model)
 
         # iterate over _fit_data
+        
         if verbose: print('Computing empirical posterior')
         for batch in tqdm(self._fit_dl, disable=not verbose):
-            data = self.parser(data=batch, **self.parser_kwargs).to(self.device)
+            data, label = self.parser(data=batch, **self.parser_kwargs)
+            data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
-            labels = batch['label']
-            for p, l in zip(preds, labels):
+            
+            for p, l in zip(preds, label):
                 _empp[int(p), int(l)] += 1
-        
+       
         # normalize to get empirical posteriors
         _empp /= _empp.sum(dim=1, keepdim=True)
 
         # replace NaN with 0
         _empp = torch.nan_to_num(_empp)
-        self._empp = _empp 
+        self._empp = _empp
+        
         return 

@@ -33,9 +33,10 @@ class GMM(ClassifierBase): # quella buona
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(data=_dl.dataset, **self.parser_kwargs)
+        data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
 
         if verbose: print('Fitting GMM')
+        
         self._classifier.fit(data)
         
         self._fit_dl = _dl
@@ -51,7 +52,7 @@ class GMM(ClassifierBase): # quella buona
         
         batch = kwargs['batch']
 
-        data = self.parser(data = batch, **self.parser_kwargs)
+        data, _ = self.parser(data = batch, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
         return probs  
             
