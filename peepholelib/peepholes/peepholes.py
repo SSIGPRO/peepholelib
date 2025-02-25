@@ -15,6 +15,9 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader 
 
+# out stuff
+from peepholelib.classifier.tgmm import GMM as tGMM
+
 class Peepholes:
     def __init__(self, **kwargs):
         self.layers = kwargs['layers']                  # list of peep layers
@@ -166,6 +169,8 @@ class Peepholes:
            
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
+
+        # TODO load classifiers
         
         return
     
@@ -295,34 +300,53 @@ class Peepholes:
 
     def save_classifiers(self, **kwargs):
         '''
-        Save the classifiers temporarily stored in self.classifiers (dict) into the Tendordict in self._phs
+        Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
         '''
         self.check_uncontexted()
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-
         if verbose: print(f'\n ---- Saving the classifiers\n')
 
-        # funziona come se stessi salvando nel campo degli scores
-        # ?? it's the same classifier for eache ds? -> since tGMM is trained on 'train' split
-        for ds_key in self._phs.keys():
-            for layer in self.layers:
+        # # add check "we have the classifiers", if not raise error
+        # if self._classifiers == None:
+        #     raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
+        
+        for layer in self.layers:
 
-                if 'classifier' not in self._phs[ds_key][layer]:
-                    if verbose: print(f'Saving classifier for layer {layer}')
-                    #self._phs[ds_key][layer]['classifier'] = self._classifiers[layer]
-                    self._phs[ds_key][layer].set_non_tensor("classifier", self._classifiers[layer])
-                else:
-                    if verbose: print(f'Classifier for {layer} already present. Skipping.')
+            _path = self.path/(f'classifier.{layer}')
+
+            if not _path.exists():
+                self._classifiers[layer]._classifier.save(_path)
+            else:
+                if verbose: print(f'Classifier for {layer} already present. Skipping.')
 
         return
 
-    def get_classifiers(self, **kwargs):
-        '''
-        Get the classifiers from the TensorDict and set to self.classifiers (list)
-        '''
-        # get classifiers from self._phs[ds_key][layer]['score_entropy'] and put them in self.classifiers (as a dict)
-        return
+
+    # def get_classifiers(self, **kwargs):    # DA ELIMINARE
+    #     '''
+    #     Get the classifiers from the TensorDict and set to self.classifiers (list)
+    #     '''
+    #     self.check_uncontexted()
+
+    #     device = kwargs['device'] if 'device' in kwargs else False
+    #     if not device: RuntimeError('Function should be called within context manager')
+
+
+    #     # if self._phs == None:
+    #     #     raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
+
+    #     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    #     if verbose: print(f'\n ---- Saving the classifiers\n')
+
+    #     for ds_key in self._phs.keys():
+            
+    #         for layer in self.layers:
+            
+    #             self._classifiers[layer] = self._phs[ds_key][layer].get_non_tensor('classifier')
+
+    #     # get classifiers from self._phs[ds_key][layer]['score_entropy'] and put them in self.classifiers (as a dict)
+    #     return
 
     def __enter__(self):
         self._is_contexted = True
