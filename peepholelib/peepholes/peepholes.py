@@ -309,7 +309,7 @@ class Peepholes:
 
         # # add check "we have the classifiers", if not raise error
         # if self._classifiers == None:
-        #     raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
+        #     raise RuntimeError('No classifiers present. Please run get_peepholes() first.')
         
         for layer in self.layers:
 
@@ -321,32 +321,6 @@ class Peepholes:
                 if verbose: print(f'Classifier for {layer} already present. Skipping.')
 
         return
-
-
-    # def get_classifiers(self, **kwargs):    # DA ELIMINARE
-    #     '''
-    #     Get the classifiers from the TensorDict and set to self.classifiers (list)
-    #     '''
-    #     self.check_uncontexted()
-
-    #     device = kwargs['device'] if 'device' in kwargs else False
-    #     if not device: RuntimeError('Function should be called within context manager')
-
-
-    #     # if self._phs == None:
-    #     #     raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
-
-    #     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    #     if verbose: print(f'\n ---- Saving the classifiers\n')
-
-    #     for ds_key in self._phs.keys():
-            
-    #         for layer in self.layers:
-            
-    #             self._classifiers[layer] = self._phs[ds_key][layer].get_non_tensor('classifier')
-
-    #     # get classifiers from self._phs[ds_key][layer]['score_entropy'] and put them in self.classifiers (as a dict)
-    #     return
 
     def __enter__(self):
         self._is_contexted = True
