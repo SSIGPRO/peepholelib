@@ -32,12 +32,24 @@ def null_parser(**kwargs):
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
-        self.nl_class = kwargs['nl_classifier']
-        self.nl_model = kwargs['nl_model']
-        
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+
+        load = kwargs['load'] if 'load' in kwargs else False
+
+        if load:
+            self.nl_class = None
+            self.nl_model = None
+            
+            self.device = None
+            self.parser = None
+            self.parser_kwargs = {}
+            
+        else:
+            self.nl_class = kwargs['nl_classifier']
+            self.nl_model = kwargs['nl_model']
+            
+            self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+            self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
+            self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
 
         # set in fit()
         self._fit_dl = None

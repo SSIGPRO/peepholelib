@@ -18,6 +18,9 @@ from torch.utils.data import DataLoader
 # out stuff
 from peepholelib.classifier.tgmm import GMM as tGMM
 
+# https://torchgmm.readthedocs.io/en/stable/generated/torchgmm.bayes.GaussianMixture.html#torchgmm.bayes.GaussianMixture.load
+from torchgmm.bayes import GaussianMixture
+
 class Peepholes:
     def __init__(self, **kwargs):
         self.layers = kwargs['layers']                  # list of peep layers
@@ -73,6 +76,7 @@ class Peepholes:
             #-----------------------------------------
             # Pre-allocate peepholes
             #-----------------------------------------
+            # multi layer handling
             for layer in self.layers:
 
                 # check for the classifier existence for each peep layer
@@ -123,6 +127,7 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
+            # multi layer handling
             for layer in self.layers:
                 if layer not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
@@ -158,6 +163,10 @@ class Peepholes:
         return
     
     def load_only(self, **kwargs):
+        '''
+        Load the peepholes 
+        Load the classifiers from the saved files to self.classifiers (dict)
+        '''
         self.check_uncontexted()
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
@@ -170,8 +179,36 @@ class Peepholes:
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
 
-        # TODO load classifiers
         
+        # load classifiers
+        if verbose: print(f'\n ---- Loading the classifiers\n')
+
+        if self._classifiers == {}:
+
+            for layer in self.layers:
+                _path = self.path / f'classifier.{layer}'
+                
+                if _path.exists():
+                    if verbose: print(f'Loading for layer: {layer}')
+
+                    # instance of the classifier
+                    gm = GaussianMixture()
+                    gm.load(_path)
+                    
+                    cls = tGMM(load=True)
+                    cls._classifier = gm
+                    # TODO load cls.emmp - find a way to save it -> it's going to be a dictionary :)
+
+                    self._classifiers[layer] = cls
+                    
+                    # check load params
+                    params = self._classifiers[layer]._classifier.get_params()
+                    print(f"Loaded parameters for {layer}: {params}")
+
+
+                else:
+                    if verbose: print(f'Classifier for layer: {layer} does not exist')
+
         return
     
     def evaluate_dists(self, **kwargs):
@@ -182,6 +219,7 @@ class Peepholes:
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
+        # multi layer handling
         for layer in self.layers:
             print(f'\n-------------\nEvaluating Distributions for layer {layer}\n-------------\n') 
             
