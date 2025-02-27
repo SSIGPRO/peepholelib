@@ -1,4 +1,7 @@
 # python stuff
+import sys
+sys.path.insert(0, '/home/claranunesbarrancos/XAI/CN/peepholelib/')
+
 import numpy as np
 from warnings import warn
 from pathlib import Path
@@ -8,8 +11,7 @@ import torch
 from tensordict import TensorDict
 from tensordict import MemoryMappedTensor as MMT
 
-def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1), device='cpu', verbose=False, warns=True):
-
+def c2s(input_shape, weight, bias=None, stride=(1, 1), padding=(0, 0), dilation=(1,1), device='cpu', verbose=False, warns=True):
     if dilation != (1,1):
         raise RuntimeError('This functions does not account for dilation, if you extendent it, please send us a PR ;).')
     
@@ -26,14 +28,14 @@ def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1)
     Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
     Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
 
-    shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win+1))
+    shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win + (0 if bias is None else 1)))
     
-    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(Hk*Wk*Cin+1)).int()
+    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(Hk*Wk*Cin + (0 if bias is None else 1))).int()
     nnz = crow[-1]
     
     # getting columns
-    cols = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk+1, dtype=torch.int)
-    data = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk+1)
+    cols = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (0 if bias is None else 1), dtype=torch.int)
+    data = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (0 if bias is None else 1))
     
     base_row = torch.zeros(Cin*Hk*Wk, dtype=torch.int)
     for cin in range(Cin):
@@ -46,19 +48,21 @@ def c2s(input_shape, weight, bias, stride=(1, 1), padding=(0, 0), dilation=(1,1)
                 base_row[idx] = c_shift+h_shift+w_shift
         
     for cout in range(Cout): 
-        k = kernel[cout]
-        _d = torch.hstack((k.flatten(), bias[cout]))
+        k = kernel[cout].flatten()
         for ho in range(Hout):
             h_shift = ho*Win*stride[0]
             for wo in range(Wout):
                 w_shift = wo*stride[1]
                 idx = cout*Hout*Wout+ho*Wout+wo
                 shift = h_shift+w_shift
-                cols[idx,:-1] = base_row+shift
-                data[idx] = _d
+                cols[idx] = base_row+shift
+                data[idx] = k 
 
-    # add bias as the last column                    
-    cols[:,-1] = Cin*Hin*Win
+    if bias is not None:
+        # add bias as the last column                    
+        cols[:,-1] = Cin*Hin*Win
+        for cout in range(Cout):
+            data[cout*Hout*Wout:(cout+1)*Hout*Wout, -1] = bias[cout]
 
     cols = cols.flatten()
     data = data.flatten()
