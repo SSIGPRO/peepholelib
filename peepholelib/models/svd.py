@@ -28,17 +28,14 @@ def c2s(input_shape, weight, bias=None, stride=(1, 1), padding=(0, 0), dilation=
     Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
     Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
 
-    if bias is not None:
-        shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win+1))
-    else:
-        shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win))
+    shape_out = torch.Size((Cout*Hout*Wout, Cin*Hin*Win + (0 if bias is None else 1)))
     
-    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(Hk*Wk*Cin + (1 if bias is not None else 0))).int()
+    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(Hk*Wk*Cin + (0 if bias is None else 1))).int()
     nnz = crow[-1]
     
     # getting columns
-    cols = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (1 if bias is not None else 0), dtype=torch.int)
-    data = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (1 if bias is not None else 0))
+    cols = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (0 if bias is None else 1), dtype=torch.int)
+    data = torch.zeros(Cout*Hout*Wout, Cin*Hk*Wk + (0 if bias is None else 1))
     
     base_row = torch.zeros(Cin*Hk*Wk, dtype=torch.int)
     for cin in range(Cin):
@@ -51,27 +48,21 @@ def c2s(input_shape, weight, bias=None, stride=(1, 1), padding=(0, 0), dilation=
                 base_row[idx] = c_shift+h_shift+w_shift
         
     for cout in range(Cout): 
-        k = kernel[cout]
-        if bias is not None:
-            _d = torch.hstack((k.flatten(), bias[cout]))
-        else:
-
-            _d = k.flatten()
+        k = kernel[cout].flatten()
         for ho in range(Hout):
             h_shift = ho*Win*stride[0]
             for wo in range(Wout):
                 w_shift = wo*stride[1]
                 idx = cout*Hout*Wout+ho*Wout+wo
                 shift = h_shift+w_shift
-                if bias is not None:
-                    cols[idx,:-1] = base_row+shift
-                else:
-                    cols[idx] = base_row+shift
-                data[idx, :len(_d)] = _d 
+                cols[idx] = base_row+shift
+                data[idx] = k 
 
     if bias is not None:
         # add bias as the last column                    
         cols[:,-1] = Cin*Hin*Win
+        for cout in range(Cout):
+            data[cout*Hout*Wout:(cout+1)*Hout*Wout, -1] = bias[cout]
 
     cols = cols.flatten()
     data = data.flatten()
