@@ -26,6 +26,26 @@ def trim_corevectors(**kwargs):
     peep_size = kwargs['peep_size']
     return data['coreVectors'][layer][:,0:peep_size], data[label]
 
+
+def map_labels(**kwargs):
+    """
+    Maps original labels to superclasses if a mapping_dict exists.
+    """
+    labels = kwargs['data']
+    mapping_dict = kwargs.get('label_mapping', None)
+
+    if mapping_dict is None:
+        return labels
+        
+    mapped_labels = []
+    for label in labels:
+        for new_label, old_labels in mapping_dict.items():
+            if label in old_labels:
+                mapped_labels.append(new_label)
+    return torch.tensor(mapped_labels)
+
+
+
 def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
@@ -38,6 +58,8 @@ class ClassifierBase: # quella buona
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
         self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+        self.superclass_parser = kwargs['superclass_parser'] if 'superclass_parser' in kwargs else null_parser 
+        self.superclass_kwargs = kwargs['superclass_kwargs'] if 'superclass_kwargs' in kwargs and 'superclass_parser' in kwargs else dict()
 
         # set in fit()
         self._fit_dl = None
@@ -77,13 +99,30 @@ class ClassifierBase: # quella buona
         # iterate over _fit_data
         
         if verbose: print('Computing empirical posterior')
+        
+        # code to make superclass work
         for batch in tqdm(self._fit_dl, disable=not verbose):
-            data, label = self.parser(data=batch, **self.parser_kwargs)
-            data, label = data.to(self.device), label.to(self.device)
+            
+            data, lab = self.parser(data=batch, **self.parser_kwargs)
+
+            data = data.to(self.device)
+            
             preds = self._classifier.predict(data)
             
-            for p, l in zip(preds, label):
+            # labels = batch['label']
+
+            labels = self.superclass_parser(data=batch['label'], **self.superclass_kwargs)
+            for p, l in zip(preds, labels):
                 _empp[int(p), int(l)] += 1
+        
+        # # original code in main branch
+        # for batch in tqdm(self._fit_dl, disable=not verbose):
+        #     data, label = self.parser(data=batch, **self.parser_kwargs)
+        #     data, label = data.to(self.device), label.to(self.device)
+        #     preds = self._classifier.predict(data)
+            
+        #     for p, l in zip(preds, label):
+        #         _empp[int(p), int(l)] += 1
        
         # normalize to get empirical posteriors
         _empp /= _empp.sum(dim=1, keepdim=True)
