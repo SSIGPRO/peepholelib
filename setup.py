@@ -11,6 +11,10 @@ setup(
     keywords=['explainable AI, Attack detection, Confidence Estimation'],
     url='https://github.com/SSIGPRO/XAI',
     install_requires=[
-          'tensordict',
+        'numpy',
+        'tensordict',
+        'torchgmm',
+        'seaborn',
+        'cuda_selector',
       ],
 )

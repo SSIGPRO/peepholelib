@@ -3,7 +3,7 @@ from torch.utils.data import random_split
 from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
 
-def random(dls, perc):
+def random_subsampling(dls, perc):
     out_dls = {}
     for k in dls:
         a, _ = random_split(dls[k].dataset, [perc, 1.0-perc])
