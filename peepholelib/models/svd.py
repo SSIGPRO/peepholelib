@@ -32,17 +32,20 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     kernel = weight
     kernel_size = Hk*Wk
     input_size = Hin*Win
-    print(f"cin: {Cin}, cout: {Cout}, groups: {groups}")
+    
     # divide the input channels and output channels in groups, if groups > 1
-    assert Cin % groups == 0, "Cin must be divisible by groups"
-    assert Cout % groups == 0, "Cout must be divisible by groups"
+    if Cin % groups != 0: raise RuntimeError("Cin must be divisible by groups")
+    if Cout % groups != 0: raise RuntimeErrot("Cout must be divisible by groups")
+    
     Cin_g = Cin // groups  
     Cout_g = Cout // groups 
-    if verbose:
-        print(" bias:", bias.shape if bias is not None else None)
-        print(f"nº of Cin per group: {Cin_g}, nº of Cout per group: {Cout_g}")
-        print(f"kernel height: {Hk}, kernel width: {Wk}, kernel size: {kernel_size}")
-        print(f"input height: {Hin}, input width: {Win}, input size: {input_size}")
+
+    #if verbose:
+    #    print(f"cin: {Cin}, cout: {Cout}, groups: {groups}")
+    #    print(" bias:", bias.shape if bias is not None else None)
+    #    print(f"nº of Cin per group: {Cin_g}, nº of Cout per group: {Cout_g}")
+    #    print(f"kernel height: {Hk}, kernel width: {Wk}, kernel size: {kernel_size}")
+    #    print(f"input height: {Hin}, input width: {Win}, input size: {input_size}")
 
     Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
     Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
@@ -73,8 +76,8 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
         start_index_out = group_id * Cout_g
         end_index_in = (group_id + 1) * Cin_g
         end_index_out = (group_id + 1) * Cout_g
-        if verbose: print(f" Group {group_id}: from index {start_index_in} to {end_index_in}")
         group_offset = start_index_in * input_size # for correct aligment w/input 
+        #if verbose: print(f" Group {group_id}: indexes in: {start_index_in}-{end_index_in} - indexes out: {start_index_out}-{end_index_out}")
 
         for cout in range(start_index_out, end_index_out): 
             k =  kernel[cout, :, :, :].flatten() 
@@ -127,7 +130,6 @@ def get_svds(self, **kwargs):
 
         if verbose: print('layer: ', layer)
         if isinstance(layer, torch.nn.Conv2d):
-            print('conv layer')
             in_shape = self._hooks[lk].in_shape
             
             W_ = c2s(in_shape, layer, device=device) 
@@ -135,7 +137,6 @@ def get_svds(self, **kwargs):
             Vh = V.T
 
         elif isinstance(layer, torch.nn.Linear):
-            if verbose: print('linear layer')
             W_ = torch.hstack((weight, bias.reshape(-1,1)))
             U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
         else:
