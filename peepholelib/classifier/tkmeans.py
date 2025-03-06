@@ -36,7 +36,7 @@ class KMeans(ClassifierBase): # quella buona
         print('tkmeans device: ', self.device)
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(data=_dl.dataset, **self.parser_kwargs)
+        data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
         print('data shape: ', data.shape, type(data))
 
         if verbose: print('Fitting KMeans')
@@ -57,7 +57,8 @@ class KMeans(ClassifierBase): # quella buona
 
         data = self.parser(data = batch, **self.parser_kwargs)
         distances = torch.tensor(self._classifier.transform(data), dtype=data.dtype)
-
+        
+        # TODO: clean this out ???
         # convert distances to probabilities (soft assignment) Gaussian-like softmax
         # TODO: Check the var in the exponent. Should it be over the training set? Should it be there?
         #probs = torch.exp(-distances ** 2 / (2 * (distances.std() ** 2)))
