@@ -78,7 +78,9 @@ class Peepholes:
             # Pre-allocate peepholes
             #-----------------------------------------
             for layer in self.target_layers:
-                # check for the classifier existence for each peep layer
+
+                # check for empiracal posterios `_empp`
+                print('self classifiers: ', self._classifiers, self.target_layers)
                 if self._classifiers[layer]._empp == None:
                     raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
                 _empp = self._classifiers[layer]._empp.to(self.device)
@@ -89,10 +91,9 @@ class Peepholes:
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
                     self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifiers[layer].nl_model))
                     
-            #----------------------------------------- 
-            # computing peepholes
-            #-----------------------------------------
-            for layer in self.target_layers:
+                    #----------------------------------------- 
+                    # computing peepholes
+                    #-----------------------------------------
                     if verbose: print(f'\n ---- computing peepholes for layer {layer}\n')
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                     for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
@@ -127,7 +128,7 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            for layer in self.targe_layers:
+            for layer in self.target_layers:
                 if layer not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
                 
@@ -257,7 +258,7 @@ class Peepholes:
             ax.set_ylabel('%')
             ax.set_xlabel('score: '+score_type)
             ax.legend(title='datasets')
-            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.'+'.png', dpi=300, bbox_inches='tight')
+            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.png', dpi=300, bbox_inches='tight')
             plt.close()
 
             if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
@@ -304,7 +305,7 @@ class Peepholes:
             plt.plot(x, y2, label='KO', c='r')
             plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
             plt.legend()
-            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.'+'.png', dpi=300, bbox_inches='tight')
+            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.png', dpi=300, bbox_inches='tight')
             plt.close()
 
         return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
@@ -333,9 +334,8 @@ class Peepholes:
 
     '''
     def save_classifiers(self, **kwargs):
-        '''
         #Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
-        '''
+
         self.check_uncontexted()
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 

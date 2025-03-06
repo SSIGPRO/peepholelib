@@ -36,7 +36,7 @@ class KMeans(ClassifierBase): # quella buona
         print('tkmeans device: ', self.device)
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(data=_dl.dataset, **self.parser_kwargs)
+        data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
         print('data shape: ', data.shape, type(data))
 
         if verbose: print('Fitting KMeans')

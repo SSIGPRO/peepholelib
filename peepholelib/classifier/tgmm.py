@@ -20,8 +20,8 @@ class GMM(ClassifierBase): # quella buona
         '''
         load = kwargs['load']# if 'load' in kwargs else False
         if not load:
-            self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
         ''' 
+        self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
         return
 
     def fit(self, **kwargs):
