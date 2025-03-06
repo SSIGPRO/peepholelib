@@ -9,5 +9,12 @@ setup(
     author='Leandro de Souza Rosa',
     author_email='leandro.desouzarosa@unibo.it',
     keywords=['explainable AI, Attack detection, Confidence Estimation'],
-    url='https://github.com/SSIGPRO/XAI'
+    url='https://github.com/SSIGPRO/XAI',
+    install_requires=[
+        'numpy',
+        'tensordict',
+        'torchgmm',
+        'seaborn',
+        'cuda_selector',
+      ],
 )
