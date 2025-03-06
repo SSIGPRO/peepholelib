@@ -15,12 +15,6 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader 
 
-# out stuff
-from peepholelib.classifier.tgmm import GMM as tGMM
-
-# https://torchgmm.readthedocs.io/en/stable/generated/torchgmm.bayes.GaussianMixture.html#torchgmm.bayes.GaussianMixture.load
-from torchgmm.bayes import GaussianMixture
-
 class Peepholes:
     def __init__(self, **kwargs):
         self.target_layers = kwargs['target_layers']                  # list of peep layers
