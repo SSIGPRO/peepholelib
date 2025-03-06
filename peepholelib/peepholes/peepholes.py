@@ -23,7 +23,7 @@ from torchgmm.bayes import GaussianMixture
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.layers = kwargs['layers']                  # list of peep layers
+        self.target_layers = kwargs['target_layers']                  # list of peep layers
         self.path = Path(kwargs['path'])
         self.name = Path(kwargs['name'])
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
@@ -31,7 +31,8 @@ class Peepholes:
         # create folder
         self.path.mkdir(parents=True, exist_ok=True)
 
-        self._classifiers = kwargs['classifiers']       # dict -> one classifier per layer
+        # (dict) one classifier per layer
+        self._classifiers = kwargs['classifiers'] 
 
         # computed in get_peepholes
         self._phs = {} 
@@ -76,9 +77,7 @@ class Peepholes:
             #-----------------------------------------
             # Pre-allocate peepholes
             #-----------------------------------------
-            # multi layer handling
-            for layer in self.layers:
-
+            for layer in self.target_layers:
                 # check for the classifier existence for each peep layer
                 if self._classifiers[layer]._empp == None:
                     raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
@@ -90,10 +89,11 @@ class Peepholes:
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
                     self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifiers[layer].nl_model))
                     
-                    #----------------------------------------- 
-                    # computing peepholes
-                    #-----------------------------------------
-                    if verbose: print('\n ---- computing peepholes \n')
+            #----------------------------------------- 
+            # computing peepholes
+            #-----------------------------------------
+            for layer in self.target_layers:
+                    if verbose: print(f'\n ---- computing peepholes for layer {layer}\n')
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                     for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
                         data_in, data_t = batch
@@ -127,8 +127,7 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            # multi layer handling
-            for layer in self.layers:
+            for layer in self.targe_layers:
                 if layer not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
                 
@@ -165,7 +164,7 @@ class Peepholes:
     def load_only(self, **kwargs):
         '''
         Load the peepholes 
-        Load the classifiers from the saved files to self.classifiers (dict)
+        # TODO: Load the classifiers from the saved files to self.classifiers (dict)
         '''
         self.check_uncontexted()
 
@@ -179,13 +178,13 @@ class Peepholes:
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
 
-        
+        ''' 
         # load classifiers
         if verbose: print(f'\n ---- Loading the classifiers\n')
 
         if self._classifiers == {}:
 
-            for layer in self.layers:
+            for layer in self.target_layers:
                 _path = self.path / f'classifier.{layer}'
                 
                 if _path.exists():
@@ -208,7 +207,7 @@ class Peepholes:
 
                 else:
                     if verbose: print(f'Classifier for layer: {layer} does not exist')
-
+        '''
         return
     
     def evaluate_dists(self, **kwargs):
@@ -219,8 +218,7 @@ class Peepholes:
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
-        # multi layer handling
-        for layer in self.layers:
+        for layer in self.target_layers:
             print(f'\n-------------\nEvaluating Distributions for layer {layer}\n-------------\n') 
             
             n_dss = len(self._phs.keys())
@@ -259,8 +257,7 @@ class Peepholes:
             ax.set_ylabel('%')
             ax.set_xlabel('score: '+score_type)
             ax.legend(title='datasets')
-            
-            plt.savefig((self.path/('peepholes.'+layer)).as_posix()+'.png', dpi=300, bbox_inches='tight')
+            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.'+'.png', dpi=300, bbox_inches='tight')
             plt.close()
 
             if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
@@ -270,48 +267,46 @@ class Peepholes:
     def evaluate(self, **kwargs): 
         self.check_uncontexted()
 
-        layer = self.layer 
         cvs = kwargs['coreVectors']
         score_type = kwargs['score_type']
-
-        quantiles = torch.arange(0, 1, 0.001) # setting quantiles list
-        prob_train = self._phs['train'][layer]['peepholes']
-        prob_val = self._phs['val'][layer]['peepholes']
         
-        # TODO: vectorize
-        conf_t = self._phs['train'][layer]['score_'+score_type].detach().cpu() 
-        conf_v = self._phs['val'][layer]['score_'+score_type].detach().cpu() 
- 
-        th = [] 
-        lt = []
-        lf = []
-
-        c = cvs['val'].dataset['result'].detach().cpu().numpy()
-        cntt = Counter(c) 
-        
-        for q in quantiles:
-            perc = torch.quantile(conf_t, q)
-            th.append(perc)
-            idx = torch.argwhere(conf_v > perc)[:,0]
-
+        for layer in self.target_layers:
+            quantiles = torch.arange(0, 1, 0.001) # setting quantiles list
+            prob_train = self._phs['train'][layer]['peepholes']
+            prob_val = self._phs['val'][layer]['peepholes']
+            
             # TODO: vectorize
-            cnt = Counter(c[idx]) 
-            lt.append(cnt[True]/cntt[True]) 
-            lf.append(cnt[False]/cntt[False])
+            conf_t = self._phs['train'][layer]['score_'+score_type].detach().cpu() 
+            conf_v = self._phs['val'][layer]['score_'+score_type].detach().cpu() 
+ 
+            th = [] 
+            lt = []
+            lf = []
 
-        plt.figure()
-        x = quantiles.numpy()
-        y1 = np.array(lt)
-        y2 = np.array(lf)
-        plt.plot(x, y1, label='OK', c='b')
-        plt.plot(x, y2, label='KO', c='r')
-        plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
-        plt.legend()
-        plt.savefig((self.path/self.name).as_posix()+'.png')
-        plt.close()
-        
-        # TODO: make dist to diagonal
-        # TODO: save and load evaluation scores
+            c = cvs['val'].dataset['result'].detach().cpu().numpy()
+            cntt = Counter(c) 
+            
+            for q in quantiles:
+                perc = torch.quantile(conf_t, q)
+                th.append(perc)
+                idx = torch.argwhere(conf_v > perc)[:,0]
+
+                # TODO: vectorize
+                cnt = Counter(c[idx]) 
+                lt.append(cnt[True]/cntt[True]) 
+                lf.append(cnt[False]/cntt[False])
+
+            plt.figure()
+            x = quantiles.numpy()
+            y1 = np.array(lt)
+            y2 = np.array(lf)
+            plt.plot(x, y1, label='OK', c='b')
+            plt.plot(x, y2, label='KO', c='r')
+            plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
+            plt.legend()
+            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.'+'.png', dpi=300, bbox_inches='tight')
+            plt.close()
+
         return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
 
     def get_dataloaders(self, **kwargs):
@@ -336,9 +331,10 @@ class Peepholes:
         self._loaders = _loaders 
         return self._loaders
 
+    '''
     def save_classifiers(self, **kwargs):
         '''
-        Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
+        #Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
         '''
         self.check_uncontexted()
 
@@ -349,7 +345,7 @@ class Peepholes:
         # if self._classifiers == None:
         #     raise RuntimeError('No classifiers present. Please run get_peepholes() first.')
         
-        for layer in self.layers:
+        for layer in self.target_layers:
 
             _path = self.path/(f'classifier.{layer}')
 
@@ -359,6 +355,7 @@ class Peepholes:
                 if verbose: print(f'Classifier for {layer} already present. Skipping.')
 
         return
+    '''
 
     def __enter__(self):
         self._is_contexted = True

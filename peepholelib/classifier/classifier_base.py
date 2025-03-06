@@ -22,9 +22,9 @@ def trim_corevectors(**kwargs):
     """
     data = kwargs['data']
     layer = kwargs['layer']
-    label = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
+    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     peep_size = kwargs['peep_size']
-    return data['coreVectors'][layer][:,0:peep_size], data[label]
+    return data['coreVectors'][layer][:,0:peep_size], data[label_key]
 
 def null_parser(**kwargs):
     data = kwargs['data']
@@ -32,9 +32,8 @@ def null_parser(**kwargs):
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
-
+        '''
         load = kwargs['load'] if 'load' in kwargs else False
-
         if load:
             self.nl_class = None
             self.nl_model = None
@@ -42,14 +41,14 @@ class ClassifierBase: # quella buona
             self.device = None
             self.parser = None
             self.parser_kwargs = {}
-            
         else:
-            self.nl_class = kwargs['nl_classifier']
-            self.nl_model = kwargs['nl_model']
-            
-            self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-            self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-            self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+        '''
+        self.nl_class = kwargs['nl_classifier']
+        self.nl_model = kwargs['nl_model']
+        
+        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
+        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
 
         # set in fit()
         self._fit_dl = None
