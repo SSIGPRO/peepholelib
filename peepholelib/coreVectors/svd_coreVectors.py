@@ -158,6 +158,8 @@ def get_coreVectors(self, **kwargs):
             ## this is specific of SVD
             # if isinstance(layer, torch.nn.Linear):
             #     for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
+                    # TODO: there should be only something like this
+                    #cvs_data['coreVectors'][lk] = reduction_fns[lk](act_data['in_activations'][lk])
             #         # check if its ViT model
             #         if isinstance(model._model, VisionTransformer):
             #             if len(act_data['in_activations'][lk].shape) == 3:
