@@ -16,6 +16,8 @@ def multilabel_classification(output):
 def get_activations(self, **kwargs):
     self.check_uncontexted()
     model = self._model
+    num_classes = self._model.num_classes
+    print(num_classes)
     device = self._model.device 
     hooks = model.get_hooks()
 
@@ -29,7 +31,8 @@ def get_activations(self, **kwargs):
     for ds_key in self._corevds:
         if verbose: print(f'\n ---- Getting activations for {ds_key}\n')
         
-        file_path = self.path/(self.name.name+'.activations.'+ds_key)
+        # file_path = self.path/(self.name.name+'.activations.'+ds_key)
+        file_path = self.path/('activations.'+ds_key)
         n_samples = self._n_samples[ds_key]       
 
         if file_path.exists():
@@ -92,8 +95,9 @@ def get_activations(self, **kwargs):
         
         # allocate memory for pred and result
         if not has_pred:
-            cvs_td['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-            cvs_td['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+            act_td['output'] = MMT.empty(shape=torch.Size((n_samples,)+(num_classes,)))
+            act_td['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
+            act_td['result'] = MMT.empty(shape=torch.Size((n_samples,)))
         
         # ---------------------------------------
         # compute predictions and get activations
@@ -108,13 +112,14 @@ def get_activations(self, **kwargs):
         for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
             with torch.no_grad():
                 y_predicted = model(cvs_data['image'].to(device))
+                act_data['output'] = y_predicted
             
             # do not save predictions and results if it is already there
             if not has_pred:
                 predicted_labels = pred_fn(y_predicted)
             
-                cvs_data['pred'] = predicted_labels
-                cvs_data['result'] = predicted_labels == cvs_data['label']
+                act_data['pred'] = predicted_labels
+                act_data['result'] = predicted_labels == cvs_data['label']
             
             for lk in _layers_to_save:
                 if model._si:

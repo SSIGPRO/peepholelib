@@ -28,7 +28,7 @@ class CoreVectors():
 
         # computed in get_activations()
         self._act_file_paths = {} 
-        self._actds = {}
+        self._actds = {} # filled in get_coreVectors_dataset
         
         # set in normalize_corevectors() 
         self._norm_mean = None 

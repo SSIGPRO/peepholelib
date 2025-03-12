@@ -82,7 +82,7 @@ def get_coreVectors(self, **kwargs):
             
             for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
                 
-                cvs_data['coreVectors'][lk] = reduction_fns[lk](*act_data['in_activations'][lk])
+                cvs_data['coreVectors'][lk] = reduction_fns[lk](act_data['in_activations'][lk])
 
 
     return        
