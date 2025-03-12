@@ -165,7 +165,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         '''
         _img = kwargs['x'].to(self.device)
         output = self._model(_img)
-        self.num_classes = output.size(1)
+        self.num_classes = output.shape[1]
         
         if not self._hooks:
             raise RuntimeError('No hooks available. Please run set_hooks() first.')
