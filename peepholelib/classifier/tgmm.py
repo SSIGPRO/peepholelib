@@ -47,7 +47,6 @@ class GMM(ClassifierBase): # quella buona
         
         self._cvs_dl = _cvs_dl
         self._act_dl = _act_dl
-        print(self._cvs_dl)
         return
     
     def classifier_probabilities(self, **kwargs):
