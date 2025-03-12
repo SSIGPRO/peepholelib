@@ -9,9 +9,8 @@ from tqdm import tqdm
 from functools import partial
 
 class CoreVectors():
-    from .dataset import get_coreVec_dataset
     from .activations import get_activations
-    from .svd_coreVectors import get_coreVectors
+    from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])
@@ -60,8 +59,8 @@ class CoreVectors():
             means, stds = torch.load(from_file)
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
-            means = self._corevds[wrt]['coreVectors'].mean(dim=0)
-            stds = self._corevds[wrt]['coreVectors'].std(dim=0)
+            means = self._corevds[wrt].mean(dim=0)
+            stds = self._corevds[wrt].std(dim=0)
             
         if target_layers != None:
             keys_to_pop = tuple(means.keys()-target_layers)
@@ -75,7 +74,7 @@ class CoreVectors():
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
-                batch['coreVectors'] = (batch['coreVectors'] - means)/stds
+                batch = (batch - means)/stds
         
         if to_file != None:
             to_file.parent.mkdir(parents=True, exist_ok=True)
@@ -135,7 +134,7 @@ class CoreVectors():
        
         if norm_file != None:
             if verbose: print('Loading normalization info.')
-            means, stds = torch.load(norm_file_path)
+            means, stds = torch.load(norm_file)
             self._norm_mean = means 
             self._norm_std = stds
 

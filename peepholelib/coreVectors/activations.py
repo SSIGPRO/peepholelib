@@ -13,41 +13,75 @@ def binary_classification(output):
 def multilabel_classification(output):
     return torch.argmax(output,axis=1).cpu()
 
+def fds(data, key):
+    if key == 'image':
+        return data[0]
+    if key == 'label':
+        return data[1]
+
 def get_activations(self, **kwargs):
     self.check_uncontexted()
+    
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    loaders = kwargs['loaders']
+    key_list = kwargs['key_list'] if 'key_list' in kwargs else ['image', 'label']
+    parser = kwargs['parser'] if 'parser' in kwargs else fds
+    pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
+
     model = self._model
     num_classes = self._model.num_classes
-    print(num_classes)
     device = self._model.device 
     hooks = model.get_hooks()
 
-    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
-
-    if not self._corevds:
-        raise RuntimeError('No data found. Please run get_coreVec_dataset() first.')
-
-    for ds_key in self._corevds:
-        if verbose: print(f'\n ---- Getting activations for {ds_key}\n')
-        
-        # file_path = self.path/(self.name.name+'.activations.'+ds_key)
+    for ds_key in loaders:
+        if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/('activations.'+ds_key)
-        n_samples = self._n_samples[ds_key]       
+        bs = loaders[ds_key].batch_size
+        
+        file_path = self.path/('activations.'+ds_key) 
+        self._act_file_paths[ds_key] = file_path     
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._actds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-            if verbose: print(f'loaded {file_path}')
+
+            self._n_samples[ds_key] = len(self._actds[ds_key])
+            
+            n_samples = self._n_samples[ds_key]
+            if verbose: print('loaded n_samples: ', n_samples)
         else:
-            if verbose: print(f'creating {file_path}') 
+            self._n_samples[ds_key] = len(loaders[ds_key].dataset)
+            n_samples = self._n_samples[ds_key] 
+            if verbose: print('loader n_samples: ', n_samples)
             self._actds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+
+            #------------------------
+            # copy images and labels
+            #------------------------
+
+            if verbose: print('Allocating images and labels')
+
+            for key in key_list:
+                data = parser(next(iter(loaders[ds_key])), key)[0]
+                
+                # get shapes for pre-allocation
+                if data.shape == torch.Size([]):
+                    self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
+                else:
+                    self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+data.shape))
+
+            if verbose: print('Copying images and labels')
+            dl_in = loaders[ds_key]
+            dl_t = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x)
+            
+            for data_in, data_t in tqdm(zip(dl_in, dl_t), disable=not verbose, total=len(dl_in)): 
+                for key in key_list:
+                    data_t[key] = parser(data_in, key)
 
         #------------------------------------------------
         # pre-allocate predictions, results, activations
         #------------------------------------------------
         act_td = self._actds[ds_key]
-        cvs_td = self._corevds[ds_key]
 
         # check if in and out activations exist
         if model._si and (not ('in_activations' in act_td)):
@@ -82,7 +116,7 @@ def get_activations(self, **kwargs):
                 act_shape = hooks[lk].out_shape
                 act_td['out_activations'][lk] = MMT.empty(shape=torch.Size((n_samples,)+act_shape))
                 _lts = lk
-             
+            
             if _lts != None: _layers_to_save.append(_lts)
         
         if verbose: print('Layers to save: ', _layers_to_save)
@@ -91,7 +125,7 @@ def get_activations(self, **kwargs):
             continue
         
         # to check if pred and results data exist 
-        has_pred = 'pred' in cvs_td 
+        has_pred = 'pred' in act_td 
         
         # allocate memory for pred and result
         if not has_pred:
@@ -104,14 +138,13 @@ def get_activations(self, **kwargs):
         # ---------------------------------------
         
         # create a temp dataloader to iterate over images
-        cvs_dl = DataLoader(cvs_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
         act_dl = DataLoader(act_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
         
         if verbose: print('Computing activations')
         
-        for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
+        for act_data in tqdm(act_dl, disable=not verbose, total=len(act_dl)):
             with torch.no_grad():
-                y_predicted = model(cvs_data['image'].to(device))
+                y_predicted = model(act_data['image'].to(device))
                 act_data['output'] = y_predicted
             
             # do not save predictions and results if it is already there
@@ -119,7 +152,7 @@ def get_activations(self, **kwargs):
                 predicted_labels = pred_fn(y_predicted)
             
                 act_data['pred'] = predicted_labels
-                act_data['result'] = predicted_labels == cvs_data['label']
+                act_data['result'] = predicted_labels == act_data['label']
             
             for lk in _layers_to_save:
                 if model._si:
