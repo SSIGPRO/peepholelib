@@ -20,11 +20,17 @@ def trim_corevectors(**kwargs):
     Returns:
         nothing 
     """
-    data = kwargs['data']
+    cvs = kwargs['cvs']
+    act = kwargs['act'] if 'act' in kwargs else None
     layer = kwargs['layer']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     peep_size = kwargs['peep_size']
-    return data['coreVectors'][layer][:,0:peep_size], data[label_key]
+    
+    if act == None:
+        return cvs[layer][:,0:peep_size]
+    else:
+        return cvs[layer][:,0:peep_size], act[label_key]
+    
 
 def null_parser(**kwargs):
     data = kwargs['data']
@@ -51,7 +57,8 @@ class ClassifierBase: # quella buona
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
 
         # set in fit()
-        self._fit_dl = None
+        self._cvs_dl = None
+        self._act_dl = None
 
         # computed in fit()
         self._classifier = None
@@ -76,20 +83,19 @@ class ClassifierBase: # quella buona
         Args:
         - verbose (Bool): print some stuff
         '''
-        
-        if self._fit_dl == None:
+        print(self._cvs_dl)
+        if self._cvs_dl == None:
             raise RuntimeError('No fitting dataloader. Please run fit() first.')
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-
         # pre-allocate empirical posteriors
         _empp = torch.zeros(self.nl_class, self.nl_model)
 
         # iterate over _fit_data
         
         if verbose: print('Computing empirical posterior')
-        for batch in tqdm(self._fit_dl, disable=not verbose):
-            data, label = self.parser(data=batch, **self.parser_kwargs)
+        for act, cvs in tqdm(zip(self._act_dl, self._cvs_dl), disable=not verbose):
+            data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
             data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
             

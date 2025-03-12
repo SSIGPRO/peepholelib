@@ -92,7 +92,7 @@ class Peepholes:
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                     for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
                         data_in, data_t = batch
-                        cp = self._classifiers[layer].classifier_probabilities(batch=data_in, verbose=verbose).to(self.device)
+                        cp = self._classifiers[layer].classifier_probabilities(cvs=data_in, verbose=verbose).to(self.device)
                         lp = cp@_empp
                         lp /= lp.sum(dim=1, keepdim=True)
                         data_t[layer]['peepholes'] = lp.cpu()
@@ -209,7 +209,7 @@ class Peepholes:
         self.check_uncontexted()
         
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        cv_dls = kwargs['coreVectors']
+        act_dls = kwargs['activations']
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
@@ -223,7 +223,7 @@ class Peepholes:
 
             for i, ds_key in enumerate(self._phs.keys()):       # train val test
                 if verbose: print(f'Evaluating {ds_key}')
-                results = cv_dls[ds_key].dataset['result']
+                results = act_dls[ds_key].dataset['result']
                 scores = self._phs[ds_key][layer]['score_'+score_type]
                 oks = (scores[results == True]).detach().cpu().numpy()
                 kos = (scores[results == False]).detach().cpu().numpy()
