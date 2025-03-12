@@ -4,12 +4,12 @@ from tqdm import tqdm
 # torch stuff
 import torch
 import torchvision
-from torchvision.models.vision_transformer import VisionTransformer
-from tensordict import TensorDict, PersistentTensorDict
+from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
-from torch.nn.modules.utils import _reverse_repeat_tuple
-from torch.nn.functional import pad
+
+def get_in_activations(x):
+    return x['in_activations']
 
 def get_coreVectors(self, **kwargs):
     self.check_uncontexted()
@@ -17,19 +17,19 @@ def get_coreVectors(self, **kwargs):
     model = self._model 
     device = self._model.device 
     normalize_wrt = kwargs['normalize_wrt'] if 'normalize_wrt' in kwargs else None 
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
 
     reduction_fns = kwargs['reduction_fns'] if 'reduction_fns' in kwargs else lambda x, y:x[y]
     shapes = kwargs['shapes'] # TODO dry run if not specified the shape
-    
+    activations_parser = kwargs['activations_parser'] if 'activations_parser' in kwargs else get_in_activations 
+
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+
     if not self._actds:
         raise RuntimeError('No activations found. Please run get_activations() first.')
     
     if reduction_fns.keys() != model._target_layers.keys(): 
         raise RuntimeError(f'Keys inconsistency between reduction_fns and target_layers \n reduction_fns keys: {reduction_fns.keys()} \n target_layers: {model._target_layers.keys()}')
-
         
     if reduction_fns.keys() != shapes.keys(): 
         raise RuntimeError(f'Keys inconsistency between reduction_fns and shapes \n reduction_fns keys: {reduction_fns.keys()} \n shapes keys: {shapes.keys()}')
@@ -62,9 +62,8 @@ def get_coreVectors(self, **kwargs):
         # check if layer in and out activations exist
         _layers_to_save = []
         
+        # allocate for core vectors 
         for lk, corev_size in shapes.items(): 
-
-            # allocate for core vectors 
             if not (lk in cvs_td):
                 if verbose: print('allocating core vectors for layer: ', lk)
                 cvs_td[lk] = MMT.empty(shape=torch.Size((n_samples,)+(corev_size,)))
@@ -81,10 +80,9 @@ def get_coreVectors(self, **kwargs):
 
         # create a temp dataloader to iterate over images
         cvs_dl = DataLoader(cvs_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
-        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False)
+        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = activations_parser, shuffle=False)
 
         if verbose: print('Computing core vectors')
-        
         
         for lk in _layers_to_save:
             
@@ -96,6 +94,6 @@ def get_coreVectors(self, **kwargs):
                 ## it could be usefule to choos the direction at the beginning and verify if that specific layer 
                 ## is present in either in or out activations
                 
-                cvs_data[lk] = reduction_fns[lk](act_data['in_activations'][lk])
+                cvs_data[lk] = reduction_fns[lk](act_data[lk])
 
     return        

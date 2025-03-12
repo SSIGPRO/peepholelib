@@ -15,19 +15,20 @@ class CoreVectors():
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])
         self.name = Path(kwargs['name'])
+        
         # create folder
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
 
-        # computed in get_coreVec_dataset()
+        # computed in get_coreVectors()
         self._cvs_file_paths = {} 
         self._n_samples = {} 
-        self._corevds = {} # filled in get_coreVectors()
+        self._corevds = {} 
 
         # computed in get_activations()
         self._act_file_paths = {} 
-        self._actds = {} # filled in get_coreVectors_dataset
+        self._actds = {} 
         
         # set in normalize_corevectors() 
         self._norm_mean = None 
