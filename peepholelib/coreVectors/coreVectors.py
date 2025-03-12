@@ -62,6 +62,7 @@ class CoreVectors():
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
             stds = self._corevds[wrt].std(dim=0)
+            print(means['classifier.0'], stds['classifier.0'])
             
         if target_layers != None:
             keys_to_pop = tuple(means.keys()-target_layers)
@@ -69,13 +70,17 @@ class CoreVectors():
             for k in keys_to_pop:
                 means.pop(k,default=None)
                 stds.pop(k,default=None)
-            
+   
         for ds_key in self._corevds:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
+                #print(batch['classifier.0'])
                 batch = (batch - means)/stds
+                #print(batch['classifier.0'])
+
+            self._corevds[ds_key] = dl.dataset
         
         if to_file != None:
             to_file.parent.mkdir(parents=True, exist_ok=True)

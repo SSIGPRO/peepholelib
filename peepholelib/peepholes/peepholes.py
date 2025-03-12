@@ -74,7 +74,6 @@ class Peepholes:
             for layer in self.target_layers:
 
                 # check for empiracal posterios `_empp`
-                print('self classifiers: ', self._classifiers, self.target_layers)
                 if self._classifiers[layer]._empp == None:
                     raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
                 _empp = self._classifiers[layer]._empp.to(self.device)
