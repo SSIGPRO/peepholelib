@@ -79,7 +79,8 @@ class KMeans(ClassifierBase): # quella buona
         super().save()
 
     def load(self, **kwargs):
-        self.file_path = self.path/('KM.' + f'cv_dim={self._classifier.model_.config.num_features}' + '.' + f'num_cluster={self.nl_class}')
+        self.file_path = kwargs['file_path']
         if not self.file_path.exists():
             raise FileNotFoundError(f"{self.file_path} does not exist, fit the classifier first")
         self._classifier.load(self.file_path)
+        super().load()
