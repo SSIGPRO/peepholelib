@@ -6,7 +6,6 @@ from tensordict import TensorDict, PersistentTensorDict
 # generic python stuff
 from pathlib import Path
 from tqdm import tqdm
-from functools import partial
 
 class CoreVectors():
     from .activations import get_activations
@@ -21,15 +20,15 @@ class CoreVectors():
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
 
-        # computed in get_coreVectors()
-        self._cvs_file_paths = {} 
-        self._n_samples = {} 
-        self._corevds = {} 
-
         # computed in get_activations()
+        self._n_samples = {} 
         self._act_file_paths = {} 
         self._actds = {} 
-        
+
+        # computed in get_coreVectors()
+        self._cvs_file_paths = {} 
+        self._corevds = {} 
+
         # set in normalize_corevectors() 
         self._norm_mean = None 
         self._norm_std = None 

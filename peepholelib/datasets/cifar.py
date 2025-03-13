@@ -41,7 +41,6 @@ class Cifar(DatasetBase):
         Args:
         - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100').
         - batch_size (int): The batch size for DataLoader.
-        - data_kwargs (dict): Additional keyword arguments for DataLoader.
         - seed (int): Random seed for reproducibility.
         - data_augmentation (bool): Flag indicating whether to apply data 
         augmentation (default: False).
@@ -54,12 +53,11 @@ class Cifar(DatasetBase):
         Example:
         - To load the training data of CIFAR10 with a batch size of 32:
         >>> c = Cifar(dataset = 'CIFAR10')
-        >>> loaders = c.load_data(batch_size=32, data_kwargs={}, seed=42)
+        >>> loaders = c.load_data(batch_size=32, seed=42)
         '''
 
         # parse parameteres
         batch_size = kwargs['batch_size']
-        data_kwargs = kwargs['data_kwargs']
         seed = kwargs['seed']
 
         augmentation_transform = kwargs['augmentation_transform'] if 'augmentation_transform' in kwargs else None
@@ -103,9 +101,12 @@ class Cifar(DatasetBase):
             train_dataset.dataset.transform = transform
      
         # Save datasets as objects in the class
-        self._dss['train'] = train_dataset
-        self._dss['val'] = val_dataset
-        self._dss['test'] = test_dataset
+        
+        self._dss = {
+                'train': train_dataset,
+                'val': val_dataset,
+                'test': test_dataset
+                }
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
         return 

@@ -14,6 +14,8 @@ def multilabel_classification(output):
     return torch.argmax(output,axis=1).cpu()
 
 def fds(data, key):
+    #print('parser data: ', data)
+    #print('parser key: ', key)
     if key == 'image':
         return data[0]
     if key == 'label':
@@ -23,7 +25,10 @@ def get_activations(self, **kwargs):
     self.check_uncontexted()
     
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    loaders = kwargs['loaders']
+
+    datasets = kwargs['datasets']
+    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
+
     key_list = kwargs['key_list'] if 'key_list' in kwargs else ['image', 'label']
     parser = kwargs['parser'] if 'parser' in kwargs else fds
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
@@ -33,11 +38,10 @@ def get_activations(self, **kwargs):
     device = self._model.device 
     hooks = model.get_hooks()
 
-    for ds_key in loaders:
+    for ds_key in datasets:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/('activations.'+ds_key)
         self._act_file_paths[ds_key] = file_path     
-        bs = loaders[ds_key].batch_size
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
@@ -48,9 +52,9 @@ def get_activations(self, **kwargs):
             n_samples = self._n_samples[ds_key]
             if verbose: print('loaded n_samples: ', n_samples)
         else:
-            self._n_samples[ds_key] = len(loaders[ds_key].dataset)
+            self._n_samples[ds_key] = len(datasets[ds_key])
             n_samples = self._n_samples[ds_key] 
-            if verbose: print('loader n_samples: ', n_samples)
+            if verbose: print('created persistent tensor dict with n_samples: ', n_samples)
             self._actds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
 
             #------------------------
@@ -58,21 +62,22 @@ def get_activations(self, **kwargs):
             #------------------------
 
             if verbose: print('Allocating images and labels')
+            
+            # create dataloader of input dataset and activations
+            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, shuffle=False) 
+            dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False)
 
             for key in key_list:
-                data = parser(next(iter(loaders[ds_key])), key)[0]
+                data = parser(next(iter(dl_ds)), key)[0]
                 
-                # get shapes for pre-allocation
+                # pre-allocation activations
                 if data.shape == torch.Size([]):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+data.shape))
 
             if verbose: print('Copying images and labels')
-            dl_in = loaders[ds_key]
-            dl_t = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x)
-            
-            for data_in, data_t in tqdm(zip(dl_in, dl_t), disable=not verbose, total=len(dl_in)): 
+            for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=n_samples): 
                 for key in key_list:
                     data_t[key] = parser(data_in, key)
 
@@ -140,7 +145,7 @@ def get_activations(self, **kwargs):
         
         if verbose: print('Computing activations')
         
-        for act_data in tqdm(act_dl, disable=not verbose, total=len(act_dl)):
+        for act_data in tqdm(act_dl, disable=not verbose, total=n_samples):
             with torch.no_grad():
                 y_predicted = model(act_data['image'].to(device))
             

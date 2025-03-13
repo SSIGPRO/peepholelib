@@ -52,7 +52,6 @@ def get_coreVectors(self, **kwargs):
 
 
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
-        print(self._n_samples[ds_key])
         n_samples = self._n_samples[ds_key]       
         
         cvs_td = self._corevds[ds_key]
