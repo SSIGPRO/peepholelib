@@ -60,4 +60,10 @@ class GMM(ClassifierBase): # quella buona
         data, _ = self.parser(data = batch, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
         return probs  
+    
+    def save(self, **kwargs):
+        self.file_path = self.path/('GMM.' + f'cv_dim={self._classifier.model_.config.num_features}' + '.' + f'num_cluster={self.nl_class}')
+        self.file_path.mkdir(parents=True, exist_ok=True)
+        self._classifier.save(self.file_path)
+        super().save()
             
