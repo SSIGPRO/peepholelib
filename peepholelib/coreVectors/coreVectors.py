@@ -50,7 +50,7 @@ class CoreVectors():
         from_file = Path(kwargs['from_file']) if 'from_file' in kwargs else None
         wrt = kwargs['wrt'] if 'wrt' in kwargs else None
         to_file = Path(kwargs['to_file']) if 'to_file' in kwargs  else None
-        target_layers = kwargs['target_layers'] if 'target_layers' in kwargs  else None
+        target_layers = kwargs['target_layers'] if 'target_layers' in kwargs else None
 
         if wrt == None and from_file == None:
             raise RuntimeError(f'Specify `wrt` or `from_file`.')
@@ -62,26 +62,22 @@ class CoreVectors():
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
             stds = self._corevds[wrt].std(dim=0)
-            print(means['classifier.0'], stds['classifier.0'])
-            
+
         if target_layers != None:
             keys_to_pop = tuple(means.keys()-target_layers)
-
+            print('pop keys: ', keys_to_pop)
             for k in keys_to_pop:
-                means.pop(k,default=None)
-                stds.pop(k,default=None)
-   
+                means.pop(k, default=None)
+                stds.pop(k, default=None)
+
         for ds_key in self._corevds:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
-                #print(batch['classifier.0'])
-                batch = (batch - means)/stds
-                #print(batch['classifier.0'])
+                for _k in means.keys():
+                    batch[_k] = (batch[_k]- means[_k])/stds[_k]
 
-            self._corevds[ds_key] = dl.dataset
-        
         if to_file != None:
             to_file.parent.mkdir(parents=True, exist_ok=True)
             torch.save((means, stds), to_file)
@@ -129,20 +125,20 @@ class CoreVectors():
 
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
-            file_path = self.path/(self.name.name+'.'+ds_key)
-            self._cvs_file_paths[ds_key] = file_path
             
-            if verbose: print(f'File {file_path} exists. Loading from disk.')
-            self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
+            self._cvs_file_paths[ds_key] = self.path/(self.name.name+'.'+ds_key)
+            self._act_file_paths[ds_key] = self.path/('activations.'+ds_key)
+
+            if verbose: print(f'Loading files {self._cvs_file_paths[ds_key]} and {self._act_file_paths[ds_key]} from disk. ')
+            self._corevds[ds_key] = PersistentTensorDict.from_h5(self._cvs_file_paths[ds_key], mode='r')
+            self._actds[ds_key] = PersistentTensorDict.from_h5(self._act_file_paths[ds_key], mode='r')
 
             self._n_samples[ds_key] = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', self._n_samples[ds_key])
        
         if norm_file != None:
             if verbose: print('Loading normalization info.')
-            means, stds = torch.load(norm_file)
-            self._norm_mean = means 
-            self._norm_std = stds
+            self._norm_mean, self._norm_std = torch.load(norm_file)
 
         return
     

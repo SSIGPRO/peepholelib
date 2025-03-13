@@ -3,7 +3,6 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
-import torchvision
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
@@ -84,16 +83,9 @@ def get_coreVectors(self, **kwargs):
 
         if verbose: print('Computing core vectors')
         
-        for lk in _layers_to_save:
-            
-            if verbose: print(f'\n ---- Getting corevectors for {lk}\n')
-            
-            for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
-
-                ## TODO change this part in oreder to guarantee the possibility to choose between in and out activations
-                ## it could be usefule to choos the direction at the beginning and verify if that specific layer 
-                ## is present in either in or out activations
-                
+        if verbose: print(f'\n ---- Getting corevectors for {ds_key}\n')
+        for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
+            for lk in _layers_to_save:
                 cvs_data[lk] = reduction_fns[lk](act_data[lk])
 
     return        

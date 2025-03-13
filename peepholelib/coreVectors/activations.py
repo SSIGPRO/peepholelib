@@ -36,10 +36,8 @@ def get_activations(self, **kwargs):
     for ds_key in loaders:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/('activations.'+ds_key)
-        bs = loaders[ds_key].batch_size
-        
-        file_path = self.path/('activations.'+ds_key) 
         self._act_file_paths[ds_key] = file_path     
+        bs = loaders[ds_key].batch_size
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
@@ -145,12 +143,11 @@ def get_activations(self, **kwargs):
         for act_data in tqdm(act_dl, disable=not verbose, total=len(act_dl)):
             with torch.no_grad():
                 y_predicted = model(act_data['image'].to(device))
-                act_data['output'] = y_predicted
             
             # do not save predictions and results if it is already there
             if not has_pred:
                 predicted_labels = pred_fn(y_predicted)
-            
+                act_data['output'] = y_predicted
                 act_data['pred'] = predicted_labels
                 act_data['result'] = predicted_labels == act_data['label']
             

@@ -1,4 +1,4 @@
-from tensordict import TensorDict
+from tensordict import PersistentTensorDict as PTD
 from tensordict import MemoryMappedTensor as MMT
 import torch
 import sys
@@ -6,14 +6,10 @@ from torch.utils.data import DataLoader
 
 def p(td, bs):
     dl = DataLoader(dataset=td, batch_size=bs, collate_fn=lambda x: x)
-    print('\ndataloader: ', len(dl.dataset))
-    for d in dl:
-        print('batch')
-        for kk in d.keys():
-            print(kk, d[kk].contiguous())
-            if kk == 'b':
-                for k in d['b'].keys():
-                    print('b', k, d['b'][k].contiguous())
+    print('\n------: ')
+    for data in dl:
+        for kk in data.keys():
+            print(kk, data[kk].contiguous())
 
 if __name__ == '__main__':
     n = 5 
@@ -23,37 +19,32 @@ if __name__ == '__main__':
     n_dicts = 2 
     
     # seems like batch size is really important
-    td = TensorDict(batch_size=n, device=device)
+    td = PTD(filename='./banana', batch_size=[n], mode='w')
     for j in range(n_dicts):
         td['a%d'%j] = MMT.empty(shape=(n,ds))
-    
-    td = td.memmap_like('./banana')
-    # makes one dict for each input
-    for i in range(n):
-        d = {}
-        # create data
-        for j in range(2):
-            d['a%d'%j] = torch.rand((1, ds))
-        td[i] = TensorDict(d) 
+        td['a%d'%j] = torch.rand((n, ds))
     
     p(td, 5)
 
     m = td.mean(dim=0)
     s = td.std(dim=0)
-    print('mean: ', m)
-    print('std: ', s)
+    for k in m.keys():
+        print('mean: ', m[k])
+        print('std: ', s[k])
+    
     print('\n------------------------\n') 
     bs = 2
     dl = DataLoader(dataset=td, batch_size=bs, collate_fn=lambda x: x)
-    for bn, data in enumerate(dl):
-        n_in = len(data)
-        temp = (data-m)/s
-        td[bn*bs:bn*bs+n_in] = temp 
-
-    print('after norm')
+    for data in dl:
+        for k in m.keys():
+            print(f'{k} - before: ', data[k])
+            data[k] = (data[k]-m[k])/s[k]
+            print(f'{k} after: ', data[k])
+            
+    print('\nafter norm')
     p(td, 5)
 
     del td
     print('after loading')
-    td2 = TensorDict.load_memmap('./banana')
+    td2 = PTD.from_h5('./banana', mode='r')
     p(td2, 5)
