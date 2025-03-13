@@ -66,6 +66,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         # set in set_model()
         self._model = None
+        self.num_classes = None
 
         # set in set_target_layers()
         self._target_layers = None 
@@ -149,7 +150,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
             layer = self.get_layer(layername=_str)
             print("layer: ", layer)
             if layer != None:
-                print("dentro do if. layer: ", layer)
                 _dict[_str] = layer
 
         self._target_layers = _dict
@@ -164,7 +164,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - x (tensor) - one input for the model set with set_model().
         '''
         _img = kwargs['x'].to(self.device)
-        self._model(_img)    
+        output = self._model(_img)
+        self.num_classes = output.shape[1]
         
         if not self._hooks:
             raise RuntimeError('No hooks available. Please run set_hooks() first.')

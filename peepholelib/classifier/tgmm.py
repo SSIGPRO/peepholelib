@@ -31,20 +31,22 @@ class GMM(ClassifierBase): # quella buona
         Args:
         '''
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        _dl = kwargs['dataloader']
+        _cvs_dl = kwargs['cvs']
+        _act_dl = kwargs['act']
         
         if verbose: 
             print('\n ---- GMM classifier\n')
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
-        data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
+        data = self.parser(cvs=_cvs_dl.dataset, **self.parser_kwargs)
 
         if verbose: print('Fitting GMM')
         
         self._classifier.fit(data)
         
-        self._fit_dl = _dl
+        self._cvs_dl = _cvs_dl
+        self._act_dl = _act_dl
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -52,12 +54,12 @@ class GMM(ClassifierBase): # quella buona
         Get prediction probabilities based on the fitted modelfor the provided inputs.
         
         Args:
-        - batch: data containing data to be parsed with the paser function set on __init__() 
+        - cvs: data containing data to be parsed with the paser function set on __init__() 
         '''
         
-        batch = kwargs['batch']
+        cvs = kwargs['cvs']
 
-        data, _ = self.parser(data = batch, **self.parser_kwargs)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
         return probs  
             
