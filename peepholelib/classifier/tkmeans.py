@@ -55,7 +55,7 @@ class KMeans(ClassifierBase): # quella buona
         
         batch = kwargs['batch']
 
-        data = self.parser(data = batch, **self.parser_kwargs)
+        data, _ = self.parser(data = batch, **self.parser_kwargs)
         distances = torch.tensor(self._classifier.transform(data), dtype=data.dtype)
         
         # TODO: clean this out ???
@@ -82,3 +82,4 @@ class KMeans(ClassifierBase): # quella buona
         self.file_path = self.path/('KM.' + f'cv_dim={self._classifier.model_.config.num_features}' + '.' + f'num_cluster={self.nl_class}')
         if not self.file_path.exists():
             raise FileNotFoundError(f"{self.file_path} does not exist, fit the classifier first")
+        self._classifier.load(self.file_path)

@@ -66,4 +66,11 @@ class GMM(ClassifierBase): # quella buona
         self.file_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self.file_path)
         super().save()
+
+    def load(self, **kwargs):
+        self.file_path = kwargs['file_path']
+        if not self.file_path.exists():
+            raise FileNotFoundError(f"{self.file_path} does not exist, fit the classifier first")
+        self._classifier.load(self.file_path)
+        super().load()
             

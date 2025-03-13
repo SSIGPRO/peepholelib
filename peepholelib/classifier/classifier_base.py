@@ -54,7 +54,7 @@ class ClassifierBase: # quella buona
         # computer in compute_empirical_posteriors()
         self._empp = None
 
-        # defined in save()
+        # defined in save() or load()
         self.file_path = None
 
         return
