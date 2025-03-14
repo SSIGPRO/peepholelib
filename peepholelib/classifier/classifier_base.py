@@ -38,23 +38,18 @@ def null_parser(**kwargs):
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
-        '''
-        load = kwargs['load'] if 'load' in kwargs else False
-        if load:
-            self.nl_class = None
-            self.nl_model = None
-            
-            self.device = None
-            self.parser = None
-            self.parser_kwargs = {}
-        else:
-        '''
+        
         self.nl_class = kwargs['nl_classifier']
         self.nl_model = kwargs['nl_model']
+
+        self.path = kwargs['path']
+        # create folder
+        self.path.mkdir(parents=True, exist_ok=True)
         
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
         self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+        
 
         # set in fit()
         self._cvs_dl = None
@@ -66,7 +61,22 @@ class ClassifierBase: # quella buona
         # computer in compute_empirical_posteriors()
         self._empp = None
 
+        # defined in save() or load()
+        self.file_path = None
+
         return
+    
+    @abc.abstractmethod
+    def load(self, **kwargs):
+        path_empp = self.file_path/ 'empp.pt'
+        self._empp = torch.load(path_empp)
+        pass 
+
+    @abc.abstractmethod
+    def save(self, **kwargs):
+        path_empp = self.file_path/ 'empp.pt'
+        torch.save(self._empp, path_empp)
+        pass
 
     @abc.abstractmethod
     def fit(self, **kwargs):
