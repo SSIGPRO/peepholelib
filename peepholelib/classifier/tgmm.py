@@ -26,16 +26,14 @@ class GMM(ClassifierBase): # quella buona
         Args:
         '''
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+        cvs = kwargs['corevectors']
         
-        if self._cvs == None:
-            raise RuntimeError('No corevectors found. Instantiate the class or run `set_corevectors()` passing the `corevectors` argument.')
-
         if verbose: 
             print('\n ---- GMM classifier\n')
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(cvs=self._cvs._cvsds, **self.parser_kwargs)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
         
         if data.shape[1] != self.n_features:
             raise RuntimeError('Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
@@ -55,7 +53,7 @@ class GMM(ClassifierBase): # quella buona
         
         cvs = kwargs['cvs']
 
-        data = self.parser(cvs=self._cvs._cvsds, **self.parser_kwargs)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
 
         return probs   
@@ -63,20 +61,19 @@ class GMM(ClassifierBase): # quella buona
     def save(self, **kwargs):
         self.path.mkdir(parents=True, exist_ok=True)
 
-        if not self.file_path == None:
-            self._clas_path = self.path/('{self.name}.' + f'n_features={self.n_features}' + '.' + f'nl_class={self.nl_class}'+'.'+'{nl_model={self.nl_model}')
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
 
-        self.file_path.mkdir(parents=True, exist_ok=True)
-        self._classifier.save(self.file_path)
+        self._classifier.save(self._clas_file)
         super().save()
         
         return
 
     def load(self, **kwargs):
-        if not self.file_path == None:
-            self._clas_path = self.path/('{self.name}.' + f'n_features={self.n_features}' + '.' + f'nl_class={self.nl_class}'+'.'+'{nl_model={self.nl_model}')
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
 
-        self._classifier.load(self.file_path)
+        self._classifier.load(self._clas_file)
         super().load()
         
         return
