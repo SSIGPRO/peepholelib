@@ -85,10 +85,6 @@ class ClassifierBase: # quella buona
     def classifier_probabilities(self, **kwargs):
         pass
     
-    def set_corevectors(self, **kwargs):
-        self._cvs = kwargs['corvectors']
-        return
-
     def compute_empirical_posteriors(self, **kwargs):
         '''
         Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to classifier's class g belongs to the model's class c.
