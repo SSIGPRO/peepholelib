@@ -27,22 +27,22 @@ class KMeans(ClassifierBase): # quella buona
         Args:
         '''
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        _dl = kwargs['dataloader']
+        cvs = kwargs['corevectors']
 
         if verbose: 
             print('\n ---- KMeans classifier\n')
             print('Parsing data')
 
-        print('tkmeans device: ', self.device)
-
         # temp dataloader for loading the whole dataset
-        data, _ = self.parser(data=_dl.dataset, **self.parser_kwargs)
-        print('data shape: ', data.shape, type(data))
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        
+        if data.shape[1] != self.n_features:
+            raise RuntimeError('Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
+
 
         if verbose: print('Fitting KMeans')
         self._classifier.fit(data)
-        
-        self._fit_dl = _dl
+
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -53,21 +53,32 @@ class KMeans(ClassifierBase): # quella buona
         - batch: data batch containing data to be parsed with the paser function set on __init__() 
         '''
         
-        batch = kwargs['batch']
+        cvs = kwargs['cvs']
 
-        data = self.parser(data = batch, **self.parser_kwargs)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
         distances = torch.tensor(self._classifier.transform(data), dtype=data.dtype)
         
-        # TODO: clean this out ???
-        # convert distances to probabilities (soft assignment) Gaussian-like softmax
-        # TODO: Check the var in the exponent. Should it be over the training set? Should it be there?
-        #probs = torch.exp(-distances ** 2 / (2 * (distances.std() ** 2)))
-        #probs = torch.exp(-distances ** 2 / 2 )
-
-        # normalize to probabilities
-        #probs /= probs.sum(dim=1, keepdim=True)
-
         # changing strategy: back to softmin
         probs = torch.nn.functional.softmin(distances, dim=1)
             
         return probs 
+    
+    def save(self, **kwargs):
+        self.path.mkdir(parents=True, exist_ok=True)
+        
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
+
+        self._classifier.save(self._clas_file)
+        super().save()
+    
+        return
+
+    def load(self, **kwargs):
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
+
+        self._classifier.load(self._clas_file)
+        super().load()
+
+        return

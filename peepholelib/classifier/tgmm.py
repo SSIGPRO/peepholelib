@@ -17,36 +17,30 @@ class GMM(ClassifierBase): # quella buona
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
         
-        '''
-        load = kwargs['load']# if 'load' in kwargs else False
-        if not load:
-        ''' 
         self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
         return
 
     def fit(self, **kwargs):
         '''
         Fit GMM. 
-        
         Args:
         '''
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        _cvs_dl = kwargs['cvs']
-        _act_dl = kwargs['act']
+        cvs = kwargs['corevectors']
         
         if verbose: 
             print('\n ---- GMM classifier\n')
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(cvs=_cvs_dl.dataset, **self.parser_kwargs)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        
+        if data.shape[1] != self.n_features:
+            raise RuntimeError('Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
 
         if verbose: print('Fitting GMM')
-        
         self._classifier.fit(data)
         
-        self._cvs_dl = _cvs_dl
-        self._act_dl = _act_dl
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -61,5 +55,25 @@ class GMM(ClassifierBase): # quella buona
 
         data = self.parser(cvs=cvs, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
-        return probs  
-            
+
+        return probs   
+    
+    def save(self, **kwargs):
+        self.path.mkdir(parents=True, exist_ok=True)
+
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
+
+        self._classifier.save(self._clas_file)
+        super().save()
+        
+        return
+
+    def load(self, **kwargs):
+        if self._clas_file == None:
+            self._clas_file = self.path/(self._suffix+'.model')
+
+        self._classifier.load(self._clas_file)
+        super().load()
+        
+        return

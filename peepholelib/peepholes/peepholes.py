@@ -19,7 +19,7 @@ class Peepholes:
     def __init__(self, **kwargs):
         self.target_layers = kwargs['target_layers']                  # list of peep layers
         self.path = Path(kwargs['path'])
-        self.name = Path(kwargs['name'])
+        self.name = kwargs['name']
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # create folder
@@ -50,12 +50,12 @@ class Peepholes:
         self.check_uncontexted()
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        dls = kwargs['loaders'] 
+        cvs = kwargs['corevectors'] 
+        bs = kwargs['batch_size']
 
-        for ds_key in dls:
-            bs = dls[ds_key].batch_size
+        for ds_key, cvds in cvs._corevds.items():
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
-            file_path = self.path/(self.name.name+'.'+ds_key)
+            file_path = self.path/(self.name+'.'+ds_key)
             
             # create/load PersistentTensorDict file
             if file_path.exists():
@@ -64,7 +64,7 @@ class Peepholes:
                 n_samples = len(self._phs[ds_key])
                 if verbose: print('loaded n_samples: ', n_samples)
             else:
-                n_samples = len(dls[ds_key].dataset)
+                n_samples = len(cvds)
                 if verbose: print('loader n_samples: ', n_samples) 
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
@@ -78,7 +78,6 @@ class Peepholes:
                     raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
                 _empp = self._classifiers[layer]._empp.to(self.device)
 
-
                 if not layer in self._phs[ds_key]:
                     if verbose: print('allocating peepholes for layer: ', layer)
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
@@ -88,9 +87,12 @@ class Peepholes:
                     # computing peepholes
                     #-----------------------------------------
                     if verbose: print(f'\n ---- computing peepholes for layer {layer}\n')
+
+                    # create dataloaders
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-                    for batch in tqdm(zip(dls[ds_key], dl_t), disable=not verbose, total=len(dl_t)):
-                        data_in, data_t = batch
+                    dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+
+                    for data_in, data_t in tqdm(zip(dl_o, dl_t), disable=not verbose, total=n_samples):
                         cp = self._classifiers[layer].classifier_probabilities(cvs=data_in, verbose=verbose).to(self.device)
                         lp = cp@_empp
                         lp /= lp.sum(dim=1, keepdim=True)
@@ -114,7 +116,7 @@ class Peepholes:
 
         for ds_key in self._phs:
             if verbose: print(f'\n ---- Getting scores for {ds_key}\n')
-            file_path = self.path / (self.name.name + '.' + ds_key)
+            file_path = self.path / (self.name + '.' + ds_key)
     
             #-----------------------------------------
             # Check if peepholes exist before computing scores
@@ -167,48 +169,18 @@ class Peepholes:
 
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
-            file_path = self.path/(self.name.name+'.'+ds_key)
+            file_path = self.path/(self.name+'.'+ds_key)
            
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
 
-        ''' 
-        # load classifiers
-        if verbose: print(f'\n ---- Loading the classifiers\n')
-
-        if self._classifiers == {}:
-
-            for layer in self.target_layers:
-                _path = self.path / f'classifier.{layer}'
-                
-                if _path.exists():
-                    if verbose: print(f'Loading for layer: {layer}')
-
-                    # instance of the classifier
-                    gm = GaussianMixture()
-                    gm.load(_path)
-                    
-                    cls = tGMM(load=True)
-                    cls._classifier = gm
-                    # TODO load cls.emmp - find a way to save it -> it's going to be a dictionary :)
-
-                    self._classifiers[layer] = cls
-                    
-                    # check load params
-                    params = self._classifiers[layer]._classifier.get_params()
-                    print(f"Loaded parameters for {layer}: {params}")
-
-
-                else:
-                    if verbose: print(f'Classifier for layer: {layer} does not exist')
-        '''
         return
     
     def evaluate_dists(self, **kwargs):
         self.check_uncontexted()
         
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        act_dls = kwargs['activations']
+        acts = kwargs['activations']
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
@@ -222,7 +194,7 @@ class Peepholes:
 
             for i, ds_key in enumerate(self._phs.keys()):       # train val test
                 if verbose: print(f'Evaluating {ds_key}')
-                results = act_dls[ds_key].dataset['result']
+                results = acts[ds_key]['result']
                 scores = self._phs[ds_key][layer]['score_'+score_type]
                 oks = (scores[results == True]).detach().cpu().numpy()
                 kos = (scores[results == False]).detach().cpu().numpy()
