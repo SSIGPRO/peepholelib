@@ -90,31 +90,31 @@ def get_activations(self, **kwargs):
         elif verbose: print('Out activations exist.')
         if 'out_activations' in act_td: act_td['out_activations'].batch_size = torch.Size((n_samples,)) 
         
-        # check if layer exists in in_ and out_activations
-        _layers_to_save = []
-        for lk in model.get_target_layers():
+        # check if module exists in in_ and out_activations
+        _modules_to_save = []
+        for mk in model.get_target_modules():
             # prevents double entries 
             _lts = None
 
             # allocate for input activations 
-            if model._si and (not (lk in act_td['in_activations'])):
-                if verbose: print('allocating in act layer: ', lk)
+            if model._si and (not (mk in act_td['in_activations'])):
+                if verbose: print('allocating in act module: ', mk)
                 # Seems like when loading from memory the batch size gets overwritten with all dims, so we over-overwrite it.
-                act_shape = hooks[lk].in_shape
-                act_td['in_activations'][lk] = MMT.empty(shape=torch.Size((n_samples,)+act_shape))
-                _lts = lk
+                act_shape = hooks[mk].in_shape
+                act_td['in_activations'][mk] = MMT.empty(shape=torch.Size((n_samples,)+act_shape))
+                _lts = mk
 
             # allocate for output activations 
-            if model._so and (not (lk in act_td['out_activations'])):
-                if verbose: print('allocating out act layer: ', lk)
-                act_shape = hooks[lk].out_shape
-                act_td['out_activations'][lk] = MMT.empty(shape=torch.Size((n_samples,)+act_shape))
-                _lts = lk
+            if model._so and (not (mk in act_td['out_activations'])):
+                if verbose: print('allocating out act module: ', mk)
+                act_shape = hooks[mk].out_shape
+                act_td['out_activations'][mk] = MMT.empty(shape=torch.Size((n_samples,)+act_shape))
+                _lts = mk
             
-            if _lts != None: _layers_to_save.append(_lts)
+            if _lts != None: _modules_to_save.append(_lts)
         
-        if verbose: print('Layers to save: ', _layers_to_save)
-        if len(_layers_to_save) == 0:
+        if verbose: print('modules to save: ', _modules_to_save)
+        if len(_modules_to_save) == 0:
             if verbose: print(f'No new activations for {ds_key}, skipping')
             continue
         
@@ -146,11 +146,11 @@ def get_activations(self, **kwargs):
                 act_data['pred'] = predicted_labels
                 act_data['result'] = predicted_labels == act_data['label']
             
-            for lk in _layers_to_save:
+            for mk in _modules_to_save:
                 if model._si:
-                    act_data['in_activations'][lk] = hooks[lk].in_activations[:].cpu()
+                    act_data['in_activations'][mk] = hooks[mk].in_activations[:].cpu()
 
                 if model._so:
-                    act_data['out_activations'][lk] = hooks[lk].out_activations[:].cpu()
+                    act_data['out_activations'][mk] = hooks[mk].out_activations[:].cpu()
     return 
 
