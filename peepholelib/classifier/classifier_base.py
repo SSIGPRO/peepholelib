@@ -37,18 +37,31 @@ def null_parser(**kwargs):
     
 class ClassifierBase: # quella buona
     def __init__(self, **kwargs):
+<<<<<<< HEAD
         self.path = kwargs['path']
         self.name = kwargs['name']
         
         self.nl_class = kwargs['nl_classifier']
+=======
+        
+        self.nl_class = kwargs['nl_classifier'] if 'nl_clasifier' in kwargs else None
+>>>>>>> ac2ed90 (minor)
         self.nl_model = kwargs['nl_model']
         self.n_features = kwargs['n_features']
 
         self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
 
+<<<<<<< HEAD
         self.bs = kwargs['batch_size'] if 'batch_size' in kwargs else '64'
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+=======
+        self.embedding_fn = kwargs['embedding_fn']
+
+        # set in fit()
+        self._cvs_dl = None
+        self._act_dl = None
+>>>>>>> ac2ed90 (minor)
 
         # computed in fit()
         self._classifier = None
@@ -84,6 +97,7 @@ class ClassifierBase: # quella buona
     @abc.abstractmethod
     def classifier_probabilities(self, **kwargs):
         pass
+<<<<<<< HEAD
     
     def compute_empirical_posteriors(self, **kwargs):
         '''
@@ -109,15 +123,45 @@ class ClassifierBase: # quella buona
             data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
             data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
-            
-            for p, l in zip(preds, label):
-                _empp[int(p), int(l)] += 1
-       
-        # normalize to get empirical posteriors
-        _empp /= _empp.sum(dim=1, keepdim=True)
+=======
 
-        # replace NaN with 0
-        _empp = torch.nan_to_num(_empp)
-        self._empp = _empp
+    def embedding_analysis(self, **kwargs):
+        if self._cvs_dl == None or self._act_dl == None:
+            raise RuntimeError('Please run fit() first.')
+        self.embedding_fn(_cvs_dl=self._cvs_dl, _act_dl=self._act_dl)
+
+
+    # def compute_empirical_posteriors(self, **kwargs):
+    #     '''
+    #     Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to cluster g belongs to class c.
+
+    #     Args:
+    #     - verbose (Bool): print some stuff
+    #     '''
+    #     if self._cvs_dl == None:
+    #         raise RuntimeError('No fitting dataloader. Please run fit() first.')
+
+    #     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    #     # pre-allocate empirical posteriors
+    #     _empp = torch.zeros(self.nl_class, self.nl_model)
+
+    #     # iterate over _fit_data
         
-        return 
+    #     if verbose: print('Computing empirical posterior')
+    #     for act, cvs in tqdm(zip(self._act_dl, self._cvs_dl), disable=not verbose):
+    #         data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
+    #         data, label = data.to(self.device), label.to(self.device)
+    #         preds = self._classifier.predict(data)
+>>>>>>> ac2ed90 (minor)
+            
+    #         for p, l in zip(preds, label):
+    #             _empp[int(p), int(l)] += 1
+       
+    #     # normalize to get empirical posteriors
+    #     _empp /= _empp.sum(dim=1, keepdim=True)
+
+    #     # replace NaN with 0
+    #     _empp = torch.nan_to_num(_empp)
+    #     self._empp = _empp
+        
+    #     return 
