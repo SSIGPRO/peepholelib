@@ -18,7 +18,7 @@ class DrillBase:
         self.path = kwargs['path']
         self.name = kwargs['name']
         
-        self.nl_class = kwargs['nl_classifier']
+        self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None
         self.nl_model = kwargs['nl_model']
         self.n_features = kwargs['n_features']
 

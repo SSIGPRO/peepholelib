@@ -25,12 +25,12 @@ def trim_corevectors(**kwargs):
     act = kwargs['act'] if 'act' in kwargs else None
     layer = kwargs['layer']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
-    cv_dim = kwargs['cv_dim']
+    peep_size = kwargs['peep_size']
 
     if act == None:
-        return cvs[layer][:,0:cv_dim]
+        return cvs[layer][:,0:peep_size]
     else:
-        return cvs[layer][:,0:cv_dim], act[label_key]
+        return cvs[layer][:,0:peep_size], act[label_key]
 
 def null_parser(**kwargs):
     data = kwargs['data']
