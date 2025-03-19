@@ -90,7 +90,7 @@ class Peepholes:
                     dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
 
                     for data_in, data_t in tqdm(zip(dl_o, dl_t), disable=not verbose, total=n_samples):
-
+                        ## TODO MAYBE HERE data_in should be data_in[layer]
                         data_t[layer]['peepholes'] = self._driller[layer](cvs=data_in, verbose=verbose)
 
                 else:
