@@ -1,5 +1,6 @@
 # our stuff
 from .classifier_base import ClassifierBase
+from pathlib import Path
 
 # torch stuff
 import torch
@@ -18,6 +19,7 @@ class KMeans(ClassifierBase): # quella buona
     def __init__(self, **kwargs):
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
+        self.path = self.path/'KM'
 
         self._classifier = tKMeans(num_clusters=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
 
@@ -70,13 +72,15 @@ class KMeans(ClassifierBase): # quella buona
             self._clas_file = self.path/(self._suffix+'.model')
 
         self._classifier.save(self._clas_file)
+        self._empp_file = self._clas_file/Path('.empp.pt')
+        torch.save(self._empp, self._empp_file)
         super().save()
     
         return
 
     def load(self, **kwargs):
         if self._clas_file == None:
-            self._clas_file = self.path/(self._suffix+'.model')
+            self._clas_file = self.path/(self._suffix+'.KM.model')
 
         self._classifier = tKMeans.load(self._clas_file)
         super().load()

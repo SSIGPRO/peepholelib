@@ -1,5 +1,6 @@
 # our stuff
 from .classifier_base import ClassifierBase
+from pathlib import Path
 
 # torch stuff
 import torch
@@ -16,7 +17,8 @@ class GMM(ClassifierBase): # quella buona
     def __init__(self, **kwargs):
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
-        
+        self.path = self.path/'GMM'
+            
         self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
         return
 
@@ -65,6 +67,7 @@ class GMM(ClassifierBase): # quella buona
             self._clas_file = self.path/(self._suffix+'.model')
 
         self._classifier.save(self._clas_file)
+        
         super().save()
         
         return

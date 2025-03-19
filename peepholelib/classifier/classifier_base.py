@@ -36,7 +36,7 @@ def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase(DrillBase): # quella buona
+class ClassifierBase(DrillBase): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
