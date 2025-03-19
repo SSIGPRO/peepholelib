@@ -5,9 +5,10 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
+from peepholelib.Drillers.drill_base import DrillBase
 
 def trim_corevectors(**kwargs):
     """
@@ -24,44 +25,20 @@ def trim_corevectors(**kwargs):
     act = kwargs['act'] if 'act' in kwargs else None
     layer = kwargs['layer']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
-    peep_size = kwargs['peep_size']
+    cv_dim = kwargs['cv_dim']
 
     if act == None:
-        return cvs[layer][:,0:peep_size]
+        return cvs[layer][:,0:cv_dim]
     else:
-        return cvs[layer][:,0:peep_size], act[label_key]
+        return cvs[layer][:,0:cv_dim], act[label_key]
 
 def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase: # quella buona
+class ClassifierBase(DrillBase): # quella buona
     def __init__(self, **kwargs):
-<<<<<<< HEAD
-        self.path = kwargs['path']
-        self.name = kwargs['name']
-        
-        self.nl_class = kwargs['nl_classifier']
-=======
-        
-        self.nl_class = kwargs['nl_classifier'] if 'nl_clasifier' in kwargs else None
->>>>>>> ac2ed90 (minor)
-        self.nl_model = kwargs['nl_model']
-        self.n_features = kwargs['n_features']
-
-        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
-
-<<<<<<< HEAD
-        self.bs = kwargs['batch_size'] if 'batch_size' in kwargs else '64'
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-=======
-        self.embedding_fn = kwargs['embedding_fn']
-
-        # set in fit()
-        self._cvs_dl = None
-        self._act_dl = None
->>>>>>> ac2ed90 (minor)
+        DrillBase.__init__(self, **kwargs)
 
         # computed in fit()
         self._classifier = None
@@ -97,7 +74,6 @@ class ClassifierBase: # quella buona
     @abc.abstractmethod
     def classifier_probabilities(self, **kwargs):
         pass
-<<<<<<< HEAD
     
     def compute_empirical_posteriors(self, **kwargs):
         '''
@@ -123,45 +99,32 @@ class ClassifierBase: # quella buona
             data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
             data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
-=======
-
-    def embedding_analysis(self, **kwargs):
-        if self._cvs_dl == None or self._act_dl == None:
-            raise RuntimeError('Please run fit() first.')
-        self.embedding_fn(_cvs_dl=self._cvs_dl, _act_dl=self._act_dl)
-
-
-    # def compute_empirical_posteriors(self, **kwargs):
-    #     '''
-    #     Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to cluster g belongs to class c.
-
-    #     Args:
-    #     - verbose (Bool): print some stuff
-    #     '''
-    #     if self._cvs_dl == None:
-    #         raise RuntimeError('No fitting dataloader. Please run fit() first.')
-
-    #     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    #     # pre-allocate empirical posteriors
-    #     _empp = torch.zeros(self.nl_class, self.nl_model)
-
-    #     # iterate over _fit_data
-        
-    #     if verbose: print('Computing empirical posterior')
-    #     for act, cvs in tqdm(zip(self._act_dl, self._cvs_dl), disable=not verbose):
-    #         data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
-    #         data, label = data.to(self.device), label.to(self.device)
-    #         preds = self._classifier.predict(data)
->>>>>>> ac2ed90 (minor)
             
-    #         for p, l in zip(preds, label):
-    #             _empp[int(p), int(l)] += 1
+            for p, l in zip(preds, label):
+                _empp[int(p), int(l)] += 1
        
-    #     # normalize to get empirical posteriors
-    #     _empp /= _empp.sum(dim=1, keepdim=True)
+        # normalize to get empirical posteriors
+        _empp /= _empp.sum(dim=1, keepdim=True)
 
-    #     # replace NaN with 0
-    #     _empp = torch.nan_to_num(_empp)
-    #     self._empp = _empp
+        # replace NaN with 0
+        _empp = torch.nan_to_num(_empp)
+        self._empp = _empp
         
-    #     return 
+        return 
+    
+    def __call__(self, **kwargs):
+        '''
+        Compute the peephole base on the empirical posterior 
+        '''
+        cvs = kwargs['cvs']
+        verbose = kwargs['verbose']
+
+        # # check for empiracal posterios `_empp`
+        if self._empp == None:
+            raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
+        _empp = self._empp.to(self.device)
+        cp = self.classifier_probabilities(cvs=cvs, verbose=verbose).to(self.device)
+        lp = cp@_empp
+        lp /= lp.sum(dim=1, keepdim=True)
+
+        return lp
