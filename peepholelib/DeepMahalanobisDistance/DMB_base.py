@@ -108,8 +108,10 @@ class DeepMahalanobisDistance(DrillBase):
         Mahalanobis = []
     
         cvs = kwargs['cvs'][self.name]
-        # magnitude = kwargs['magnitude']
+        acts = kwargs['acts']
+        magnitude = kwargs['magnitude']
         
+        data = acts['image']
         # compute Mahalanobis score
         gaussian_score = 0
         for i in range(self.nl_model):
@@ -121,17 +123,16 @@ class DeepMahalanobisDistance(DrillBase):
                 gaussian_score = term_gau.view(-1,1)
             else:
                 gaussian_score = torch.cat((gaussian_score, term_gau.view(-1,1)), 1)
-        print(gaussian_score)
         # Input_processing
-        # sample_pred = gaussian_score.max(1)[1]
-        # batch_sample_mean = self._mean.index_select(0, sample_pred)
-        # zero_f = cvs - batch_sample_mean
-        # pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-        # loss = torch.mean(-pure_gau)
-        # loss.backward()
+        sample_pred = gaussian_score.max(1)[1]
+        batch_sample_mean = self._mean.to(self.device).index_select(0, sample_pred)
+        zero_f = cvs.to(self.device) - batch_sample_mean.to(self.device)
+        pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision.to(self.device)), zero_f.t()).diag()
+        loss = torch.mean(-pure_gau)
+        loss.backward()
         
-        # gradient =  torch.ge(data.grad.data, 0)
-        # gradient = (gradient.float() - 0.5) * 2
+        gradient =  torch.ge(data.grad.data, 0)
+        gradient = (gradient.float() - 0.5) * 2
         # if net_type == 'densenet':
         #     gradient.index_copy_(1, torch.LongTensor([0]).cuda(), gradient.index_select(1, torch.LongTensor([0]).cuda()) / (63.0/255.0))
         #     gradient.index_copy_(1, torch.LongTensor([1]).cuda(), gradient.index_select(1, torch.LongTensor([1]).cuda()) / (62.1/255.0))
@@ -140,7 +141,7 @@ class DeepMahalanobisDistance(DrillBase):
         #     gradient.index_copy_(1, torch.LongTensor([0]).cuda(), gradient.index_select(1, torch.LongTensor([0]).cuda()) / (0.2023))
         #     gradient.index_copy_(1, torch.LongTensor([1]).cuda(), gradient.index_select(1, torch.LongTensor([1]).cuda()) / (0.1994))
         #     gradient.index_copy_(1, torch.LongTensor([2]).cuda(), gradient.index_select(1, torch.LongTensor([2]).cuda()) / (0.2010))
-        # tempInputs = torch.add(data.data, -magnitude, gradient)
+        tempInputs = torch.add(data.data, -magnitude, gradient)
 
         # noise_out_features = model.intermediate_forward(Variable(tempInputs, volatile=True), layer_index)
         # noise_out_features = noise_out_features.view(noise_out_features.size(0), noise_out_features.size(1), -1)
