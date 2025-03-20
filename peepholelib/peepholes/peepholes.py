@@ -55,7 +55,7 @@ class Peepholes:
         cvs = kwargs['corevectors'] 
         bs = kwargs['batch_size']
 
-        for ds_key, cvds in cvs._corevds.items():
+        for (ds_key, cvds), ( _, actds) in zip(cvs._corevds.items(), cvs._actds.items()):
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
             
@@ -88,10 +88,11 @@ class Peepholes:
                     # create dataloaders
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                     dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+                    dl_a = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
 
-                    for data_in, data_t in tqdm(zip(dl_o, dl_t), disable=not verbose, total=n_samples):
+                    for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
                         ## TODO MAYBE HERE data_in should be data_in[layer]
-                        data_t[layer]['peepholes'] = self._driller[layer](cvs=data_in, verbose=verbose)
+                        data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in, **kwargs)
 
                 else:
                     if verbose: print(f'Peepholes for {layer} already present. Skipping.')
