@@ -20,10 +20,13 @@ class DeepMahalanobisDistance(DrillBase):
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
+        self.model = kwargs['model']
+        self.magnitude = kwargs['magnitude']
+        self.mean_transform = kwargs['mean_transform']
+
         # computed in fit()
         self._mean = {} 
         self._precision = {}
-        #self.layer = kwargs['layer']
 
         # set in fit()
         self._cvs = None 
@@ -105,12 +108,10 @@ class DeepMahalanobisDistance(DrillBase):
         precision is a DICT of precision matrices one for each layer
         '''
 
-        Mahalanobis = []
-    
-        cvs = kwargs['cvs'][self.name]
         acts = kwargs['acts']
-        model = kwargs['model']
-        magnitude = kwargs['magnitude']
+        model = self.model
+        magnitude = self.magnitude
+        mean = self.mean_transform
 
         data = torch.tensor(acts['image'], requires_grad=True, device=self.device)
 
@@ -125,34 +126,33 @@ class DeepMahalanobisDistance(DrillBase):
         output = hooks[self.name].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
+        output = output.to(self.device)
+
+        self._precision = self._precision.to(self.device)
         for i in range(self.nl_model):
-            batch_sample_mean = self._mean[i]
+            batch_sample_mean = self._mean[i].to(self.device)
             
-            zero_f = output.to(self.device) - batch_sample_mean.to(self.device)
-            term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision.to(self.device)), zero_f.t()).diag()
+            zero_f = output - batch_sample_mean
+            term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
             if i == 0:
                 gaussian_score = term_gau.view(-1,1)
             else:
                 gaussian_score = torch.cat((gaussian_score, term_gau.view(-1,1)), 1)
         # Input_processing
-        print(gaussian_score[37])
-        sample_pred = gaussian_score.max(1)[1]
+        sample_pred = gaussian_score.max(1)[1].to(self.device)
         batch_sample_mean = self._mean.to(self.device).index_select(0, sample_pred)
-        zero_f = output.to(self.device) - batch_sample_mean.to(self.device)
-        pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision.to(self.device)), zero_f.t()).diag()
+        zero_f = output - batch_sample_mean
+        pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
         loss = torch.mean(-pure_gau)
         loss.backward()
         
         gradient =  torch.ge(data.grad.data, 0)
         gradient = (gradient.float() - 0.5) * 2
-        # if net_type == 'densenet':
-        #     gradient.index_copy_(1, torch.LongTensor([0]).cuda(), gradient.index_select(1, torch.LongTensor([0]).cuda()) / (63.0/255.0))
-        #     gradient.index_copy_(1, torch.LongTensor([1]).cuda(), gradient.index_select(1, torch.LongTensor([1]).cuda()) / (62.1/255.0))
-        #     gradient.index_copy_(1, torch.LongTensor([2]).cuda(), gradient.index_select(1, torch.LongTensor([2]).cuda()) / (66.7/255.0))
-        # elif net_type == 'resnet':
-        #     gradient.index_copy_(1, torch.LongTensor([0]).cuda(), gradient.index_select(1, torch.LongTensor([0]).cuda()) / (0.2023))
-        #     gradient.index_copy_(1, torch.LongTensor([1]).cuda(), gradient.index_select(1, torch.LongTensor([1]).cuda()) / (0.1994))
-        #     gradient.index_copy_(1, torch.LongTensor([2]).cuda(), gradient.index_select(1, torch.LongTensor([2]).cuda()) / (0.2010))
+
+        gradient.index_copy_(1, torch.LongTensor([0]).to(self.device), gradient.index_select(1, torch.LongTensor([0]).to(self.device)) / (mean[0]))
+        gradient.index_copy_(1, torch.LongTensor([1]).to(self.device), gradient.index_select(1, torch.LongTensor([1]).to(self.device)) / (mean[1]))
+        gradient.index_copy_(1, torch.LongTensor([2]).to(self.device), gradient.index_select(1, torch.LongTensor([2]).to(self.device)) / (mean[2]))
+    
         tempInputs = torch.add(data.data, -magnitude, gradient)
         hooks[self.name].in_activations = None 
         with torch.no_grad():
@@ -160,24 +160,16 @@ class DeepMahalanobisDistance(DrillBase):
         output = hooks[self.name].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
+        output = output.to(self.device)
         noise_gaussian_score = 0
         for i in range(self.nl_model):
-            batch_sample_mean = self._mean[i]
+            batch_sample_mean = self._mean[i].to(self.device)
             
-            zero_f = output.to(self.device) - batch_sample_mean.to(self.device)
-            term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision.to(self.device)), zero_f.t()).diag()
+            zero_f = output - batch_sample_mean
+            term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
             if i == 0:
                 noise_gaussian_score = term_gau.view(-1,1)
             else:
                 noise_gaussian_score = torch.cat((noise_gaussian_score, term_gau.view(-1,1)), 1)   
-        print(noise_gaussian_score[37])
-        print(torch.norm(gaussian_score[37]-noise_gaussian_score[37]))
-        quit()
-        # noise_gaussian_score, _ = torch.max(noise_gaussian_score, dim=1)
-        # Mahalanobis.extend(noise_gaussian_score.cpu().numpy())
-        
-        # for i in range(data.size(0)):
-        #     g.write("{}\n".format(noise_gaussian_score[i]))
-        # g.close()
 
         return gaussian_score.detach()
