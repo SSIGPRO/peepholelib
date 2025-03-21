@@ -73,7 +73,7 @@ class GMM(ClassifierBase): # quella buona
         if self._clas_file == None:
             self._clas_file = self.path/(self._suffix+'.model')
 
-        self._classifier.load(self._clas_file)
+        self._classifier = tGMM.load(self._clas_file)
         super().load()
         
         return
