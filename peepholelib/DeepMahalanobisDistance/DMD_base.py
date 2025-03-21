@@ -3,6 +3,8 @@ import abc
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
 # torch stuff
 import torch
@@ -22,7 +24,10 @@ class DeepMahalanobisDistance(DrillBase):
 
         self.model = kwargs['model']
         self.magnitude = kwargs['magnitude']
-        self.mean_transform = kwargs['mean_transform']
+        self.std_transform = kwargs['std_transform']
+
+        # used in __call__()
+        self.hooks = self.model.get_hooks()
 
         # computed in fit()
         self._mean = {} 
@@ -32,15 +37,39 @@ class DeepMahalanobisDistance(DrillBase):
         self._cvs = None 
 
         # defined in save() or load()
-        self._clas_file = None
+        self._mean_file = None
+        self._precision_file = None
         self._suffix = f'{self.name}.nl_model={self.nl_model}'
+        self.dmd_folder = None
         return
     
     def load(self, **kwargs):
-        pass 
+        self._suffix = Path(self._suffix)
+        if self.dmd_folder == None:
+            self.dmd_folder = self.path/self._suffix
+
+        self.precision_path = self.dmd_folder/'precision.pt'
+        self.mean_path = self.dmd_folder/'mean.pt' 
+
+        self._mean = torch.load(self.mean_path)
+        self._precision = torch.load(self.precision_path)
+    
+        return 
 
     def save(self, **kwargs):
-        pass       
+        self._suffix = Path(self._suffix)
+
+        if self.dmd_folder == None:
+            self.dmd_folder = self.path/self._suffix
+        
+        self.dmd_folder.mkdir(parents=True, exist_ok=True)
+
+        self.precision_path = self.dmd_folder/'precision.pt'
+        self.mean_path = self.dmd_folder/'mean.pt'   
+    
+        torch.save(self._mean, self.mean_path)
+        torch.save(self._precision, self.precision_path)
+        return     
 
     def fit(self, **kwargs):
         """
@@ -51,6 +80,7 @@ class DeepMahalanobisDistance(DrillBase):
         print(self.name)
         cvs = kwargs['corevectors'][self.name]
         acts = kwargs['activations']
+        label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label'
         
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
@@ -62,7 +92,7 @@ class DeepMahalanobisDistance(DrillBase):
         
         for i, (act, cv) in tqdm(enumerate(zip(acts, cvs))):
                 
-            label = int(act['label']) 
+            label = int(act[label_key]) 
             
             if num_sample_per_class[label] == 0:
                 list_features[label] = cv.view(1, -1)
@@ -95,8 +125,6 @@ class DeepMahalanobisDistance(DrillBase):
 
         return 
 
-    def classifier_probabilities(self, **kwargs):
-        pass 
     def __call__(self, **kwargs):
         '''
         Compute the proposed Mahalanobis confidence score on input dataset
@@ -109,21 +137,19 @@ class DeepMahalanobisDistance(DrillBase):
         '''
 
         acts = kwargs['acts']
-        model = self.model
         magnitude = self.magnitude
-        mean = self.mean_transform
+        std = self.std_transform
 
         data = torch.tensor(acts['image'], requires_grad=True, device=self.device)
-
-        hooks = model.get_hooks()
+    
 
         # compute Mahalanobis score
         gaussian_score = 0
-        model._model.eval()
-        hooks[self.name].in_activations = None 
-        _ = model(data.to(self.device))
+        self.model._model.eval()
+        self.hooks[self.name].in_activations = None 
+        _ = self.model(data.to(self.device))
         
-        output = hooks[self.name].in_activations[:]
+        output = self.hooks[self.name].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
         output = output.to(self.device)
@@ -149,15 +175,15 @@ class DeepMahalanobisDistance(DrillBase):
         gradient =  torch.ge(data.grad.data, 0)
         gradient = (gradient.float() - 0.5) * 2
 
-        gradient.index_copy_(1, torch.LongTensor([0]).to(self.device), gradient.index_select(1, torch.LongTensor([0]).to(self.device)) / (mean[0]))
-        gradient.index_copy_(1, torch.LongTensor([1]).to(self.device), gradient.index_select(1, torch.LongTensor([1]).to(self.device)) / (mean[1]))
-        gradient.index_copy_(1, torch.LongTensor([2]).to(self.device), gradient.index_select(1, torch.LongTensor([2]).to(self.device)) / (mean[2]))
+        gradient.index_copy_(1, torch.LongTensor([0]).to(self.device), gradient.index_select(1, torch.LongTensor([0]).to(self.device)) / (std[0]))
+        gradient.index_copy_(1, torch.LongTensor([1]).to(self.device), gradient.index_select(1, torch.LongTensor([1]).to(self.device)) / (std[1]))
+        gradient.index_copy_(1, torch.LongTensor([2]).to(self.device), gradient.index_select(1, torch.LongTensor([2]).to(self.device)) / (std[2]))
     
         tempInputs = torch.add(data.data, -magnitude, gradient)
-        hooks[self.name].in_activations = None 
+        self.hooks[self.name].in_activations = None 
         with torch.no_grad():
-            _ = model(tempInputs.to(self.device))
-        output = hooks[self.name].in_activations[:]
+            _ = self.model(tempInputs.to(self.device))
+        output = self.hooks[self.name].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
         output = output.to(self.device)
