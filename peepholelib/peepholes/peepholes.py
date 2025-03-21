@@ -13,7 +13,9 @@ import pandas as pd
 import torch
 from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
-from torch.utils.data import DataLoader 
+from torch.utils.data import DataLoader
+
+from peepholelib.Drillers import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
@@ -26,7 +28,7 @@ class Peepholes:
         self.path.mkdir(parents=True, exist_ok=True)
 
         # (dict) one classifier per layer
-        self._classifiers = kwargs['classifiers'] 
+        self._driller = kwargs['driller'] 
 
         # computed in get_peepholes
         self._phs = {} 
@@ -53,7 +55,7 @@ class Peepholes:
         cvs = kwargs['corevectors'] 
         bs = kwargs['batch_size']
 
-        for ds_key, cvds in cvs._corevds.items():
+        for (ds_key, cvds), ( _, actds) in zip(cvs._corevds.items(), cvs._actds.items()):
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
             
@@ -73,15 +75,10 @@ class Peepholes:
             #-----------------------------------------
             for layer in self.target_layers:
 
-                # check for empiracal posterios `_empp`
-                if self._classifiers[layer]._empp == None:
-                    raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
-                _empp = self._classifiers[layer]._empp.to(self.device)
-
                 if not layer in self._phs[ds_key]:
                     if verbose: print('allocating peepholes for layer: ', layer)
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifiers[layer].nl_model))
+                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[layer].nl_model))
                     
                     #----------------------------------------- 
                     # computing peepholes
@@ -91,12 +88,12 @@ class Peepholes:
                     # create dataloaders
                     dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
                     dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+                    dl_a = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
 
-                    for data_in, data_t in tqdm(zip(dl_o, dl_t), disable=not verbose, total=n_samples):
-                        cp = self._classifiers[layer].classifier_probabilities(cvs=data_in, verbose=verbose).to(self.device)
-                        lp = cp@_empp
-                        lp /= lp.sum(dim=1, keepdim=True)
-                        data_t[layer]['peepholes'] = lp.cpu()
+                    for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
+                        ## TODO MAYBE HERE data_in should be data_in[layer]
+                        data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in, **kwargs)
+
                 else:
                     if verbose: print(f'Peepholes for {layer} already present. Skipping.')
         return 

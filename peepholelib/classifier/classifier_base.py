@@ -5,9 +5,10 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
-from tensordict import TensorDict
+from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
+from peepholelib.Drillers.drill_base import DrillBase
 
 def trim_corevectors(**kwargs):
     """
@@ -24,31 +25,20 @@ def trim_corevectors(**kwargs):
     act = kwargs['act'] if 'act' in kwargs else None
     layer = kwargs['layer']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
-    peep_size = kwargs['peep_size']
+    cv_dim = kwargs['cv_dim']
 
     if act == None:
-        return cvs[layer][:,0:peep_size]
+        return cvs[layer][:,0:cv_dim]
     else:
-        return cvs[layer][:,0:peep_size], act[label_key]
+        return cvs[layer][:,0:cv_dim], act[label_key]
 
 def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase: # quella buona
+class ClassifierBase(DrillBase): 
     def __init__(self, **kwargs):
-        self.path = kwargs['path']
-        self.name = kwargs['name']
-        
-        self.nl_class = kwargs['nl_classifier']
-        self.nl_model = kwargs['nl_model']
-        self.n_features = kwargs['n_features']
-
-        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
-
-        self.bs = kwargs['batch_size'] if 'batch_size' in kwargs else '64'
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+        DrillBase.__init__(self, **kwargs)
 
         # computed in fit()
         self._classifier = None
@@ -121,3 +111,20 @@ class ClassifierBase: # quella buona
         self._empp = _empp
         
         return 
+    
+    def __call__(self, **kwargs):
+        '''
+        Compute the peephole base on the empirical posterior 
+        '''
+        cvs = kwargs['cvs']
+        verbose = kwargs['verbose']
+
+        # # check for empiracal posterios `_empp`
+        if self._empp == None:
+            raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
+        _empp = self._empp.to(self.device)
+        cp = self.classifier_probabilities(cvs=cvs, verbose=verbose).to(self.device)
+        lp = cp@_empp
+        lp /= lp.sum(dim=1, keepdim=True)
+
+        return lp
