@@ -8,10 +8,7 @@ import matplotlib.colors as colors
 
 # torch stuff
 import torch
-from tensordict import TensorDict, PersistentTensorDict
-from tensordict import MemoryMappedTensor as MMT
-from torch.utils.data import DataLoader
-from peepholelib.Drillers.drill_base import DrillBase
+from peepholelib.peepholes.drill_base import DrillBase
 from sklearn import covariance
 
 def null_parser(**kwargs):
@@ -30,7 +27,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.hooks = self.model.get_hooks()
 
         # computed in fit()
-        self._mean = {} 
+        self._means = {} 
         self._precision = {}
 
         # set in fit()
@@ -44,21 +41,18 @@ class DeepMahalanobisDistance(DrillBase):
         return
     
     def load(self, **kwargs):
-        self._suffix = Path(self._suffix)
         if self.dmd_folder == None:
             self.dmd_folder = self.path/self._suffix
 
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt' 
 
-        self._mean = torch.load(self.mean_path)
+        self._means = torch.load(self.mean_path)
         self._precision = torch.load(self.precision_path)
     
         return 
 
     def save(self, **kwargs):
-        self._suffix = Path(self._suffix)
-
         if self.dmd_folder == None:
             self.dmd_folder = self.path/self._suffix
         
@@ -67,7 +61,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt'   
     
-        torch.save(self._mean, self.mean_path)
+        torch.save(self._means, self.mean_path)
         torch.save(self._precision, self.precision_path)
         return     
 
@@ -77,48 +71,23 @@ class DeepMahalanobisDistance(DrillBase):
         return: sample_class_mean: list of class mean
                 precision: list of precisions
         """
-        print(self.name)
-        cvs = kwargs['corevectors'][self.name]
+
+        cvs = kwargs['corevectors']
         acts = kwargs['activations']
         label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label'
         
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
-        num_sample_per_class = np.zeros(self.nl_model)
-        list_features = []
-        for j in range(self.nl_model):
-            list_features.append(0)
-        ## it creats a list of n_classes
-        
-        for i, (act, cv) in tqdm(enumerate(zip(acts, cvs))):
-                
-            label = int(act[label_key]) 
-            
-            if num_sample_per_class[label] == 0:
-                list_features[label] = cv.view(1, -1)
-            else:
-                 list_features[label] = torch.cat((list_features[label], cv.view(1, -1)), 0)
-
-            num_sample_per_class[label] += 1
-        print(cvs.size())
-        print(cvs[0].size())        
-        _size = cvs.size(1)
-        mean_list = torch.Tensor(self.nl_model, _size).cuda()
-        for j in range(self.nl_model):
-            mean_list[j] = torch.mean(list_features[j], 0)
-        self._mean = mean_list
-        print(self._mean)
-        
-        X = 0
+        # get TDs for each label
+        labels = acts[label_key].int()
+        self._means = {}
+        list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
         for i in range(self.nl_model):
-            if i == 0:
-                X = list_features[i].to(self.device) - self._mean[i].to(self.device)
-                print(X)
-
-            else:
-                X = torch.cat((X, list_features[i].to(self.device) - self._mean[i].to(self.device)), 0)       
+            self._means[i] = list_features[labels == i].mean(dim=0).to(self.device)
+            list_features[labels == i] -= self._means[i]
+        
         # find inverse            
-        group_lasso.fit(X.cpu().numpy())
+        group_lasso.fit(list_features.cpu().numpy())
         precision = group_lasso.precision_
         precision = torch.from_numpy(precision).float().cuda()
         self._precision = precision
