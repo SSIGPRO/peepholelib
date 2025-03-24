@@ -44,8 +44,8 @@ class DeepMahalanobisDistance(DrillBase):
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt' 
 
-        self._means = torch.load(self.mean_path)
-        self._precision = torch.load(self.precision_path)
+        self._means = torch.load(self.mean_path).to(self.device)
+        self._precision = torch.load(self.precision_path).to(self.device)
     
         return 
 
@@ -58,8 +58,8 @@ class DeepMahalanobisDistance(DrillBase):
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt'   
     
-        torch.save(self._means, self.mean_path)
-        torch.save(self._precision, self.precision_path)
+        torch.save(self._means.detach().cpu(), self.mean_path)
+        torch.save(self._precision.detach().cpu(), self.precision_path)
         return     
 
     def fit(self, **kwargs):
@@ -113,7 +113,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.model._model.eval()
 
         # TODO: need this reset?
-        self.hooks[self._layer].in_activations = None 
+        #self.hooks[self._layer].in_activations = None 
         _ = self.model(data.to(self.device))
         
         output = self.hooks[self._layer].in_activations[:]
@@ -137,6 +137,7 @@ class DeepMahalanobisDistance(DrillBase):
         
         gradient = torch.ge(data.grad.data, 0)
         gradient = (gradient.float() - 0.5) * 2
+
         # TODO: Still think this could be simples
         for i in range(3):
             gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
@@ -144,7 +145,7 @@ class DeepMahalanobisDistance(DrillBase):
         tempInputs = torch.add(data.data, -magnitude, gradient)
 
         # TODO: is this necessary?
-        self.hooks[self._layer].in_activations = None 
+        #self.hooks[self._layer].in_activations = None 
         with torch.no_grad():
             _ = self.model(tempInputs.to(self.device))
         output = self.hooks[self._layer].in_activations[:]
@@ -161,4 +162,4 @@ class DeepMahalanobisDistance(DrillBase):
         
         # TODO: ref code returns noise_gaussian_score
         input('.............. wait................. ')
-        return noise_gaussian_score
+        return noise_gaussian_score.detach().cpu()
