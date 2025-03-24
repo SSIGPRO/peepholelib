@@ -72,10 +72,10 @@ class KMeans(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
-        if self._clas_file == None:
-            self._clas_file = self.path/(self._suffix+'.model')
+        if self._clas_path == None:
+            self._clas_path = self.path/(self._suffix+'.model')
 
-        self._classifier = tKMeans.load(self._clas_file)
+        self._classifier = tKMeans.load(self._clas_path)
         super().load()
 
         return
