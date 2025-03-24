@@ -13,13 +13,8 @@ def binary_classification(output):
 def multilabel_classification(output):
     return torch.argmax(output,axis=1).cpu()
 
-def fds(data, key):
-    #print('parser data: ', data)
-    #print('parser key: ', key)
-    if key == 'image':
-        return data[0]
-    if key == 'label':
-        return data[1]
+def fds(data, key_list):
+    return {'image': data[0], 'label': data[1]}
 
 def get_activations(self, **kwargs):
     self.check_uncontexted()
@@ -64,14 +59,14 @@ def get_activations(self, **kwargs):
             if verbose: print('Allocating images and labels')
             
             # create dataloader of input dataset and activations
-            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, shuffle=False) 
+            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list), shuffle=False) 
             dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False)
 
+            data = next(iter(dl_ds))
             for key in key_list:
-                data = parser(next(iter(dl_ds)), key)[0]
-                
+                _d = data[key][0]
                 # pre-allocation activations
-                if data.shape == torch.Size([]):
+                if _d.shape == torch.Size([]):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+data.shape))
@@ -79,7 +74,7 @@ def get_activations(self, **kwargs):
             if verbose: print('Copying images and labels')
             for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=n_samples): 
                 for key in key_list:
-                    data_t[key] = parser(data_in, key)
+                    data_t[key] = data_in[key]
 
         #------------------------------------------------
         # pre-allocate predictions, results, activations

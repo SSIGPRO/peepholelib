@@ -91,7 +91,7 @@ class Peepholes:
 
                     for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
                         ## TODO MAYBE HERE data_in should be data_in[layer]
-                        data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in, **kwargs)
+                        data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in)
 
                 else:
                     if verbose: print(f'Peepholes for {layer} already present. Skipping.')

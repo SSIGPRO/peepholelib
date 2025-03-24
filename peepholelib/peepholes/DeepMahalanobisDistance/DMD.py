@@ -11,10 +11,6 @@ import torch
 from peepholelib.peepholes.drill_base import DrillBase
 from sklearn import covariance
 
-def null_parser(**kwargs):
-    data = kwargs['data']
-    return data['data'], data['label'] 
-    
 class DeepMahalanobisDistance(DrillBase): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
@@ -105,16 +101,19 @@ class DeepMahalanobisDistance(DrillBase):
         precision is a DICT of precision matrices one for each layer
         '''
 
-        acts = kwargs['acts']
         magnitude = self.magnitude
         std = self.std_transform
-
-        data = torch.tensor(acts['image'], requires_grad=True, device=self.device)
-    
+        
+        acts = kwargs['acts']
+        data = self.parser(acts, **self.parser_kwargs)
+        data = data.to(self.device)
+        data.requires_grad_(True)
 
         # compute Mahalanobis score
         gaussian_score = 0
         self.model._model.eval()
+
+        # TODO: need this reset?
         self.hooks[self.name].in_activations = None 
         _ = self.model(data.to(self.device))
         

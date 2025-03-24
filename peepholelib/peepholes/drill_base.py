@@ -1,10 +1,6 @@
 # python stuff
 import abc  
 
-def null_parser(**kwargs):
-    data = kwargs['data']
-    return data['data'], data['label'] 
-    
 class DrillBase: 
     def __init__(self, **kwargs):
         self.path = kwargs['path']
