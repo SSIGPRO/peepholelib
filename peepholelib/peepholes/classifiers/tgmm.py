@@ -59,7 +59,7 @@ class GMM(ClassifierBase): # quella buona
     
     def save(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/(self._suffix+'.model')
+            self._clas_path = self.path/('GMM.'+self._suffix+'.model')
 
         self._classifier.save(self._clas_path)
         
@@ -69,7 +69,7 @@ class GMM(ClassifierBase): # quella buona
 
     def load(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/(self._suffix+'.model')
+            self._clas_path = self.path/('GMM.'+self._suffix+'.model')
 
         self._classifier = tGMM.load(self._clas_file)
         super().load()
