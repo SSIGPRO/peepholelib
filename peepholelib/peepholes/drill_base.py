@@ -14,7 +14,6 @@ class DrillBase:
         self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
 
-        self.bs = kwargs['batch_size'] if 'batch_size' in kwargs else '64'
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # computed in fit()

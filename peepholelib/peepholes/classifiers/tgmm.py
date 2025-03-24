@@ -50,9 +50,8 @@ class GMM(ClassifierBase): # quella buona
         - cvs: data containing data to be parsed with the paser function set on __init__() 
         '''
         
-        cvs = kwargs['cvs']
+        data = kwargs['data']
 
-        data = self.parser(cvs=cvs, **self.parser_kwargs)
         probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
 
         return probs   

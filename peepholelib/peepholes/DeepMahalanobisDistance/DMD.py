@@ -16,8 +16,9 @@ class DeepMahalanobisDistance(DrillBase):
         DrillBase.__init__(self, **kwargs)
 
         self.model = kwargs['model']
+        self._layer = kwargs['layer']
         self.magnitude = kwargs['magnitude']
-        self.std_transform = kwargs['std_transform']
+        self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
 
         # used in __call__()
         self.hooks = self.model.get_hooks()
@@ -76,7 +77,7 @@ class DeepMahalanobisDistance(DrillBase):
         
         # get TDs for each label
         labels = acts[label_key].int()
-        self._means = {}
+        self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
         for i in range(self.nl_model):
             self._means[i] = list_features[labels == i].mean(dim=0).to(self.device)
@@ -84,10 +85,7 @@ class DeepMahalanobisDistance(DrillBase):
         
         # find inverse            
         group_lasso.fit(list_features.cpu().numpy())
-        precision = group_lasso.precision_
-        precision = torch.from_numpy(precision).float().cuda()
-        self._precision = precision
-
+        self._precision = torch.from_numpy(group_lasso.precision_).float().to(self.device)
         return 
 
     def __call__(self, **kwargs):
@@ -105,65 +103,62 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         acts = kwargs['acts']
-        data = self.parser(acts, **self.parser_kwargs)
+        data = self.parser(act = acts, **self.parser_kwargs)
         data = data.to(self.device)
         data.requires_grad_(True)
+        n_samples = data.shape[0]
 
         # compute Mahalanobis score
         gaussian_score = 0
         self.model._model.eval()
 
         # TODO: need this reset?
-        self.hooks[self.name].in_activations = None 
+        self.hooks[self._layer].in_activations = None 
         _ = self.model(data.to(self.device))
         
-        output = self.hooks[self.name].in_activations[:]
+        output = self.hooks[self._layer].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
         output = output.to(self.device)
-
-        self._precision = self._precision.to(self.device)
+        
+        gaussian_score = torch.zeros(n_samples, self.nl_model)
         for i in range(self.nl_model):
-            batch_sample_mean = self._mean[i].to(self.device)
-            
-            zero_f = output - batch_sample_mean
+            zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-            if i == 0:
-                gaussian_score = term_gau.view(-1,1)
-            else:
-                gaussian_score = torch.cat((gaussian_score, term_gau.view(-1,1)), 1)
+            gaussian_score[:,i] = term_gau
+
         # Input_processing
         sample_pred = gaussian_score.max(1)[1].to(self.device)
-        batch_sample_mean = self._mean.to(self.device).index_select(0, sample_pred)
+        batch_sample_mean = self._means.index_select(0, sample_pred)
         zero_f = output - batch_sample_mean
         pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
         loss = torch.mean(-pure_gau)
         loss.backward()
         
-        gradient =  torch.ge(data.grad.data, 0)
+        gradient = torch.ge(data.grad.data, 0)
         gradient = (gradient.float() - 0.5) * 2
-
-        gradient.index_copy_(1, torch.LongTensor([0]).to(self.device), gradient.index_select(1, torch.LongTensor([0]).to(self.device)) / (std[0]))
-        gradient.index_copy_(1, torch.LongTensor([1]).to(self.device), gradient.index_select(1, torch.LongTensor([1]).to(self.device)) / (std[1]))
-        gradient.index_copy_(1, torch.LongTensor([2]).to(self.device), gradient.index_select(1, torch.LongTensor([2]).to(self.device)) / (std[2]))
+        # TODO: Still think this could be simples
+        for i in range(3):
+            gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
     
         tempInputs = torch.add(data.data, -magnitude, gradient)
-        self.hooks[self.name].in_activations = None 
+
+        # TODO: is this necessary?
+        self.hooks[self._layer].in_activations = None 
         with torch.no_grad():
             _ = self.model(tempInputs.to(self.device))
-        output = self.hooks[self.name].in_activations[:]
+        output = self.hooks[self._layer].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
         output = output.to(self.device)
         noise_gaussian_score = 0
+
+        noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
-            batch_sample_mean = self._mean[i].to(self.device)
-            
             zero_f = output - batch_sample_mean
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-            if i == 0:
-                noise_gaussian_score = term_gau.view(-1,1)
-            else:
-                noise_gaussian_score = torch.cat((noise_gaussian_score, term_gau.view(-1,1)), 1)   
-
-        return gaussian_score.detach()
+            noise_gaussian_score[:, i] = term_gau
+        
+        # TODO: ref code returns noise_gaussian_score
+        input('.............. wait................. ')
+        return noise_gaussian_score

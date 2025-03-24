@@ -98,7 +98,8 @@ class ClassifierBase(DrillBase):
         if self._empp == None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
         _empp = self._empp.to(self.device)
-        cp = self.classifier_probabilities(cvs=cvs, verbose=verbose).to(self.device)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
         lp = cp@_empp
         lp /= lp.sum(dim=1, keepdim=True)
 

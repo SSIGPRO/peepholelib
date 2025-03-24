@@ -52,9 +52,8 @@ class KMeans(ClassifierBase): # quella buona
         - batch: data batch containing data to be parsed with the paser function set on __init__() 
         '''
         
-        cvs = kwargs['cvs']
+        data = kwargs['data']
 
-        data = self.parser(cvs=cvs, **self.parser_kwargs)
         distances = torch.tensor(self._classifier.transform(data), dtype=data.dtype)
         
         # changing strategy: back to softmin
