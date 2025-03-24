@@ -5,32 +5,8 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
-from tensordict import TensorDict, PersistentTensorDict
-from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
-from peepholelib.Drillers.drill_base import DrillBase
-
-def trim_corevectors(**kwargs):
-    """
-    Trims peephole data from a give layer.
-
-    Args:
-      tensor_dict (TensorDict): TensorDict from our CoreVectors class.
-      layer (str): Layer key.
-
-    Returns:
-        nothing 
-    """
-    cvs = kwargs['cvs']
-    act = kwargs['act'] if 'act' in kwargs else None
-    layer = kwargs['layer']
-    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
-    cv_dim = kwargs['cv_dim']
-
-    if act == None:
-        return cvs[layer][:,0:cv_dim]
-    else:
-        return cvs[layer][:,0:cv_dim], act[label_key]
+from peepholelib.peepholes.drill_base import DrillBase
 
 def null_parser(**kwargs):
     data = kwargs['data']
@@ -51,8 +27,7 @@ class ClassifierBase(DrillBase):
 
         # defined in save() or load()
         self._empp_file = None
-        self._clas_file = None
-        self._suffix = f'{self.name}.n_features={self.n_features}.nl_class={self.nl_class}.nl_model={self.nl_model}'
+        self._clas_path = None
         return
     
     @abc.abstractmethod

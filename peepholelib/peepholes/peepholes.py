@@ -15,17 +15,14 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
-from peepholelib.Drillers import drill_base as driller
+from peepholelib.peepholes import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.target_layers = kwargs['target_layers']                  # list of peep layers
+        self.target_layers = kwargs['target_layers'] # list of peep layers
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-
-        # create folder
-        self.path.mkdir(parents=True, exist_ok=True)
 
         # (dict) one classifier per layer
         self._driller = kwargs['driller'] 
@@ -47,7 +44,9 @@ class Peepholes:
         Compute model probabilities from classifier probabilities and empirical posteriors.
         
         Args:
-        - dataloader (DataLoader): Dataloader containing data to be parsed with the paser function set on __init__() 
+        - verbose (bool): print progress messages
+        - corevectors (peepholelib.CoreVectors): corevectors object containing corevectors and activations
+        - batchsize (int): batchsize to process corevectors into peepholes
         '''
         self.check_uncontexted()
 
@@ -68,13 +67,13 @@ class Peepholes:
             else:
                 n_samples = len(cvds)
                 if verbose: print('loader n_samples: ', n_samples) 
+                self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
             #-----------------------------------------
             # Pre-allocate peepholes
             #-----------------------------------------
             for layer in self.target_layers:
-
                 if not layer in self._phs[ds_key]:
                     if verbose: print('allocating peepholes for layer: ', layer)
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
@@ -157,7 +156,6 @@ class Peepholes:
     def load_only(self, **kwargs):
         '''
         Load the peepholes 
-        # TODO: Load the classifiers from the saved files to self.classifiers (dict)
         '''
         self.check_uncontexted()
 
@@ -293,31 +291,6 @@ class Peepholes:
 
         self._loaders = _loaders 
         return self._loaders
-
-    '''
-    def save_classifiers(self, **kwargs):
-        #Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
-
-        self.check_uncontexted()
-
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        if verbose: print(f'\n ---- Saving the classifiers\n')
-
-        # # add check "we have the classifiers", if not raise error
-        # if self._classifiers == None:
-        #     raise RuntimeError('No classifiers present. Please run get_peepholes() first.')
-        
-        for layer in self.target_layers:
-
-            _path = self.path/(f'classifier.{layer}')
-
-            if not _path.exists():
-                self._classifiers[layer]._classifier.save(_path)
-            else:
-                if verbose: print(f'Classifier for {layer} already present. Skipping.')
-
-        return
-    '''
 
     def __enter__(self):
         self._is_contexted = True

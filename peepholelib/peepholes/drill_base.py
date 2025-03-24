@@ -1,13 +1,5 @@
 # python stuff
 import abc  
-from pathlib import Path
-from tqdm import tqdm
-
-# torch stuff
-import torch
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
-from torch.utils.data import DataLoader
 
 def null_parser(**kwargs):
     data = kwargs['data']
@@ -17,7 +9,8 @@ class DrillBase:
     def __init__(self, **kwargs):
         self.path = kwargs['path']
         self.name = kwargs['name']
-        
+
+        # TODO: check if nl_class and n_features are not the same?
         self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None
         self.nl_model = kwargs['nl_model']
         self.n_features = kwargs['n_features']
@@ -57,6 +50,3 @@ class DrillBase:
     def fit(self, **kwargs):
         pass        
 
-    @abc.abstractmethod
-    def classifier_probabilities(self, **kwargs):
-        pass
