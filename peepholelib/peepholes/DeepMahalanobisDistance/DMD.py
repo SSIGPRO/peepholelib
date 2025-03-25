@@ -103,6 +103,8 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         acts = kwargs['acts']
+
+        # get input image and set gradient to modify it
         data = self.parser(act = acts, **self.parser_kwargs)
         data = data.to(self.device)
         data.requires_grad_(True)
@@ -112,23 +114,21 @@ class DeepMahalanobisDistance(DrillBase):
         gaussian_score = 0
         self.model._model.eval()
 
-        # TODO: need this reset?
-        #self.hooks[self._layer].in_activations = None 
+        self.model._model.zero_grad()
         _ = self.model(data.to(self.device))
         
         output = self.hooks[self._layer].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
-        output = output.to(self.device)
         
-        gaussian_score = torch.zeros(n_samples, self.nl_model)
+        gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
             gaussian_score[:,i] = term_gau
 
         # Input_processing
-        sample_pred = gaussian_score.max(1)[1].to(self.device)
+        sample_pred = gaussian_score.max(1)[1]
         batch_sample_mean = self._means.index_select(0, sample_pred)
         zero_f = output - batch_sample_mean
         pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
@@ -138,21 +138,20 @@ class DeepMahalanobisDistance(DrillBase):
         gradient = torch.ge(data.grad.data, 0)
         gradient = (gradient.float() - 0.5) * 2
 
-        # TODO: Still think this could be simples
+        # TODO: Still think this could be simpler
+        # TODO: this is 3 because the activation are reshaped to have 3 dimensions.
+        # I suspect this is specific for the models used in the reference code
+        # The std values should probablu reflect the number of dimensions
         for i in range(3):
             gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
     
-        tempInputs = torch.add(data.data, -magnitude, gradient)
+        tempInputs = torch.add(data.data, gradient, alpha=-magnitude)
 
-        # TODO: is this necessary?
-        #self.hooks[self._layer].in_activations = None 
         with torch.no_grad():
             _ = self.model(tempInputs.to(self.device))
         output = self.hooks[self._layer].in_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
-        output = output.to(self.device)
-        noise_gaussian_score = 0
 
         noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
@@ -161,5 +160,4 @@ class DeepMahalanobisDistance(DrillBase):
             noise_gaussian_score[:, i] = term_gau
         
         # TODO: ref code returns noise_gaussian_score
-        input('.............. wait................. ')
         return noise_gaussian_score.detach().cpu()

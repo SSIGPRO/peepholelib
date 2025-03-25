@@ -70,31 +70,32 @@ class Peepholes:
                 self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
-            #-----------------------------------------
-            # Pre-allocate peepholes
-            #-----------------------------------------
+            layers_to_compute = []
             for layer in self.target_layers:
                 if not layer in self._phs[ds_key]:
+                    #------------------------
+                    # Pre-allocate peepholes
+                    #------------------------
                     if verbose: print('allocating peepholes for layer: ', layer)
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
                     self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[layer].nl_model))
-                    
-                    #----------------------------------------- 
-                    # computing peepholes
-                    #-----------------------------------------
-                    if verbose: print(f'\n ---- computing peepholes for layer {layer}\n')
-
-                    # create dataloaders
-                    dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-                    dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
-                    dl_a = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
-
-                    for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
-                        ## TODO MAYBE HERE data_in should be data_in[layer]
-                        data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in)
-
+                    layers_to_compute.append(layer)
                 else:
                     if verbose: print(f'Peepholes for {layer} already present. Skipping.')
+                    
+            #------------------------ 
+            # computing peepholes
+            #------------------------
+            # create dataloaders
+            dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
+            dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+            dl_a = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+            if verbose: print(f'\n ---- computing peepholes for layers {layers_to_compute}\n')
+            for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
+                for layer in layers_to_compute:
+                    ## TODO MAYBE HERE data_in should be data_in[layer]
+                    data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in)
+
         return 
 
     def get_scores(self, **kwargs):
