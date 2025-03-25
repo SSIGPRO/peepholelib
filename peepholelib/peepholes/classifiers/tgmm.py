@@ -15,6 +15,7 @@ class GMM(ClassifierBase): # quella buona
     def __init__(self, **kwargs):
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
+        self._suffix = 'GMM.'+ self._suffix
         
         self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
         return
@@ -58,7 +59,7 @@ class GMM(ClassifierBase): # quella buona
     
     def save(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/('GMM.'+self._suffix+'.model')
+            self._clas_path = self.path/(self._suffix+'.model')
 
         self._classifier.save(self._clas_path)
         
@@ -68,9 +69,9 @@ class GMM(ClassifierBase): # quella buona
 
     def load(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/('GMM.'+self._suffix+'.model')
+            self._clas_path = self.path/(self._suffix+'.model')
 
-        self._classifier = tGMM.load(self._clas_file)
+        self._classifier = tGMM.load(self._clas_path)
         super().load()
         
         return

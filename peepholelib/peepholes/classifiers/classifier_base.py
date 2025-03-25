@@ -92,7 +92,7 @@ class ClassifierBase(DrillBase):
         Compute the peephole base on the empirical posterior 
         '''
         cvs = kwargs['cvs']
-        verbose = kwargs['verbose']
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else True
 
         # # check for empiracal posterios `_empp`
         if self._empp == None:

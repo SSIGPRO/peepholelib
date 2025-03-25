@@ -1,5 +1,6 @@
 # General python stuff
 from tqdm import tqdm
+from functools import partial
 
 # torch stuff
 import torch
@@ -13,8 +14,9 @@ def binary_classification(output):
 def multilabel_classification(output):
     return torch.argmax(output,axis=1).cpu()
 
-def fds(data, key_list):
-    return {'image': data[0], 'label': data[1]}
+def fds(batch, key_list):
+    images, labels = zip(*batch)
+    return {'image': images, 'label': torch.tensor(labels)}
 
 def get_activations(self, **kwargs):
     self.check_uncontexted()
@@ -25,7 +27,7 @@ def get_activations(self, **kwargs):
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
 
     key_list = kwargs['key_list'] if 'key_list' in kwargs else ['image', 'label']
-    parser = kwargs['parser'] if 'parser' in kwargs else fds
+    ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else fds
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
 
     model = self._model
@@ -59,17 +61,18 @@ def get_activations(self, **kwargs):
             if verbose: print('Allocating images and labels')
             
             # create dataloader of input dataset and activations
-            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list), shuffle=False) 
+            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
             dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False)
 
             data = next(iter(dl_ds))
             for key in key_list:
                 _d = data[key][0]
+
                 # pre-allocation activations
                 if _d.shape == torch.Size([]):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
-                    self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+data.shape))
+                    self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape))
 
             if verbose: print('Copying images and labels')
             for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=n_samples): 

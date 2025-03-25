@@ -56,7 +56,7 @@ class CoreVectors():
         
         if from_file != None:
             if verbose: print(f'Loading normalization from {from_file}')
-            means, stds = torch.load(from_file)
+            means, stds = torch.load(from_file, weights_only=False)
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
