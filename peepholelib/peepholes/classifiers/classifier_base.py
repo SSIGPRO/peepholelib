@@ -60,13 +60,13 @@ class ClassifierBase(DrillBase):
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         actds = kwargs['actds']
         corevds = kwargs['corevds']
-
+        bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
         # pre-allocate empirical posteriors
         _empp = torch.zeros(self.nl_class, self.nl_model)
         
         # create dataloaders
-        acts_dl = DataLoader(actds, batch_size=self.bs, collate_fn=lambda x: x)
-        cvs_dl = DataLoader(corevds, batch_size=self.bs, collate_fn=lambda x: x)
+        acts_dl = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+        cvs_dl = DataLoader(corevds, batch_size=bs, collate_fn=lambda x: x)
 
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
