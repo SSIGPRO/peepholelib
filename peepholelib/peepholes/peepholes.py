@@ -1,6 +1,9 @@
 # python stuff
 from pathlib import Path
 from tqdm import tqdm
+from math import ceil
+
+# Stuff used in evaluation ... will get out from here
 from collections import Counter
 import numpy as np
 
@@ -91,7 +94,7 @@ class Peepholes:
             dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
             dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
             if verbose: print(f'\n ---- computing peepholes for layers {layers_to_compute}\n')
-            for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=n_samples):
+            for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for layer in layers_to_compute:
                     phs[layer]['peepholes'] = self._driller[layer](cvs=cvs, acts=acts)
 
