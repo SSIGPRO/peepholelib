@@ -1,10 +1,6 @@
 # python stuff
 import abc 
 
-def null_parser(**kwargs):
-    data = kwargs['data']
-    return data['data'], data['label'] 
-
 class DrillBase: 
     def __init__(self, **kwargs):
         self.path = kwargs['path']
@@ -15,8 +11,8 @@ class DrillBase:
         self.nl_model = kwargs['nl_model']
         self.n_features = kwargs['n_features']
 
-        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
+        self.parser = kwargs['parser']
+        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs else {} 
 
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 

@@ -63,7 +63,7 @@ class KMeans(ClassifierBase): # quella buona
     
     def save(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/('KMeans.'+self._suffix+'.model')
+            self._clas_path = self.path/(self._suffix+'.KMeans.model')
 
         self._classifier.save(self._clas_path)
         super().save()
@@ -72,7 +72,7 @@ class KMeans(ClassifierBase): # quella buona
 
     def load(self, **kwargs):
         if self._clas_path == None:
-            self._clas_path = self.path/('KMeans.'+self._suffix+'.model')
+            self._clas_path = self.path/(self._suffix+'.KMeans.model')
 
         self._classifier = tKMeans.load(self._clas_path)
         super().load()

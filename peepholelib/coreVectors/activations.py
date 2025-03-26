@@ -1,6 +1,7 @@
 # General python stuff
 from tqdm import tqdm
 from functools import partial
+from math import ceil
 
 # torch stuff
 import torch
@@ -8,16 +9,10 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
-def binary_classification(output):
-    return torch.sigmoid(output).squeeze().cpu() > 0.5
-
-def multilabel_classification(output):
-    return torch.argmax(output,axis=1).cpu()
-
-def fds(batch, key_list):
-    images, labels = zip(*batch)
-    return {'image': images, 'label': torch.tensor(labels)}
-
+# Our stuff
+from .parsers import from_dataset
+from .prediction_fns import multilabel_classification
+    
 def get_activations(self, **kwargs):
     self.check_uncontexted()
     
@@ -27,7 +22,7 @@ def get_activations(self, **kwargs):
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
 
     key_list = kwargs['key_list'] if 'key_list' in kwargs else ['image', 'label']
-    ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else fds
+    ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
 
     model = self._model
@@ -57,17 +52,15 @@ def get_activations(self, **kwargs):
             #------------------------
             # copy images and labels
             #------------------------
-
-            if verbose: print('Allocating images and labels')
             
             # create dataloader of input dataset and activations
             dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
             dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False)
 
+            if verbose: print('Allocating images and labels')
             data = next(iter(dl_ds))
             for key in key_list:
                 _d = data[key][0]
-
                 # pre-allocation activations
                 if _d.shape == torch.Size([]):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
@@ -75,7 +68,7 @@ def get_activations(self, **kwargs):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape))
 
             if verbose: print('Copying images and labels')
-            for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=n_samples): 
+            for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=ceil(n_samples/bs)): 
                 for key in key_list:
                     data_t[key] = data_in[key]
 
@@ -142,8 +135,7 @@ def get_activations(self, **kwargs):
         act_dl = DataLoader(act_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
         
         if verbose: print('Computing activations')
-        
-        for act_data in tqdm(act_dl, disable=not verbose, total=n_samples):
+        for act_data in tqdm(act_dl, disable=not verbose):
             with torch.no_grad():
                 y_predicted = model(act_data['image'].to(device))
             

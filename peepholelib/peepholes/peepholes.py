@@ -87,14 +87,13 @@ class Peepholes:
             # computing peepholes
             #------------------------
             # create dataloaders
-            dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-            dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
-            dl_a = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+            dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
+            dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+            dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
             if verbose: print(f'\n ---- computing peepholes for layers {layers_to_compute}\n')
-            for cvs_in, acts_in, data_t in tqdm(zip(dl_o, dl_a, dl_t), disable=not verbose, total=n_samples):
+            for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=n_samples):
                 for layer in layers_to_compute:
-                    ## TODO MAYBE HERE data_in should be data_in[layer]
-                    data_t[layer]['peepholes'] = self._driller[layer](cvs=cvs_in, acts=acts_in)
+                    phs[layer]['peepholes'] = self._driller[layer](cvs=cvs, acts=acts)
 
         return 
 
