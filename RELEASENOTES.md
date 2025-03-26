@@ -8,4 +8,4 @@
 - `ClassifierBase` receives a `CoreVectors` class as argument instead of dataloader
 - `ClassifierBase` can be saved and loaded. It receives `path` and `name` arguments for saving.
 - `Peepholes` objects now compute peepholes using a `DrillBase` class
-- `Peepholes` implements (Deem Mahalanobis Distance)[https://arxiv.org/abs/1807.03888] as peephole computation
+- `Peepholes` implements [Deem Mahalanobis Distance](https://arxiv.org/abs/1807.03888) as peephole computation
