@@ -100,56 +100,55 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     return csr_mat 
 
 def get_svds(self, **kwargs):
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-    device = kwargs['device'] if 'device' in kwargs else 'cpu'
+    target_modules = kwargs['target_modules'] 
     path = Path(kwargs['path'])
-    name = Path(kwargs['name'])
+    name = kwargs['name']
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
     # create folder
     path.mkdir(parents=True, exist_ok=True)
     
-    file_path = path/(name.name)
+    file_path = path/name
     if file_path.exists():
         if verbose: print(f'File {file_path} exists. Loading from disk.')
         _svds = TensorDict.load_memmap(file_path)
     else: 
         _svds = TensorDict()
 
-    _layers_to_compute = []
-    for lk in self._target_layers:
-        if lk in _svds.keys():
+    _modules_to_compute = []
+    for mk in target_modules:
+        if mk in _svds.keys():
             continue
-        _layers_to_compute.append(lk)
-    if verbose: print('Layers to compute SVDs: ', _layers_to_compute)
+        _modules_to_compute.append(mk)
+    if verbose: print('modules to compute SVDs: ', _modules_to_compute)
     
-    for lk in _layers_to_compute:
-        if verbose: print(f'\n ---- Getting SVDs for {lk}\n')
-        layer = self._target_layers[lk]
-        weight = layer.weight 
-        bias = layer.bias 
+    for mk in _modules_to_compute:
+        if verbose: print(f'\n ---- Getting SVDs for {mk}\n')
+        module = self._target_modules[mk]
+        weight = module.weight 
+        bias = module.bias 
 
-        if verbose: print('layer: ', layer)
-        if isinstance(layer, torch.nn.Conv2d):
-            in_shape = self._hooks[lk].in_shape
-            
-            W_ = c2s(in_shape, layer, device=device) 
+        if verbose: print('module: ', module)
+        if isinstance(module, torch.nn.Conv2d):
+            in_shape = self._hooks[mk].in_shape
+            W_ = c2s(in_shape, layer, device=self.device) 
             U, s, V = torch.svd_lowrank(W_, q=300)
             Vh = V.T
 
-        elif isinstance(layer, torch.nn.Linear):
+        elif isinstance(module, torch.nn.Linear):
             W_ = torch.hstack((weight, bias.reshape(-1,1)))
             U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
         else:
             raise RuntimeError('Unsuported layer type')
 
-        _svds[lk] = TensorDict({
+        _svds[mk] = TensorDict({
                 'U': MMT(U.detach().cpu()),
                 's': MMT(s.detach().cpu()),
                 'Vh': MMT(Vh.detach().cpu())
                 })
 
     if verbose: print(f'saving {file_path}')
-    if len(_layers_to_compute) != 0:
+    if len(_modules_to_compute) != 0:
         _svds.memmap(file_path)
     
     self._svds = _svds

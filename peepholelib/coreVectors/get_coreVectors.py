@@ -27,8 +27,8 @@ def get_coreVectors(self, **kwargs):
     if not self._actds:
         raise RuntimeError('No activations found. Please run get_activations() first.')
     
-    if reduction_fns.keys() != model._target_layers.keys(): 
-        raise RuntimeError(f'Keys inconsistency between reduction_fns and target_layers \n reduction_fns keys: {reduction_fns.keys()} \n target_layers: {model._target_layers.keys()}')
+    if reduction_fns.keys() != model._target_modules.keys(): 
+        raise RuntimeError(f'Keys inconsistency between reduction_fns and target_modules \n reduction_fns keys: {reduction_fns.keys()} \n target_modules: {model._target_modules.keys()}')
         
     if reduction_fns.keys() != shapes.keys(): 
         raise RuntimeError(f'Keys inconsistency between reduction_fns and shapes \n reduction_fns keys: {reduction_fns.keys()} \n shapes keys: {shapes.keys()}')
@@ -57,18 +57,18 @@ def get_coreVectors(self, **kwargs):
         cvs_td = self._corevds[ds_key]
         act_td = self._actds[ds_key]
 
-        # check if layer in and out activations exist
-        _layers_to_save = []
+        # check if module in and out activations exist
+        _modules_to_save = []
         
         # allocate for core vectors 
-        for lk, corev_size in shapes.items(): 
-            if not (lk in cvs_td):
-                if verbose: print('allocating core vectors for layer: ', lk)
-                cvs_td[lk] = MMT.empty(shape=torch.Size((n_samples,)+(corev_size,)))
-                _layers_to_save.append(lk)
+        for mk, corev_size in shapes.items(): 
+            if not (mk in cvs_td):
+                if verbose: print('allocating core vectors for module: ', mk)
+                cvs_td[mk] = MMT.empty(shape=torch.Size((n_samples,)+(corev_size,)))
+                _modules_to_save.append(mk)
 
-        if verbose: print('Layers to save: ', _layers_to_save)
-        if len(_layers_to_save) == 0:
+        if verbose: print('modules to save: ', _modules_to_save)
+        if len(_modules_to_save) == 0:
             print(f'No new core vectors for {ds_key}, skipping')
             continue
 
@@ -84,7 +84,7 @@ def get_coreVectors(self, **kwargs):
         
         if verbose: print(f'\n ---- Getting corevectors for {ds_key}\n')
         for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
-            for lk in _layers_to_save:
-                cvs_data[lk] = reduction_fns[lk](act_data[lk])
+            for mk in _modules_to_save:
+                cvs_data[mk] = reduction_fns[mk](act_data[mk])
 
     return        

@@ -22,12 +22,12 @@ from peepholelib.peepholes import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.target_layers = kwargs['target_layers'] # list of peep layers
+        self.target_modules = kwargs['target_modules'] # list of peep modules
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-        # (dict) one classifier per layer
+        # (dict) one classifier per module
         self._driller = kwargs['driller'] 
 
         # computed in get_peepholes
@@ -73,18 +73,18 @@ class Peepholes:
                 self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
-            layers_to_compute = []
-            for layer in self.target_layers:
-                if not layer in self._phs[ds_key]:
+            modules_to_compute = []
+            for module in self.target_modules:
+                if not module in self._phs[ds_key]:
                     #------------------------
                     # Pre-allocate peepholes
                     #------------------------
-                    if verbose: print('allocating peepholes for layer: ', layer)
-                    self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[layer].nl_model))
-                    layers_to_compute.append(layer)
+                    if verbose: print('allocating peepholes for module: ', module)
+                    self._phs[ds_key][module] = TensorDict(batch_size=n_samples)
+                    self._phs[ds_key][module]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[module].nl_model))
+                    modules_to_compute.append(module)
                 else:
-                    if verbose: print(f'Peepholes for {layer} already present. Skipping.')
+                    if verbose: print(f'Peepholes for {module} already present. Skipping.')
                     
             #------------------------ 
             # computing peepholes
@@ -93,10 +93,10 @@ class Peepholes:
             dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
             dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
             dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
-            if verbose: print(f'\n ---- computing peepholes for layers {layers_to_compute}\n')
+            if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
-                for layer in layers_to_compute:
-                    phs[layer]['peepholes'] = self._driller[layer](cvs=cvs, acts=acts)
+                for module in modules_to_compute:
+                    phs[module]['peepholes'] = self._driller[module](cvs=cvs, acts=acts)
 
         return 
 
@@ -122,27 +122,27 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            for layer in self.target_layers:
-                if layer not in self._phs[ds_key]:
-                    raise ValueError(f"Peepholes for layer {layer} do not exist. Please run get_peepholes() first.")
+            for module in self.target_modules:
+                if module not in self._phs[ds_key]:
+                    raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
                 
-                if 'peepholes' not in self._phs[ds_key][layer]:
-                    raise ValueError(f"Peepholes do not exist in layer {layer}. Please run get_peepholes() first.")
+                if 'peepholes' not in self._phs[ds_key][module]:
+                    raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
                     
                 #-----------------------------------------
                 # Check if scores already exist
                 #-----------------------------------------
-                if 'score_max' in self._phs[ds_key][layer] and 'score_entropy' in self._phs[ds_key][layer]:
-                    if verbose: print(f"Scores already computed for layer {layer}. Skipping computation.")
+                if 'score_max' in self._phs[ds_key][module] and 'score_entropy' in self._phs[ds_key][module]:
+                    if verbose: print(f"Scores already computed for module {module}. Skipping computation.")
                     continue 
 
                 #-----------------------------------------
                 # Pre-allocate scores
                 #-----------------------------------------
-                if verbose: print('Allocating scores for layer:', layer)
-                self._phs[ds_key][layer].batch_size = torch.Size((n_samples,))
-                self._phs[ds_key][layer]['score_max'] = MMT.empty(shape=(n_samples,))
-                self._phs[ds_key][layer]['score_entropy'] = MMT.empty(shape=(n_samples,))
+                if verbose: print('Allocating scores for module:', module)
+                self._phs[ds_key][module].batch_size = torch.Size((n_samples,))
+                self._phs[ds_key][module]['score_max'] = MMT.empty(shape=(n_samples,))
+                self._phs[ds_key][module]['score_entropy'] = MMT.empty(shape=(n_samples,))
                 
                 #-----------------------------------------
                 # Compute scores
@@ -150,9 +150,9 @@ class Peepholes:
                 if verbose: print('\n ---- Computing scores \n')
                 _dl = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x: x)
                 for batch in tqdm(_dl, disable=not verbose, total=len(_dl)):
-                    peepholes = batch[layer]['peepholes']
-                    batch[layer]['score_max'] = torch.max(peepholes, dim=1).values
-                    batch[layer]['score_entropy'] = torch.sum(peepholes * torch.log(peepholes + 1e-12), dim=1)
+                    peepholes = batch[module]['peepholes']
+                    batch[module]['score_max'] = torch.max(peepholes, dim=1).values
+                    batch[module]['score_entropy'] = torch.sum(peepholes * torch.log(peepholes + 1e-12), dim=1)
     
         return
     
@@ -182,8 +182,8 @@ class Peepholes:
         score_type = kwargs['score_type']
         bins = kwargs['bins'] if 'bins' in kwargs else 100
 
-        for layer in self.target_layers:
-            print(f'\n-------------\nEvaluating Distributions for layer {layer}\n-------------\n') 
+        for module in self.target_modules:
+            print(f'\n-------------\nEvaluating Distributions for module {module}\n-------------\n') 
             
             n_dss = len(self._phs.keys())
             fig, axs = plt.subplots(1, n_dss+1, sharex='all', sharey='all', figsize=(4*(1+n_dss), 4))
@@ -193,7 +193,7 @@ class Peepholes:
             for i, ds_key in enumerate(self._phs.keys()):       # train val test
                 if verbose: print(f'Evaluating {ds_key}')
                 results = acts[ds_key]['result']
-                scores = self._phs[ds_key][layer]['score_'+score_type]
+                scores = self._phs[ds_key][module]['score_'+score_type]
                 oks = (scores[results == True]).detach().cpu().numpy()
                 kos = (scores[results == False]).detach().cpu().numpy()
 
@@ -214,14 +214,14 @@ class Peepholes:
             
             # plot train and test distributions
             ax = axs[0]
-            scores = self._phs['train'][layer]['score_'+score_type].detach().cpu().numpy()
+            scores = self._phs['train'][module]['score_'+score_type].detach().cpu().numpy()
             sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='train n=%d'%len(scores), alpha=0.5)
-            scores = self._phs['val'][layer]['score_'+score_type].detach().cpu().numpy()
+            scores = self._phs['val'][module]['score_'+score_type].detach().cpu().numpy()
             sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='val n=%d'%len(scores), alpha=0.5)
             ax.set_ylabel('%')
             ax.set_xlabel('score: '+score_type)
             ax.legend(title='datasets')
-            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.png', dpi=300, bbox_inches='tight')
+            plt.savefig((self.path/self.name).as_posix()+f'.{module}.png', dpi=300, bbox_inches='tight')
             plt.close()
 
             if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
@@ -234,14 +234,14 @@ class Peepholes:
         cvs = kwargs['coreVectors']
         score_type = kwargs['score_type']
         
-        for layer in self.target_layers:
+        for module in self.target_modules:
             quantiles = torch.arange(0, 1, 0.001) # setting quantiles list
-            prob_train = self._phs['train'][layer]['peepholes']
-            prob_val = self._phs['val'][layer]['peepholes']
+            prob_train = self._phs['train'][module]['peepholes']
+            prob_val = self._phs['val'][module]['peepholes']
             
             # TODO: vectorize
-            conf_t = self._phs['train'][layer]['score_'+score_type].detach().cpu() 
-            conf_v = self._phs['val'][layer]['score_'+score_type].detach().cpu() 
+            conf_t = self._phs['train'][module]['score_'+score_type].detach().cpu() 
+            conf_v = self._phs['val'][module]['score_'+score_type].detach().cpu() 
  
             th = [] 
             lt = []
@@ -268,7 +268,7 @@ class Peepholes:
             plt.plot(x, y2, label='KO', c='r')
             plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
             plt.legend()
-            plt.savefig((self.path/self.name).as_posix()+f'.{layer}.png', dpi=300, bbox_inches='tight')
+            plt.savefig((self.path/self.name).as_posix()+f'.{module}.png', dpi=300, bbox_inches='tight')
             plt.close()
 
         return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
