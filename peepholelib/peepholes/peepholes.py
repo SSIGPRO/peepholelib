@@ -1,6 +1,9 @@
 # python stuff
 from pathlib import Path
 from tqdm import tqdm
+from math import ceil
+
+# Stuff used in evaluation ... will get out from here
 from collections import Counter
 import numpy as np
 
@@ -13,20 +16,19 @@ import pandas as pd
 import torch
 from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
-from torch.utils.data import DataLoader 
+from torch.utils.data import DataLoader
+
+from peepholelib.peepholes import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.target_layers = kwargs['target_layers']                  # list of peep layers
+        self.target_layers = kwargs['target_layers'] # list of peep layers
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-        # create folder
-        self.path.mkdir(parents=True, exist_ok=True)
-
         # (dict) one classifier per layer
-        self._classifiers = kwargs['classifiers'] 
+        self._driller = kwargs['driller'] 
 
         # computed in get_peepholes
         self._phs = {} 
@@ -45,7 +47,9 @@ class Peepholes:
         Compute model probabilities from classifier probabilities and empirical posteriors.
         
         Args:
-        - dataloader (DataLoader): Dataloader containing data to be parsed with the paser function set on __init__() 
+        - verbose (bool): print progress messages
+        - corevectors (peepholelib.CoreVectors): corevectors object containing corevectors and activations
+        - batchsize (int): batchsize to process corevectors into peepholes
         '''
         self.check_uncontexted()
 
@@ -53,7 +57,7 @@ class Peepholes:
         cvs = kwargs['corevectors'] 
         bs = kwargs['batch_size']
 
-        for ds_key, cvds in cvs._corevds.items():
+        for (ds_key, cvds), ( _, actds) in zip(cvs._corevds.items(), cvs._actds.items()):
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
             
@@ -66,39 +70,34 @@ class Peepholes:
             else:
                 n_samples = len(cvds)
                 if verbose: print('loader n_samples: ', n_samples) 
+                self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
-            #-----------------------------------------
-            # Pre-allocate peepholes
-            #-----------------------------------------
+            layers_to_compute = []
             for layer in self.target_layers:
-
-                # check for empiracal posterios `_empp`
-                if self._classifiers[layer]._empp == None:
-                    raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
-                _empp = self._classifiers[layer]._empp.to(self.device)
-
                 if not layer in self._phs[ds_key]:
+                    #------------------------
+                    # Pre-allocate peepholes
+                    #------------------------
                     if verbose: print('allocating peepholes for layer: ', layer)
                     self._phs[ds_key][layer] = TensorDict(batch_size=n_samples)
-                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._classifiers[layer].nl_model))
-                    
-                    #----------------------------------------- 
-                    # computing peepholes
-                    #-----------------------------------------
-                    if verbose: print(f'\n ---- computing peepholes for layer {layer}\n')
-
-                    # create dataloaders
-                    dl_t = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-                    dl_o = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
-
-                    for data_in, data_t in tqdm(zip(dl_o, dl_t), disable=not verbose, total=n_samples):
-                        cp = self._classifiers[layer].classifier_probabilities(cvs=data_in, verbose=verbose).to(self.device)
-                        lp = cp@_empp
-                        lp /= lp.sum(dim=1, keepdim=True)
-                        data_t[layer]['peepholes'] = lp.cpu()
+                    self._phs[ds_key][layer]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[layer].nl_model))
+                    layers_to_compute.append(layer)
                 else:
                     if verbose: print(f'Peepholes for {layer} already present. Skipping.')
+                    
+            #------------------------ 
+            # computing peepholes
+            #------------------------
+            # create dataloaders
+            dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
+            dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
+            dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+            if verbose: print(f'\n ---- computing peepholes for layers {layers_to_compute}\n')
+            for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
+                for layer in layers_to_compute:
+                    phs[layer]['peepholes'] = self._driller[layer](cvs=cvs, acts=acts)
+
         return 
 
     def get_scores(self, **kwargs):
@@ -160,7 +159,6 @@ class Peepholes:
     def load_only(self, **kwargs):
         '''
         Load the peepholes 
-        # TODO: Load the classifiers from the saved files to self.classifiers (dict)
         '''
         self.check_uncontexted()
 
@@ -296,31 +294,6 @@ class Peepholes:
 
         self._loaders = _loaders 
         return self._loaders
-
-    '''
-    def save_classifiers(self, **kwargs):
-        #Save the classifiers temporarily stored in self.classifiers (dict) in the specified path in a pickle file
-
-        self.check_uncontexted()
-
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        if verbose: print(f'\n ---- Saving the classifiers\n')
-
-        # # add check "we have the classifiers", if not raise error
-        # if self._classifiers == None:
-        #     raise RuntimeError('No classifiers present. Please run get_peepholes() first.')
-        
-        for layer in self.target_layers:
-
-            _path = self.path/(f'classifier.{layer}')
-
-            if not _path.exists():
-                self._classifiers[layer]._classifier.save(_path)
-            else:
-                if verbose: print(f'Classifier for {layer} already present. Skipping.')
-
-        return
-    '''
 
     def __enter__(self):
         self._is_contexted = True

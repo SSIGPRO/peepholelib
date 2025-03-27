@@ -5,50 +5,16 @@ from tqdm import tqdm
 
 # torch stuff
 import torch
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
-
-def trim_corevectors(**kwargs):
-    """
-    Trims peephole data from a give layer.
-
-    Args:
-      tensor_dict (TensorDict): TensorDict from our CoreVectors class.
-      layer (str): Layer key.
-
-    Returns:
-        nothing 
-    """
-    cvs = kwargs['cvs']
-    act = kwargs['act'] if 'act' in kwargs else None
-    layer = kwargs['layer']
-    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
-    peep_size = kwargs['peep_size']
-
-    if act == None:
-        return cvs[layer][:,0:peep_size]
-    else:
-        return cvs[layer][:,0:peep_size], act[label_key]
+from peepholelib.peepholes.drill_base import DrillBase
 
 def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase: # quella buona
+class ClassifierBase(DrillBase): 
     def __init__(self, **kwargs):
-        self.path = kwargs['path']
-        self.name = kwargs['name']
-        
-        self.nl_class = kwargs['nl_classifier']
-        self.nl_model = kwargs['nl_model']
-        self.n_features = kwargs['n_features']
-
-        self.parser = kwargs['parser'] if 'parser' in kwargs else null_parser 
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs and 'parser' in kwargs else dict() 
-
-        self.bs = kwargs['batch_size'] if 'batch_size' in kwargs else '64'
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+        DrillBase.__init__(self, **kwargs)
 
         # computed in fit()
         self._classifier = None
@@ -61,8 +27,7 @@ class ClassifierBase: # quella buona
 
         # defined in save() or load()
         self._empp_file = None
-        self._clas_file = None
-        self._suffix = f'{self.name}.n_features={self.n_features}.nl_class={self.nl_class}.nl_model={self.nl_model}'
+        self._clas_path = None
         return
     
     @abc.abstractmethod
@@ -95,13 +60,13 @@ class ClassifierBase: # quella buona
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         actds = kwargs['actds']
         corevds = kwargs['corevds']
-
+        bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
         # pre-allocate empirical posteriors
         _empp = torch.zeros(self.nl_class, self.nl_model)
         
         # create dataloaders
-        acts_dl = DataLoader(actds, batch_size=self.bs, collate_fn=lambda x: x)
-        cvs_dl = DataLoader(corevds, batch_size=self.bs, collate_fn=lambda x: x)
+        acts_dl = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+        cvs_dl = DataLoader(corevds, batch_size=bs, collate_fn=lambda x: x)
 
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
@@ -121,3 +86,21 @@ class ClassifierBase: # quella buona
         self._empp = _empp
         
         return 
+    
+    def __call__(self, **kwargs):
+        '''
+        Compute the peephole base on the empirical posterior 
+        '''
+        cvs = kwargs['cvs']
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
+
+        # # check for empiracal posterios `_empp`
+        if self._empp == None:
+            raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
+        _empp = self._empp.to(self.device)
+        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
+        lp = cp@_empp
+        lp /= lp.sum(dim=1, keepdim=True)
+
+        return lp

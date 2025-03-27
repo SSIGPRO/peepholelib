@@ -7,8 +7,11 @@ from tensordict import MemoryMappedTensor as MMT
 from pathlib import Path as Path
 import abc 
 
-def ftd(data, key):
-    return data[key]
+def ftd(data, key_list):
+    r = {}
+    for k in key_list:
+        r[k] = data[k]
+    return r 
 
 class AttackBase(metaclass=abc.ABCMeta):
     

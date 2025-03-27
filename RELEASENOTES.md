@@ -4,5 +4,8 @@
 - Peepholes now accept multiple layers as `target_layers` argument
 - Images, Labels, Results, and Outputs were moved to the `corevector._actds` instead of `corevector._cvsds`
 - `get_corevectors()` now accepts a generic dimensionality reduction function
+- `CoreVectors` implements `ChannelWiseMean_conv()` as `average pooling` dimemsionality reduction 
 - `ClassifierBase` receives a `CoreVectors` class as argument instead of dataloader
-- `ClassifierBase` can be saved and loaded (error saying it is not fitted when loading). It receives `path` and `name` arguments for saving.
+- `ClassifierBase` can be saved and loaded. It receives `path` and `name` arguments for saving.
+- `Peepholes` objects now compute peepholes using a `DrillBase` class
+- `Peepholes` implements [Deep Mahalanobis Distance](https://arxiv.org/abs/1807.03888) as peephole computation

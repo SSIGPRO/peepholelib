@@ -36,21 +36,15 @@ class Hook:
             self.in_shape = self.in_activations.shape[1:]
         if self._so:
             self.out_shape = self.out_activations.shape[1:]
-        print('in out shapes: ', self.in_shape, self.out_shape)
+
         return
 
     def __call__(self, module, module_in, module_out):
         if self._si: 
-            if self.in_activations == None or module_in[0].shape != self.in_activations.shape:
-                self.in_activations = module_in[0]
-            else:
-                self.in_activations[:] = module_in[0][:]
-
+            self.in_activations = module_in[0]
         if self._so: 
-            if self.out_activations == None or module_out.shape != self.out_activations.shape:
-                self.out_activations = module_out
-            else:
-                self.out_activations[:] = module_out[:]
+            self.out_activations = module_out
+
         return
 
     def __str__(self):
