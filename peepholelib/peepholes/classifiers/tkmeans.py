@@ -20,6 +20,10 @@ class KMeans(ClassifierBase): # quella buona
 
         self._classifier = tKMeans(num_clusters=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
 
+        self._clas_path = self.path/(self.name+'.KMeans'+self._suffix)
+        self._empp_file = self._clas_path/'empp.pt'
+        return
+
     def fit(self, **kwargs):
         '''
         Fitss clusters.
@@ -62,18 +66,13 @@ class KMeans(ClassifierBase): # quella buona
         return probs 
     
     def save(self, **kwargs):
-        if self._clas_path == None:
-            self._clas_path = self.path/(self._suffix+'.KMeans.model')
-
+        self._clas_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self._clas_path)
         super().save()
     
         return
 
     def load(self, **kwargs):
-        if self._clas_path == None:
-            self._clas_path = self.path/(self._suffix+'.KMeans.model')
-
         self._classifier = tKMeans.load(self._clas_path)
         super().load()
 

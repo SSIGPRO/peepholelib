@@ -6,10 +6,15 @@ class DrillBase:
         self.path = kwargs['path']
         self.name = kwargs['name']
 
-        # TODO: check if nl_class and n_features are not the same?
-        self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None
+        # number of classes in the NN model
         self.nl_model = kwargs['nl_model']
+
+        # a.k.a corevector size
         self.n_features = kwargs['n_features']
+
+        # number of classes in classifier, e.g., number of clusters
+        self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None
+
 
         self.parser = kwargs['parser']
         self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs else {} 
@@ -25,8 +30,11 @@ class DrillBase:
         # computer in compute_empirical_posteriors()
         self._empp = None
 
-        # defined in save() or load()
-        self._suffix = f'{self.name}.n_features={self.n_features}.nl_class={self.nl_class}.nl_model={self.nl_model}'
+        # used in save() or load()
+        self._suffix = f'.nl_model={self.nl_model}.n_features={self.n_features}'
+        if not (self.nl_class is None):
+            self._suffix += f'.nl_class={self.nl_class}'
+
         return
     
     @abc.abstractmethod
