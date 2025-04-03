@@ -123,7 +123,7 @@ def get_activations(self, **kwargs):
         
         # allocate memory for pred and result
         if not has_pred:
-            act_td['output'] = MMT.empty(shape=torch.Size((n_samples,)+(num_classes,)))
+            act_td['output'] = MMT.empty(shape=torch.Size((n_samples,num_classes)))
             act_td['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
             act_td['result'] = MMT.empty(shape=torch.Size((n_samples,)))
         

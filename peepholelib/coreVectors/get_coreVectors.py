@@ -42,14 +42,13 @@ def get_coreVectors(self, **kwargs):
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-
             n_samples = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', n_samples)
+            self._corevds[ds_key].batch_size = torch.Size((n_samples,)) 
         else:
             n_samples = len(self._actds[ds_key])
-            if verbose: print('loader n_samples: ', n_samples) 
             self._corevds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-
+            if verbose: print('loader n_samples: ', n_samples) 
 
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
         n_samples = self._n_samples[ds_key]       
@@ -64,7 +63,7 @@ def get_coreVectors(self, **kwargs):
         for mk, corev_size in shapes.items(): 
             if not (mk in cvs_td):
                 if verbose: print('allocating core vectors for module: ', mk)
-                cvs_td[mk] = MMT.empty(shape=torch.Size((n_samples,)+(corev_size,)))
+                cvs_td[mk] = MMT.empty(shape=(n_samples, corev_size))
                 _modules_to_save.append(mk)
 
         if verbose: print('modules to save: ', _modules_to_save)

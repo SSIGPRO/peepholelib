@@ -31,7 +31,6 @@ def svd_Linear_ViT(act_data, reduct_m, device):
     return cvs
 
 def svd_Conv2D(act_data, reduct_m, layer, device):
-
     reduct_m = reduct_m.to(device)
     pad_mode = layer.padding_mode if layer.padding_mode != 'zeros' else 'constant'
     padding = _reverse_repeat_tuple(layer.padding, 2) 
