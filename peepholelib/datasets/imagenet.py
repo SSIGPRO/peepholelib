@@ -1,6 +1,6 @@
 # Our stuff
 from .dataset_base import DatasetBase
-## from .transforms import vgg16_ImageNet
+from .transforms import vgg16_imagenet
 
 # General python stuff
 from pathlib import Path as Path
@@ -63,7 +63,7 @@ class ImageNet(DatasetBase):
 
         # original dataset without augmentation
         # accepts custom transform if provided in kwargs
-        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_ImageNet
+        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_imagenet
 
         # set torch seed
         torch.manual_seed(seed)
@@ -72,16 +72,14 @@ class ImageNet(DatasetBase):
         test_dataset = datasets.ImageNet(
             root=self.data_path,
             split='val',
-            transform=transform,
-            download=False
+            transform=transform          
         )
         
         # Load the training split without any transform yet.
         _train_data = datasets.ImageNet(
             root=self.data_path,
             split='train',
-            transform=None,
-            download=False
+            transform=None
         )
 
         train_dataset, val_dataset = random_split(
