@@ -25,20 +25,18 @@ class ClassifierBase(DrillBase):
         # computer in compute_empirical_posteriors()
         self._empp = None
 
-        # defined in save() or load()
-        self._empp_file = None
+        # defined in __init__(), used in save() and load()
         self._clas_path = None
+        self._empp_file = None
         return
     
     @abc.abstractmethod
     def load(self, **kwargs):
-        self._empp_file = self.path/(self._suffix+'.empp.pt')
         self._empp = torch.load(self._empp_file)
         pass 
 
     @abc.abstractmethod
     def save(self, **kwargs):
-        self._empp_file = self.path/(self._suffix+'.empp.pt')
         torch.save(self._empp, self._empp_file)
         pass
 

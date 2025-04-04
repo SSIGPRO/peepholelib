@@ -30,33 +30,20 @@ class DeepMahalanobisDistance(DrillBase):
         # set in fit()
         self._cvs = None 
 
-        # defined in save() or load()
-        self._mean_file = None
-        self._precision_file = None
-        self._suffix = f'{self.name}.nl_model={self.nl_model}'
-        self.dmd_folder = None
+        # used in save() or load()
+        self.dmd_folder = self.path/(self.name+self._suffix)
+        self.precision_path = self.dmd_folder/'precision.pt'
+        self.mean_path = self.dmd_folder/'mean.pt' 
         return
     
     def load(self, **kwargs):
-        if self.dmd_folder == None:
-            self.dmd_folder = self.path/self._suffix
-
-        self.precision_path = self.dmd_folder/'precision.pt'
-        self.mean_path = self.dmd_folder/'mean.pt' 
-
         self._means = torch.load(self.mean_path).to(self.device)
         self._precision = torch.load(self.precision_path).to(self.device)
     
         return 
 
     def save(self, **kwargs):
-        if self.dmd_folder == None:
-            self.dmd_folder = self.path/self._suffix
-        
         self.dmd_folder.mkdir(parents=True, exist_ok=True)
-
-        self.precision_path = self.dmd_folder/'precision.pt'
-        self.mean_path = self.dmd_folder/'mean.pt'   
     
         torch.save(self._means.detach().cpu(), self.mean_path)
         torch.save(self._precision.detach().cpu(), self.precision_path)
