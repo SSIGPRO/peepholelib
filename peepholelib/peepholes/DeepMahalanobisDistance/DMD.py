@@ -104,7 +104,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.model._model.zero_grad()
         _ = self.model(data.to(self.device))
         
-        output = self.hooks[self._layer].in_activations[:]
+        output = self.hooks[self._layer].out_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
         
@@ -136,7 +136,7 @@ class DeepMahalanobisDistance(DrillBase):
 
         with torch.no_grad():
             _ = self.model(tempInputs.to(self.device))
-        output = self.hooks[self._layer].in_activations[:]
+        output = self.hooks[self._layer].out_activations[:]
         output = output.view(output.size(0), output.size(1), -1)
         output = torch.mean(output, 2)
 

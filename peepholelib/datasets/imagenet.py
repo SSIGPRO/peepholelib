@@ -1,6 +1,6 @@
 # Our stuff
 from .dataset_base import DatasetBase
-from .transforms import vgg16_cifar100
+## from .transforms import vgg16_ImageNet
 
 # General python stuff
 from pathlib import Path as Path
@@ -9,28 +9,27 @@ from pathlib import Path as Path
 import torch
 from torch.utils.data import random_split, DataLoader
 
-# CIFAR from torchvision
+# ImageNet from torchvision
 from torchvision import transforms, datasets
 
 
-class Cifar(DatasetBase):
+class ImageNet(DatasetBase):
     def __init__(self, **kwargs):
         DatasetBase.__init__(self, **kwargs)
 
-        # use CIFAR10 by default
+        # use ImageNet by default
         if 'dataset' in kwargs:
             self.dataset = kwargs['dataset']
         else:
-            self.dataset = 'CIFAR10'
+            self.dataset = 'ImageNet'
         print('dataset: %s' % self.dataset)
 
-        # raise error if the dataset is not CIFAR
-        if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be CIFAR")
+        # raise error if the dataset is not ImageNet
+        if "imagenet" not in self.dataset.lower():
+            raise ValueError("Dataset must be ImageNet")
 
         '''
-        CIFAR10 num_classes: 10
-        CIFAR100 num_classes: 100
+        ImageNet-1k num_classes: 1e3
         '''
         return
 
@@ -39,20 +38,20 @@ class Cifar(DatasetBase):
         Load and prepare data for a specified portion of a dataset.
 
         Args:
-        - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100').
+        - dataset (str): The name of the dataset ('ImageNet').
         - batch_size (int): The batch size for DataLoader.
         - seed (int): Random seed for reproducibility.
         - data_augmentation (bool): Flag indicating whether to apply data
         augmentation (default: False).
-        - original_transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
-        - augmentation_transform (torchvision.transforms.Compose): Custom transform to apply to the augmented dataset. (default: CIFAR10/CIFAR100 transform)
+        - original_transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: ImageNet transform)
+        - augmentation_transform (torchvision.transforms.Compose): Custom transform to apply to the augmented dataset. (default: ImageNet transform)
 
         Returns:
         - dict: containing a DataLoader for 'train', 'val', 'test', and a dictionary mapping class indices to class names for 'classes'.
 
         Example:
-        - To load the training data of CIFAR10 with a batch size of 32:
-        >>> c = Cifar(dataset = 'CIFAR10')
+        - To load the training data of ImageNet with a batch size of 32:
+        >>> c = ImageNet(dataset = 'ImageNet')
         >>> loaders = c.load_data(batch_size=32, seed=42)
         '''
 
@@ -64,25 +63,25 @@ class Cifar(DatasetBase):
 
         # original dataset without augmentation
         # accepts custom transform if provided in kwargs
-        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_cifar100
+        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_ImageNet
 
         # set torch seed
         torch.manual_seed(seed)
 
-        # Test dataset is loaded directly
-        test_dataset = datasets.__dict__[self.dataset](
+        # Load the official validation split as the test dataset.
+        test_dataset = datasets.ImageNet(
             root=self.data_path,
-            train=False,
+            split='val',
             transform=transform,
-            download=True
+            download=False
         )
-
-        # train data will be splitted for training and validation
-        _train_data = datasets.__dict__[self.dataset](
+        
+        # Load the training split without any transform yet.
+        _train_data = datasets.ImageNet(
             root=self.data_path,
-            train=True,
-            transform=None, #transform,
-            download=True
+            split='train',
+            transform=None,
+            download=False
         )
 
         train_dataset, val_dataset = random_split(
