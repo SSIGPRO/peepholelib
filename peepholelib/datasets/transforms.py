@@ -32,9 +32,10 @@ mobile_netv2 = transforms.Compose([
     ]) 
 
 vgg16_imagenet = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    transforms.Resize(256),  # Resize to 256x256
+    transforms.CenterCrop(224),  # Crop to 224x224
+    transforms.ToTensor(),  # Convert to tensor
+    transforms.Normalize(mean=[0.438, 0.418, 0.377], std=[0.300, 0.287, 0.294])  # Normalize
 ])
 
 vgg16_imagenet_augmentations = transforms.Compose([
