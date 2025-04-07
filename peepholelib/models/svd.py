@@ -131,7 +131,7 @@ def get_svds(self, **kwargs):
         if verbose: print('module: ', module)
         if isinstance(module, torch.nn.Conv2d):
             in_shape = self._hooks[mk].in_shape
-            W_ = c2s(in_shape, layer, device=self.device) 
+            W_ = c2s(in_shape, module, device=self.device) 
             U, s, V = torch.svd_lowrank(W_, q=300)
             Vh = V.T
 
