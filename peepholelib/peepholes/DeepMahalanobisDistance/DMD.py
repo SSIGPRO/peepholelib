@@ -92,7 +92,7 @@ class DeepMahalanobisDistance(DrillBase):
         acts = kwargs['acts']
 
         # get input image and set gradient to modify it
-        data = self.parser(act = acts, **self.parser_kwargs)
+        data = self.parser(act = acts)
         data = data.to(self.device)
         data.requires_grad_(True)
         n_samples = data.shape[0]
@@ -146,5 +146,4 @@ class DeepMahalanobisDistance(DrillBase):
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
             noise_gaussian_score[:, i] = term_gau
         
-        # TODO: ref code returns noise_gaussian_score
         return noise_gaussian_score.detach().cpu()

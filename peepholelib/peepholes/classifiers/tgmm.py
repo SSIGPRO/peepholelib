@@ -35,10 +35,10 @@ class GMM(ClassifierBase): # quella buona
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
-        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        data = self.parser(cvs=cvs)
         
         if data.shape[1] != self.n_features:
-            raise RuntimeError('Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
+            raise RuntimeError(f'Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
 
         if verbose: print('Fitting GMM')
         self._classifier.fit(data)
