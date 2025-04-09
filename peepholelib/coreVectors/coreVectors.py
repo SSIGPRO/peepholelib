@@ -46,6 +46,8 @@ class CoreVectors():
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
+        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
+
         from_file = Path(kwargs['from_file']) if 'from_file' in kwargs else None
         wrt = kwargs['wrt'] if 'wrt' in kwargs else None
         to_file = Path(kwargs['to_file']) if 'to_file' in kwargs  else None
@@ -65,14 +67,13 @@ class CoreVectors():
 
         if target_layers != None:
             keys_to_pop = tuple(means.keys()-target_layers)
-            print('pop keys: ', keys_to_pop)
             for k in keys_to_pop:
                 means.pop(k, default=None)
                 stds.pop(k, default=None)
 
         for ds_key in self._corevds:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
-            dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x)
+            dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
                 for _k in means.keys():
