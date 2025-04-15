@@ -12,13 +12,7 @@ class DrillBase:
         # a.k.a corevector size
         self.n_features = kwargs['n_features']
 
-        # number of classes in classifier, e.g., number of clusters
-        self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None
-
-
         self.parser = kwargs['parser']
-        self.parser_kwargs = kwargs['parser_kwargs'] if 'parser_kwargs' in kwargs else {} 
-
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # computed in fit()
@@ -32,9 +26,6 @@ class DrillBase:
 
         # used in save() or load()
         self._suffix = f'.nl_model={self.nl_model}.n_features={self.n_features}'
-        if not (self.nl_class is None):
-            self._suffix += f'.nl_class={self.nl_class}'
-
         return
     
     @abc.abstractmethod

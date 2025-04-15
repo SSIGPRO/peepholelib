@@ -60,6 +60,7 @@ class CoreVectors():
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
+            print('means: ', means['features.28'])
             stds = self._corevds[wrt].std(dim=0)
 
         if target_layers != None:

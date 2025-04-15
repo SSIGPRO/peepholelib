@@ -43,7 +43,19 @@ def svd_Conv2D(act_data, reduct_m, layer, device):
     else:
         ones = torch.ones(n_act, 1)
         _acts = torch.hstack((acts_flat, ones)).to(device)
-    cvs = (reduct_m@_acts.T).T
+    
+    if len(reduct_m.shape) == 3:
+        n_channels = reduct_m.shape[0]
+        rank = reduct_m.shape[1]
+        in_size = reduct_m.shape[2] 
+        
+        # concat channels for broadcasting multiplication
+        _rm = (reduct_m.view(n_channels*rank, in_size)@_acts.T).T
+        # restore shape - corevec for each channel, each channel with `rank` elements
+        cvs = _rm.view(n_act, n_channels, rank) 
+    else:
+        cvs = (reduct_m@_acts.T).T
+
     cvs = cvs.cpu()
         
     return cvs
