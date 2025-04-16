@@ -17,6 +17,7 @@ def get_coreVectors(self, **kwargs):
     device = self._model.device 
     normalize_wrt = kwargs['normalize_wrt'] if 'normalize_wrt' in kwargs else None 
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
+    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
     reduction_fns = kwargs['reduction_fns'] if 'reduction_fns' in kwargs else lambda x, y:x[y]
     activations_parser = kwargs['activations_parser'] if 'activations_parser' in kwargs else get_in_activations 
@@ -47,37 +48,42 @@ def get_coreVectors(self, **kwargs):
             if verbose: print('loader n_samples: ', n_samples) 
 
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
-        n_samples = self._n_samples[ds_key]       
         
-        cvs_td = self._corevds[ds_key]
-        act_td = self._actds[ds_key]
-
         # check if module in and out activations exist
         _modules_to_save = []
         
         # allocate for core vectors 
         for mk in model._target_modules.keys(): 
-            if not (mk in cvs_td):
+            if not (mk in self._corevds[ds_key]):
                 if verbose: print('allocating core vectors for module: ', mk)
                 # get cv shape from data
-                _act0 = activations_parser(act_td)[mk][0:1]
+                _a0 = activations_parser(self._actds[ds_key][0])[mk]
+                _act0 = _a0.reshape((1,)+_a0.shape)
                 cv_shape = reduction_fns[mk](act_data=_act0).shape[1:]
 
-                cvs_td[mk] = MMT.empty(shape=((n_samples,)+cv_shape))
+                self._corevds[ds_key][mk] = MMT.empty(shape=((n_samples,)+cv_shape))
                 _modules_to_save.append(mk)
 
         if verbose: print('modules to save: ', _modules_to_save)
         if len(_modules_to_save) == 0:
             print(f'No new core vectors for {ds_key}, skipping')
             continue
+        
+        # Close PTD create with mode 'w' and re-open it with mode 'r+'
+        # This is done so we can use multiple workers for reading and writting
+        self._corevds[ds_key].close()
+        self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+        cvs_td = self._corevds[ds_key]
+        act_td = self._actds[ds_key]
 
         # ---------------------------------------
         # compute corevectors 
         # ---------------------------------------
 
         # create a temp dataloader to iterate over images
-        cvs_dl = DataLoader(cvs_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
-        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = activations_parser, shuffle=False)
+        cvs_dl = DataLoader(cvs_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False, num_workers = n_threads) 
+        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = activations_parser, shuffle=False, num_workers = n_threads)
 
         if verbose: print('Computing core vectors')
         
