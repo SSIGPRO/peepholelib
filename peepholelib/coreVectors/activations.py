@@ -54,11 +54,11 @@ def get_activations(self, **kwargs):
             # Pre-allocation 
             #------------------------
             if verbose: print('Allocating images and labels')
-            _data = [datasets[ds_key][0]]
+            _data = datasets[ds_key][0]
             data = ds_parser(_data, key_list=key_list)
 
             for key in key_list:
-                _d = data[key][0]
+                _d = data[key]
                 # pre-allocation activations
                 if _d.shape == torch.Size([]):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
