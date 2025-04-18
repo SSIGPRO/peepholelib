@@ -50,6 +50,10 @@ def trim_channelwise_corevectors(**kwargs):
     _tcv = _cv[:,:,0:cv_dim] # timmed cv
     _trcv = _tcv.reshape(_ns, _nc*cv_dim) # trimmed and reshaped cv
     if act == None:
+        print('-----------')
+        print(f'trimmed corevector:{_trcv}')
+        print('-----------')
+        
         return _trcv 
     else:
         return _trcv, act[label_key]  

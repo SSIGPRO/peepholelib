@@ -106,5 +106,8 @@ class ClassifierBase(DrillBase):
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
         lp = cp@_empp
         lp /= lp.sum(dim=1, keepdim=True)
+        print('the peephole')
+
+        print(lp)
 
         return lp

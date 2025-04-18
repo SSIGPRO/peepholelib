@@ -8,6 +8,8 @@ from pathlib import Path as Path
 import abc 
 
 def ftd(data, key_list):
+    print(data)
+    print(key_list)
     r = {}
     for k in key_list:
         r[k] = data[k]
