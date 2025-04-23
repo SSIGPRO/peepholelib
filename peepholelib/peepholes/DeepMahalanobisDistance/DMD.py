@@ -113,37 +113,39 @@ class DeepMahalanobisDistance(DrillBase):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
             gaussian_score[:,i] = term_gau
+            
+        return gaussian_score.detach().cpu()
 
-        # Input_processing
-        sample_pred = gaussian_score.max(1)[1]
-        batch_sample_mean = self._means.index_select(0, sample_pred)
-        zero_f = output - batch_sample_mean
-        pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-        loss = torch.mean(-pure_gau)
-        loss.backward()
+        # # Input_processing
+        # sample_pred = gaussian_score.max(1)[1]
+        # batch_sample_mean = self._means.index_select(0, sample_pred)
+        # zero_f = output - batch_sample_mean
+        # pure_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
+        # loss = torch.mean(-pure_gau)
+        # loss.backward()
         
-        gradient = torch.ge(data.grad.data, 0)
-        gradient = (gradient.float() - 0.5) * 2
+        # gradient = torch.ge(data.grad.data, 0)
+        # gradient = (gradient.float() - 0.5) * 2
 
-        # TODO: Still think this could be simpler
-        # TODO: this is 3 because the activation are reshaped to have 3 dimensions.
-        # I suspect this is specific for the models used in the reference code
-        # The std values should probablu reflect the number of dimensions
-        for i in range(3):
-            gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
+        # # TODO: Still think this could be simpler
+        # # TODO: this is 3 because the activation are reshaped to have 3 dimensions.
+        # # I suspect this is specific for the models used in the reference code
+        # # The std values should probablu reflect the number of dimensions
+        # for i in range(3):
+        #     gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
     
-        tempInputs = torch.add(data.data, gradient, alpha=-magnitude)
+        # tempInputs = torch.add(data.data, gradient, alpha=-magnitude)
 
-        with torch.no_grad():
-            _ = self.model(tempInputs.to(self.device))
-        output = self.hooks[self._layer].in_activations[:]
-        output = output.view(output.size(0), output.size(1), -1)
-        output = torch.mean(output, 2)
+        # with torch.no_grad():
+        #     _ = self.model(tempInputs.to(self.device))
+        # output = self.hooks[self._layer].in_activations[:]
+        # output = output.view(output.size(0), output.size(1), -1)
+        # output = torch.mean(output, 2)
 
-        noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
-        for i in range(self.nl_model):
-            zero_f = output - batch_sample_mean
-            term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-            noise_gaussian_score[:, i] = term_gau
+        # noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
+        # for i in range(self.nl_model):
+        #     zero_f = output - batch_sample_mean
+        #     term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
+        #     noise_gaussian_score[:, i] = term_gau
         
-        return noise_gaussian_score.detach().cpu()
+        # return noise_gaussian_score.detach().cpu()
