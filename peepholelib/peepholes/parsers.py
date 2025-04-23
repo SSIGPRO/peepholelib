@@ -42,13 +42,20 @@ def trim_channelwise_corevectors(**kwargs):
     module = kwargs['module']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     cv_dim = kwargs['cv_dim']
+    cols = kwargs['cols'] if 'cols' in kwargs else None
     
     _cv = cvs[module]
     _ns = _cv.shape[0] # n samples
     _nc = _cv.shape[1] # n channels
     _r  = _cv.shape[2] # rank
-    _tcv = _cv[:,:,0:cv_dim] # timmed cv
-    _trcv = _tcv.reshape(_ns, _nc*cv_dim) # trimmed and reshaped cv
+    
+    if cols is None:
+        _tcv = _cv[:,:,0:cv_dim] # timmed cv
+        _trcv = _tcv.reshape(_ns, _nc*cv_dim) # trimmed and reshaped cv
+    else:
+        _tcv = _cv[:,cols,0:cv_dim] # timmed cv
+        _trcv = _tcv.reshape(_ns, len(cols)*cv_dim) # trimmed and reshaped cv
+
     if act == None:
         return _trcv 
     else:
