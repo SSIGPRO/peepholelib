@@ -1,6 +1,8 @@
 # torch stuff
 import torch
 from tensordict import MemoryMappedTensor as MMT
+import matplotlib.gridspec as gridspec
+
 
 # python stuff
 import os
@@ -50,34 +52,31 @@ def _extract_outputs(corevecs):
     
     return o_dnn, o_dnn_dfs
 
-def _initialize_peepholes(peepholes, ph_config_names):
+def _initialize_peepholes(peepholes):
     """
     Loads peephole classifiers for conceptograms.
     
     Args:
         peepholes (Peepholes): peepholes (already initialized).
-        ph_config_names (list): List of configuration peephole names (name of the peephole file that gets saved in data folder).
     
     Returns:
         dict: A dictionary containing loaded peepholes for each configuration and split.
     """
     ph_dict = {}  
-    for ph_config_name in ph_config_names:
         
-        with peepholes as ph:
-            ph.load_only(loaders=splits, verbose=False)
-            for split in splits:
-                ph_dict.setdefault(ph_config_name, {})[split] = ph._phs[split].detach().cpu()
+    with peepholes as ph:
+        ph.load_only(loaders=splits, verbose=False)
+        for split in splits:
+            ph_dict.setdefault(ph.name , {})[split] = ph._phs[split].detach().cpu()
     
-    return ph_dict
+    return ph_dict, ph.name
     
-def _generate_conceptograms_dict(peepholes, ph_config_names, target_layers, n_classes):
+def _generate_conceptograms_dict(peepholes, target_layers, n_classes):
     """
     Constructs a tensor for each data split with shape (samples, layers, classes) for Conceptograms.
     
     Args:
         peepholes (Peepholes): Peepholes (already initialized).
-        ph_config_names (list): List of peephole configuration names (names of saved peephole files).
         target_layers (list): List of target layers to extract peephole data from.
         n_classes (int): Number of classes in the dataset.
     
@@ -85,32 +84,30 @@ def _generate_conceptograms_dict(peepholes, ph_config_names, target_layers, n_cl
         dict: A dictionary containing conceptogram matrices for each split ('train', 'test', 'val').
     """
     
-    ph_dict = _initialize_peepholes(
+    ph_dict, peephole_config_name = _initialize_peepholes(
         peepholes=peepholes,
-        ph_config_names=ph_config_names
     )
 
     cgs_dict = {}
     
-    for peephole_config_name in ph_config_names:
         
-        # Get the first layer in the 'train' split as a reference
-        layer = list(ph_dict[peephole_config_name]['train'].keys())[0]
+    # Get the first layer in the 'train' split as a reference
+    layer = list(ph_dict[peephole_config_name]['train'].keys())[0]
 
-        # Allocate memory for each dataset split
-        for key in ph_dict[peephole_config_name].keys():
-            cgs_dict[key] = MMT.empty(shape=torch.Size(
-                (len(ph_dict[peephole_config_name][key][layer]['peepholes']), 
-                len(ph_dict[peephole_config_name]['train'].keys()), 
-                n_classes)))
-            if verbose: print(f"Allocated memory for {key}: {cgs_dict[key].shape}")
+    # Allocate memory for each dataset split
+    for key in ph_dict[peephole_config_name].keys():
+        cgs_dict[key] = MMT.empty(shape=torch.Size(
+            (len(ph_dict[peephole_config_name][key][layer]['peepholes']), 
+            len(ph_dict[peephole_config_name]['train'].keys()), 
+            n_classes)))
+        if verbose: print(f"Allocated memory for {key}: {cgs_dict[key].shape}")
 
-        # Populate the tensor dictionary with peephole data
-        for key in ph_dict[peephole_config_name].keys():
-            if verbose: print(f'\n------------{key}-------------')
-            for i, layer in enumerate(target_layers):
-                cgs_dict[key][:, i, :] = ph_dict[peephole_config_name][key][layer]['peepholes']
-                if verbose: print(f"Sample data for {key}, layer {layer}:\n", cgs_dict[key][0])
+    # Populate the tensor dictionary with peephole data
+    for key in ph_dict[peephole_config_name].keys():
+        if verbose: print(f'\n------------{key}-------------')
+        for i, layer in enumerate(target_layers):
+            cgs_dict[key][:, i, :] = ph_dict[peephole_config_name][key][layer]['peepholes']
+            if verbose: print(f"Sample data for {key}, layer {layer}:\n", cgs_dict[key][0])
     
     return cgs_dict
 
@@ -122,7 +119,6 @@ def generate_conceptograms(peepholes, save_path, n_cgs=5, **kwargs):
         peepholes (Peepholes): Peepholes (already initialized).
         save_path (str): Directory where conceptograms will be saved.
         n_cgs (int): Number of conceptograms to display (default: 5).
-        ph_config_names (list): List of configuration peephole names (name of the peephole file that gets saved in the data folder).
         target_layers (list): List of target layers.
         n_classes (int): Number of classes.
     """
@@ -130,7 +126,6 @@ def generate_conceptograms(peepholes, save_path, n_cgs=5, **kwargs):
 
     cgs_dict = _generate_conceptograms_dict(
         peepholes=peepholes,
-        ph_config_names=kwargs['ph_config_names'],
         target_layers=kwargs['target_layers'],
         n_classes=kwargs['n_classes'],
     )
@@ -158,9 +153,8 @@ def generate_conceptogram(peepholes, sample, save_path, **kwargs):
     
     Args:
         peepholes (Peepholes): Peepholes (already initialized).
-        sample (int): Index of the conceptogram to visualize.
+        sample (int): Index of split test sample to visualize.
         save_path (str): Path where the generated conceptogram should be saved.
-        ph_config_names (str): List of configuration peephole names (name of the peephole file that gets saved in the data folder).
         target_layers (list): List of target layers.
         n_classes (int): Number of classes.
     """
@@ -169,11 +163,11 @@ def generate_conceptogram(peepholes, sample, save_path, **kwargs):
     # Generate conceptogram dictionary
     cgs_dict = _generate_conceptograms_dict(
         peepholes=peepholes,
-        ph_config_names=kwargs['ph_config_names'],
         target_layers=kwargs['target_layers'],
         n_classes=kwargs['n_classes'],
     )
-    
+
+
     # Create conceptogram
     fig, axs = plt.subplots(1, 1, figsize=(3, 6))
     fig.suptitle(f'Example of conceptogram - split={split}, index={sample}\n')
@@ -191,74 +185,83 @@ def generate_conceptogram(peepholes, sample, save_path, **kwargs):
     print(f'Conceptogram saved at: {save_file}')
 
 
-def generate_sample_conceptogram(sample, **kwargs):
-    """
-    Generate a detailed conceptogram (with network output) for a specific sample.
 
-    Args:
-        sample (int): Index of the sample to visualize.
-        ppepholes (Peepholes): Peepholes (already initialized).
-        ds (Dataset): Dataset
-        corevecs (CoreVectors): Core vectors 
-        ph_config_names (list): List of peephole configuration names.
-        target_layers (list): List of target layers.
-        n_classes (int): Number of classes in the dataset.
-        save_path (str): Path to save the generated conceptogram plot.
-    """
+def generate_sample_conceptogram(sample, **kwargs):
     split = 'test'
     save_path = kwargs['save_path']
     ds = kwargs['ds']
 
     o_dnn, o_dnn_dfs = _extract_outputs(kwargs['corevecs'])
+
+    if sample >= len(o_dnn_dfs[split]):
+        raise ValueError(f"Sample must be between 0 and {len(o_dnn_dfs[split]) - 1}! You passed {sample}.")
+
     cgs_dict = _generate_conceptograms_dict(
         peepholes=kwargs['peepholes'],
-        ph_config_names=kwargs['ph_config_names'],
         target_layers=kwargs['target_layers'],
         n_classes=kwargs['n_classes'],
     )
 
-    # labels
-    true_out = o_dnn_dfs[split]['true'][sample]     # number
-    true_class = ds._classes[true_out]              # string
-
+    # Labels 
+    true_out = o_dnn_dfs[split]['true'][sample]
+    true_class = ds._classes[true_out]
     label_out = o_dnn_dfs[split]['label'][sample]
     label_class = ds._classes[label_out]
-
     confidence = o_dnn_dfs[split]['max'][sample]
 
-    # matrix and array (print pre label with soft max -> o_dnn)
+    # Data
     concepto = cgs_dict[split][sample].detach().cpu().numpy().T
-    out_net = np.expand_dims(o_dnn[split][sample], axis=1) # roba predetta
+    out_net = np.expand_dims(o_dnn[split][sample], axis=1)
+    image = ds._dss[split][sample][0].permute(1, 2, 0).cpu().numpy()
 
+    # plotting
+    fig = plt.figure(figsize=(8, 8))
+    gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 0.5])  
 
-    # create concepotogram
-    fig, ax = plt.subplots(1, 2, figsize=(6, 8))
-    fig.suptitle(f'Split: {split} - Element: {sample} - True label: {true_out} - Pred label: {label_out}\nConfidence: {confidence:.2f}')
+    fig.suptitle(
+        f'Split: {split} - Sample: {sample}\nTrue: {true_class} ({true_out}) - Pred: {label_class} ({label_out}) - Conf: {confidence:.2f}',
+        fontsize=14
+    )
 
-    ax[0].imshow(concepto, aspect='auto', cmap='YlGnBu')
-    ax[0].set_xticks(np.arange(len(kwargs['target_layers'])))
-    ax[0].set_yticks([true_out, label_out], [f'{true_out} ({true_class})', f'{label_out} ({label_class})'])
-    ax[0].yaxis.tick_right()
-    ax[0].set_xlabel('Layers')
+    # input image
+    ax0 = plt.subplot(gs[0])
+    ax0.imshow(image)
+    ax0.axis('off')
+    ax0.set_title('Input Image')
 
-    ax[1].imshow(out_net, cmap='YlGnBu')
-    ax[1].set_xticks([])
-    ax[1].set_yticks([true_out])
-    ax[1].yaxis.set_label_position("right")
-    ax[1].yaxis.tick_right()
-    ax[1].set_xlabel('Net Out')
-    plt.tight_layout()
+    # conceptogram
+    ax1 = plt.subplot(gs[1])
+    ax1.imshow(concepto, aspect='auto', cmap='YlGnBu')
+    ax1.set_xticks(np.arange(len(kwargs['target_layers'])))
+    ax1.set_yticks([true_out, label_out], [f'{true_out} ({true_class})', f'{label_out} ({label_class})'])
+    ax1.yaxis.tick_right()
+    ax1.set_xlabel('Layers')
+    ax1.set_title('Conceptogram')
 
-    # save conceptogram
+    # network output 
+    ax2 = plt.subplot(gs[2])
+    ax2.imshow(out_net, cmap='YlGnBu', aspect='auto')
+    ax2.set_xticks([])
+    ax2.set_yticks([true_out])
+    ax2.yaxis.set_label_position("right")
+    ax2.yaxis.tick_right()
+    ax2.set_xlabel('Net Out')
+    ax2.set_title('Network Output')
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.92])
+
+    # Save
     os.makedirs(save_path, exist_ok=True)
     filename = f'sample_conceptogram_{split}_sample{sample}_true{true_out}_pred{label_out}_conf{confidence:.2f}.png'
     save_file = os.path.join(save_path, filename)
     plt.savefig(save_file)
     plt.close()
-    print(f"Conceptogram saved to {save_path}")
+
+    print(f"Conceptogram saved to: {save_file}")
 
 
-def generate_sample_conceptograms(sample, result, confidence, **kwargs):
+
+def generate_sample_conceptograms(class_id, result, confidence, **kwargs):
     """
     Generates multiple detailed conceptograms (with network output) for a specific class, prediction result and minimum confidence.
 
@@ -270,7 +273,6 @@ def generate_sample_conceptograms(sample, result, confidence, **kwargs):
         ds (Dataset): Dataset.
         corevecs (CoreVectors): Corevectors.
         save_path (str or Path): File path where the final figure will be saved.
-        ph_config_names (list): List of peephole configuration names.
         target_layers (list): List of model layers for which to extract peepholes.
         n_classes (int): Total number of output classes.
     """
@@ -283,9 +285,12 @@ def generate_sample_conceptograms(sample, result, confidence, **kwargs):
     rand_samples = []
     k = 0
 
+    if class_id >= len(ds._classes):
+        raise ValueError(f"Class ID has to be a number between 0 and {len(ds._classes)-1}!")
+
     while len(rand_samples) < 5 and k < 500:
         if o_dnn_dfs[split]['result'][k] == result and \
-           o_dnn_dfs[split]['true'][k] == sample and \
+           o_dnn_dfs[split]['true'][k] == class_id and \
            o_dnn_dfs[split]['max'][k] >= confidence:
             rand_samples.append(k)
         k += 1
@@ -294,7 +299,6 @@ def generate_sample_conceptograms(sample, result, confidence, **kwargs):
 
     cgs_dict = _generate_conceptograms_dict(
         peepholes=kwargs['peepholes'],
-        ph_config_names=kwargs['ph_config_names'],
         target_layers=kwargs['target_layers'],
         n_classes=kwargs['n_classes'],
     )
@@ -321,7 +325,7 @@ def generate_sample_conceptograms(sample, result, confidence, **kwargs):
         ax_concepto.set_yticks([true_out, label_out], [f'{true_out} ({true_class})', f'{label_out} ({label_class})'])
         ax_concepto.yaxis.tick_right()
         ax_concepto.set_xlabel('Layers')
-        ax_concepto.set_title(f'Element: {sample}\nConfidence: {confidence:.2f}')
+        ax_concepto.set_title(f'Class ID: {class_id}\nConfidence: {confidence:.2f}')
 
         ax_out_net = axes[i * 2 + 1]
         ax_out_net.imshow(out_net, cmap='YlGnBu')
@@ -331,13 +335,13 @@ def generate_sample_conceptograms(sample, result, confidence, **kwargs):
         ax_out_net.yaxis.tick_right()
         ax_out_net.set_xlabel('Net Out')
 
-    fig.suptitle(f'Split: {split} - Class: {sample} ({ds._classes[sample]})', fontsize=16)
+    fig.suptitle(f'Split: {split} - Class: {class_id} ({ds._classes[class_id]})', fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
 
     # Save conceptograms
     os.makedirs(save_path, exist_ok=True)
     res_str = 'correct' if result else 'incorrect'
-    filename = f'conceptograms_{split}_class{sample}_{res_str}_conf{confidence:.2f}.png'
+    filename = f'conceptograms_{split}_class{class_id}_{res_str}_conf{confidence:.2f}.png'
     save_file = os.path.join(save_path, filename)
     plt.savefig(save_file)
     plt.close()
