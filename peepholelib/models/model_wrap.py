@@ -117,10 +117,10 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         if overwrite:
             in_size = temp[-1].in_features
-            temp[-1] = torch.nn.Linear(in_size, n_classes)
+            temp[-1] = torch.nn.Linear(in_size, n_classes, device=self.device)
         else:
             out_size = temp[-1].out_features 
-            temp.append(torch.nn.Linear(out_size, n_classes))
+            temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
 
         return
 
@@ -140,10 +140,10 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         # take the checkpoint and the state_dict from the saved file
         _checkpoint = torch.load(file, map_location=self.device)
-        if 'state_dict' in self._checkpoint:
-            _state_dict = self._checkpoint['state_dict']
+        if 'state_dict' in _checkpoint:
+            _state_dict = _checkpoint['state_dict']
         else:
-            _state_dict = self._checkpoint  # Assume the entire model's state dictionary is stored directly
+            _state_dict = _checkpoint  # Assume the entire model's state dictionary is stored directly
                     
         # assign model    
         self._model.load_state_dict(_state_dict) 
