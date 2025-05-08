@@ -36,31 +36,18 @@ class Cifar(DatasetBase):
     
     def load_data(self, **kwargs):
         '''
-        Load and prepare data for a specified portion of a dataset.
+        Load and prepare CIFAR10 or CIFAR100 data.
         
         Args:
-        - dataset (str): The name of the dataset ('CIFAR10', 'CIFAR100').
-        - batch_size (int): The batch size for DataLoader.
         - seed (int): Random seed for reproducibility.
-        - data_augmentation (bool): Flag indicating whether to apply data 
-        augmentation (default: False).
-        - original_transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
-        - augmentation_transform (torchvision.transforms.Compose): Custom transform to apply to the augmented dataset. (default: CIFAR10/CIFAR100 transform)
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
         
         Returns:
-        - dict: containing a DataLoader for 'train', 'val', 'test', and a dictionary mapping class indices to class names for 'classes'.
-        
-        Example:
-        - To load the training data of CIFAR10 with a batch size of 32:
-        >>> c = Cifar(dataset = 'CIFAR10')
-        >>> loaders = c.load_data(batch_size=32, seed=42)
+        - a thumbs up
         '''
 
         # parse parameteres
-        batch_size = kwargs['batch_size']
         seed = kwargs['seed']
-
-        augmentation_transform = kwargs['augmentation_transform'] if 'augmentation_transform' in kwargs else None
 
         # original dataset without augmentation
         # accepts custom transform if provided in kwargs
@@ -71,18 +58,18 @@ class Cifar(DatasetBase):
 
         # Test dataset is loaded directly
         test_dataset = datasets.__dict__[self.dataset](
-            root=self.data_path,
-            train=False,
-            transform=transform,
-            download=True
+            root = self.data_path,
+            train = False,
+            transform = transform,
+            download = True
         )
         
         # train data will be splitted for training and validation
         _train_data = datasets.__dict__[self.dataset]( 
-            root=self.data_path,
-            train=True,
-            transform=None, #transform,
-            download=True
+            root = self.data_path,
+            train = True,
+            transform = None, #transform,
+            download = True
         )
         
         train_dataset, val_dataset = random_split(
@@ -91,17 +78,12 @@ class Cifar(DatasetBase):
             generator=torch.Generator().manual_seed(seed)
         )
         
-        # set validation dataset transform
-        val_dataset.dataset.transform = transform
-        
-        # Apply the transformation according to data augmentation 
-        if augmentation_transform != None:
-            train_dataset.dataset.transform = augmentation_transform 
-        else:
+        # Apply the transform 
+        if transform != None:
+            val_dataset.dataset.transform = transform
             train_dataset.dataset.transform = transform
      
         # Save datasets as objects in the class
-        
         self._dss = {
                 'train': train_dataset,
                 'val': val_dataset,

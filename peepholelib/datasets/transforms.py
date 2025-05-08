@@ -13,13 +13,11 @@ vgg16_cifar10 = transforms.Compose([
 ])
 
 vgg16_cifar100_augumentations = transforms.Compose([
-    transforms.RandomResizedCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vgg16_cifar100
     ])
 
 vgg16_cifar10_augumentations = transforms.Compose([
-    transforms.RandomResizedCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vgg16_cifar10
     ])

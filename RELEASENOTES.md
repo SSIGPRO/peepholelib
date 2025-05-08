@@ -3,6 +3,9 @@
 ## general
 - update `utils/testing.py` to `utils/samplers.py`
 
+## Model
+- add function `update_output` to `model_wrap`
+
 ## SVDs
 - Support `torch.nn.Conv2d` layers with no bias, and with groups
 - `model.svd` implements `channel_wise` SVD for Conv2D layers per default.
