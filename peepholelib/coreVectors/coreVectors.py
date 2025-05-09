@@ -77,13 +77,8 @@ class CoreVectors():
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             
             for batch in tqdm(dl, disable=not verbose, total=len(dl)):
-                if ds_key=='test':
-                    for _k in means.keys():
-                        batch[_k] = (batch[_k]- means[_k])/stds[_k]
-                else:
-                    for _k in means.keys():
-                        batch[_k] = (batch[_k]- means[_k])/stds[_k]
-                
+                for _k in means.keys():
+                    batch[_k] = (batch[_k]- means[_k])/stds[_k]               
 
         if to_file != None:
             to_file.parent.mkdir(parents=True, exist_ok=True)

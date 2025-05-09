@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader
 def get_in_activations(x):
     return x['in_activations']
 
+def get_out_activations(x):
+    return x['out_activations']
+
 def get_coreVectors(self, **kwargs):
     self.check_uncontexted()
     
