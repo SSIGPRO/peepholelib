@@ -102,4 +102,5 @@ def fine_tune(**kwargs):
     plt.plot(val_losses.detach().cpu().numpy(), label='val')
     plt.xlabel('epoch')
     plt.ylabel('loss')
+    plt.legend()
     plt.savefig(path/(name+'.losses.png'), dpi=300, bbox_inches='tight')
