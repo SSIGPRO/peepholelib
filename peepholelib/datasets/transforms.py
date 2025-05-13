@@ -3,7 +3,7 @@ from torchvision import transforms
 vgg16_cifar100 = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294)) # CIFAR100
+    transforms.Normalize((0.438, 0.418, 0.377), (0.300, 0.287, 0.294))
 ])
 
 vgg16_cifar10 = transforms.Compose([
@@ -22,6 +22,18 @@ vgg16_cifar10_augumentations = transforms.Compose([
     transforms.RandomResizedCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vgg16_cifar10
+    ])
+
+vgg16_imagenet = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+])
+
+vgg16_imagenet_augumentations = transforms.Compose([
+    transforms.RandomResizedCrop(224),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET), 
+    vgg16_imagenet
     ])
 
 mobile_netv2 = transforms.Compose([
