@@ -1,16 +1,16 @@
 # Our stuff
-from .dataset_base import DatasetBase
-from .transforms import vgg16_cifar100
+from peepholelib.datasets.dataset_base import DatasetBase
+from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 
 # General python stuff
 from pathlib import Path as Path
 
 # torch stuff
 import torch
-from torch.utils.data import random_split, DataLoader
+from torch.utils.data import random_split
 
 # CIFAR from torchvision
-from torchvision import transforms, datasets
+from torchvision import datasets
 
 
 class Cifar(DatasetBase):
@@ -18,10 +18,7 @@ class Cifar(DatasetBase):
         DatasetBase.__init__(self, **kwargs)
         
         # use CIFAR10 by default
-        if 'dataset' in kwargs:
-            self.dataset = kwargs['dataset']
-        else:
-            self.dataset = 'CIFAR10'
+        self.dataset = kwargs['dataset'] if 'dataset' in kwargs else 'CIFAR10'
         print('dataset: %s' % self.dataset)
 
         # raise error if the dataset is not CIFAR
@@ -40,19 +37,15 @@ class Cifar(DatasetBase):
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 transform)
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 for vgg16 transform)
         
         Returns:
         - a thumbs up
         '''
-
-        # parse parameteres
-        seed = kwargs['seed']
-
-        # original dataset without augmentation
         # accepts custom transform if provided in kwargs
-        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_cifar100
+        transform = kwargs['transform'] if 'transform' in kwargs else eval('vgg16_'+self.dataset.lower())
             
+        seed = kwargs['seed']
         # set torch seed
         torch.manual_seed(seed)
 
