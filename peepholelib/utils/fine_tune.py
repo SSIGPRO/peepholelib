@@ -129,8 +129,8 @@ def fine_tune(**kwargs):
         # saving and plotting
         if (epoch+1)%save_every == 0:
             _d = {
-                  'train_losses': train_losses[:epoch],
-                  'val_losses': train_losses[:epoch],
+                  'train_losses': train_losses[:epoch+1],
+                  'val_losses': train_losses[:epoch+1],
                   'state_dict': model._model.state_dict(),
                   'optimizer': optim.state_dict()
                   }
@@ -143,4 +143,4 @@ def fine_tune(**kwargs):
             plt.xlabel('epoch')
             plt.ylabel('loss')
             plt.legend()
-            plt.savefig(file.as_posix()+'losses.png', dpi=300, bbox_inches='tight')
+            plt.savefig(file.as_posix()+'.losses.png', dpi=300, bbox_inches='tight')
