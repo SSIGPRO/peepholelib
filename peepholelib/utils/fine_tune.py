@@ -29,12 +29,14 @@ def fine_tune(**kwargs):
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
     # training artifacts
-    _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss  
+    _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss
     loss_kwargs = kwargs['loss_kwargs'] if 'loss_kwargs' in kwargs else {'reduction': 'mean'}
     _opt = kwargs['optimizer'] if 'optimizer' in kwargs else torch.optim.SGD
     optim_kwargs = kwargs['optim_kwargs'] if 'optim_kwargs' in kwargs else dict()
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else partial(torch.argmax, axis=1)  
-
+    _sched = kwargs['scheduler'] if 'scheduler' in kwargs else None 
+    scheduler_kwargs = kwargs['scheduler_kwargs'] if 'scheduler_kwargs' in kwargs and 'scheduler' in kwargs else {} 
+    
     # training progress
     lr = kwargs['lr']
     iterations = kwargs['iterations'] if 'iterations' in kwargs else 'full' 
@@ -44,6 +46,7 @@ def fine_tune(**kwargs):
     # create training artifacts
     loss_fn = _l()
     optim = _opt(model._model.parameters(), lr=lr, **optim_kwargs)
+    scheduler = _sched(optimizer=optim, **scheduler_kwargs) if not _sched == None else None
 
     # saving
     save_every = kwargs['save_every'] if 'save_every' in kwargs else 100
@@ -54,7 +57,6 @@ def fine_tune(**kwargs):
     assert(isinstance(model, ModelWrap))
     assert(isinstance(ds, DatasetBase))
     assert(isinstance(iterations, int) or iterations == 'full')
-    
 
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
@@ -129,6 +131,7 @@ def fine_tune(**kwargs):
             optim.step()
             loss_acc += loss*len(data)
             acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
+
         train_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
         train_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
 
@@ -146,6 +149,9 @@ def fine_tune(**kwargs):
                 acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
             val_losses[epoch] = (loss_acc/iter_val).detach().cpu()
             val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
+
+        # step the scheduler
+        if not scheduler == None: scheduler.step(loss)
 
         if verbose: print(f'epoch `{epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]}')
         
