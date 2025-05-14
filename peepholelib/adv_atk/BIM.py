@@ -15,7 +15,7 @@ class myBIM(AttackBase):
    
     def __init__(self, **kwargs):
         AttackBase.__init__(self, **kwargs)
-        r"""
+        """
         BIM or iterative-FGSM in the paper 'Adversarial Examples in the Physical World'
         [https://arxiv.org/abs/1607.02533]
     
