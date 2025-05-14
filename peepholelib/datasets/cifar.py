@@ -15,6 +15,15 @@ from torchvision import datasets
 
 class Cifar(DatasetBase):
     def __init__(self, **kwargs):
+        '''
+        Cifar loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+
+        Expects:
+            data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+        Returns:
+            - a thumbs up
+        '''
+
         DatasetBase.__init__(self, **kwargs)
         
         # use CIFAR10 by default
@@ -25,10 +34,6 @@ class Cifar(DatasetBase):
         if "cifar" not in self.dataset.lower():
             raise ValueError("Dataset must be CIFAR")
 
-        '''
-        CIFAR10 num_classes: 10
-        CIFAR100 num_classes: 100
-        '''
         return
     
     def load_data(self, **kwargs):

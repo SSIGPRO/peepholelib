@@ -23,10 +23,9 @@ class ImageNet(DatasetBase):
     """
     ImageNet‑1K loader (train & val).
     Expects:
-        <data_path>/train/<class>/*.JPEG
-        <data_path>/val/<class>/*.JPEG
-    Returns from load_data():
-        {'train': DataLoader, 'val': DataLoader}
+        data_path (str): imagenet download folder
+    Returns:
+        - a thumbs up
     """
 
     def __init__(self, **kwargs):
