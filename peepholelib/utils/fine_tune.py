@@ -106,6 +106,8 @@ def fine_tune(**kwargs):
                 vebose = verbose
                 )
         optim.load_state_dict(data['optimizer']) 
+        if not scheduler == None:
+            scheduler.load_state_dict(data['scheduler'])
 
         initial_epoch = trained_for 
     else:
@@ -163,7 +165,8 @@ def fine_tune(**kwargs):
                   'val_losses': val_losses[:epoch+1],
                   'val_accuracy': val_acc[:epoch+1],
                   'state_dict': model._model.state_dict(),
-                  'optimizer': optim.state_dict()
+                  'optimizer': optim.state_dict(),
+                  'scheduler': scheduler.state_dict() if not scheduler == None else None
                   }
             torch.save(_d, file.as_posix()+'.'+str(epoch)+'.pt')
 
