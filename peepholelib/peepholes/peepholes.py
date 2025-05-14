@@ -3,15 +3,6 @@ from pathlib import Path
 from tqdm import tqdm
 from math import ceil
 
-# Stuff used in evaluation ... will get out from here
-from collections import Counter
-import numpy as np
-
-# plotting stuff
-from matplotlib import pyplot as plt
-import seaborn as sb
-import pandas as pd
-
 # torch stuff
 import torch
 from tensordict import TensorDict, PersistentTensorDict
@@ -56,6 +47,7 @@ class Peepholes:
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         cvs = kwargs['corevectors'] 
         bs = kwargs['batch_size']
+        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
         for (ds_key, cvds), ( _, actds) in zip(cvs._corevds.items(), cvs._actds.items()):
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
@@ -85,14 +77,19 @@ class Peepholes:
                     modules_to_compute.append(module)
                 else:
                     if verbose: print(f'Peepholes for {module} already present. Skipping.')
-                    
+
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers for reading and writting
+            self._phs[ds_key].close()
+            self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+
             #------------------------ 
             # computing peepholes
             #------------------------
             # create dataloaders
-            dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x)
-            dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x)
-            dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
+            dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads)
+            dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+            dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
@@ -107,7 +104,7 @@ class Peepholes:
         self.check_uncontexted()
         
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 32
+        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
 
         if self._phs == None:
@@ -174,104 +171,104 @@ class Peepholes:
 
         return
     
-    def evaluate_dists(self, **kwargs):
-        self.check_uncontexted()
-        
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        acts = kwargs['activations']
-        score_type = kwargs['score_type']
-        bins = kwargs['bins'] if 'bins' in kwargs else 100
-
-        for module in self.target_modules:
-            print(f'\n-------------\nEvaluating Distributions for module {module}\n-------------\n') 
-            
-            n_dss = len(self._phs.keys())
-            fig, axs = plt.subplots(1, n_dss+1, sharex='all', sharey='all', figsize=(4*(1+n_dss), 4))
-            
-            m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
-
-            for i, ds_key in enumerate(self._phs.keys()):       # train val test
-                if verbose: print(f'Evaluating {ds_key}')
-                results = acts[ds_key]['result']
-                scores = self._phs[ds_key][module]['score_'+score_type]
-                oks = (scores[results == True]).detach().cpu().numpy()
-                kos = (scores[results == False]).detach().cpu().numpy()
-
-                m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-                m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
 
 
-                #--------------- 
-                # plotting
-                #---------------
-                ax = axs[i+1]
-                sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-                sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-                ax.set_xlabel('score: '+score_type)
-                ax.set_ylabel('%')
-                ax.title.set_text(ds_key)
-                ax.legend(title='dist')
-            
-            # plot train and test distributions
-            ax = axs[0]
-            scores = self._phs['train'][module]['score_'+score_type].detach().cpu().numpy()
-            sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='train n=%d'%len(scores), alpha=0.5)
-            scores = self._phs['val'][module]['score_'+score_type].detach().cpu().numpy()
-            sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='val n=%d'%len(scores), alpha=0.5)
-            ax.set_ylabel('%')
-            ax.set_xlabel('score: '+score_type)
-            ax.legend(title='datasets')
-            plt.savefig((self.path/self.name).as_posix()+f'.{module}.png', dpi=300, bbox_inches='tight')
-            plt.close()
 
-            if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
 
-        return m_ok, s_ok, m_ko, s_ko
 
-    def evaluate(self, **kwargs): 
-        self.check_uncontexted()
 
-        cvs = kwargs['coreVectors']
-        score_type = kwargs['score_type']
-        
-        for module in self.target_modules:
-            quantiles = torch.arange(0, 1, 0.001) # setting quantiles list
-            prob_train = self._phs['train'][module]['peepholes']
-            prob_val = self._phs['val'][module]['peepholes']
-            
-            # TODO: vectorize
-            conf_t = self._phs['train'][module]['score_'+score_type].detach().cpu() 
-            conf_v = self._phs['val'][module]['score_'+score_type].detach().cpu() 
- 
-            th = [] 
-            lt = []
-            lf = []
 
-            c = cvs['val'].dataset['result'].detach().cpu().numpy()
-            cntt = Counter(c) 
-            
-            for q in quantiles:
-                perc = torch.quantile(conf_t, q)
-                th.append(perc)
-                idx = torch.argwhere(conf_v > perc)[:,0]
 
-                # TODO: vectorize
-                cnt = Counter(c[idx]) 
-                lt.append(cnt[True]/cntt[True]) 
-                lf.append(cnt[False]/cntt[False])
 
-            plt.figure()
-            x = quantiles.numpy()
-            y1 = np.array(lt)
-            y2 = np.array(lf)
-            plt.plot(x, y1, label='OK', c='b')
-            plt.plot(x, y2, label='KO', c='r')
-            plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
-            plt.legend()
-            plt.savefig((self.path/self.name).as_posix()+f'.{module}.png', dpi=300, bbox_inches='tight')
-            plt.close()
 
-        return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def get_dataloaders(self, **kwargs):
         self.check_uncontexted()

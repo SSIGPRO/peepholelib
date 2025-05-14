@@ -1,13 +1,15 @@
-import numpy as np
+# General python stuff
 from warnings import warn
 from pathlib import Path
+import numpy as np
+from tqdm import tqdm
 
 # torch stuff
 import torch
 from tensordict import TensorDict
 from tensordict import MemoryMappedTensor as MMT
 
-def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
+def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, warns=True):
     if not isinstance(layer, torch.nn.Conv2d):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
 
@@ -40,21 +42,9 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     Cin_g = Cin // groups  
     Cout_g = Cout // groups 
 
-    #if verbose:
-    #    print(f"cin: {Cin}, cout: {Cout}, groups: {groups}")
-    #    print(" bias:", bias.shape if bias is not None else None)
-    #    print(f"nº of Cin per group: {Cin_g}, nº of Cout per group: {Cout_g}")
-    #    print(f"kernel height: {Hk}, kernel width: {Wk}, kernel size: {kernel_size}")
-    #    print(f"input height: {Hin}, input width: {Win}, input size: {input_size}")
-
     Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
     Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
     output_size = Hout*Wout
-
-    shape_out = torch.Size((Cout*output_size, Cin*input_size + (0 if bias is None else 1)))
-    
-    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
-    nnz = crow[-1]
     
     # getting columns
     cols = torch.zeros(Cout*output_size, Cin*kernel_size + (0 if bias is None else 1), dtype=torch.int)
@@ -77,7 +67,6 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
         end_index_in = (group_id + 1) * Cin_g
         end_index_out = (group_id + 1) * Cout_g
         group_offset = start_index_in * input_size # for correct aligment w/input 
-        #if verbose: print(f" Group {group_id}: indexes in: {start_index_in}-{end_index_in} - indexes out: {start_index_out}-{end_index_out}")
 
         for cout in range(start_index_out, end_index_out): 
             k =  kernel[cout, :, :, :].flatten() 
@@ -89,20 +78,45 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
                     shift = h_shift+w_shift+group_offset
                     cols[idx, start_index_in * kernel_size : end_index_in * kernel_size] = base_row+shift
                     data[idx, start_index_in * kernel_size : end_index_in * kernel_size] = k
+                    
                     if bias is not None:
                         cols[idx, -1] = Cin * Hin * Win  
                         data[idx, -1] = bias[cout]
 
-    cols = cols.flatten()
-    data = data.flatten()
+    if not channel_wise:
+        shape_out = torch.Size((Cout*output_size, Cin*input_size + (0 if bias is None else 1)))
+        crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
 
-    csr_mat = torch.sparse_csr_tensor(crow, cols, data, size=shape_out, device=device)
-    return csr_mat 
+        cols = cols.flatten()
+        data = data.flatten()
+        
+        csr_mat = torch.sparse_csr_tensor(crow, cols, data, size=shape_out, device=device)
+
+        ret = csr_mat
+    else:
+        csrs = []
+        shape_out = torch.Size((output_size, Cin*input_size + (0 if bias is None else 1)))
+        crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
+
+        for cout in range(Cout):
+            hl, hh = cout*output_size, (cout+1)*output_size
+            _cols = cols[hl:hh, :] 
+            _data = data[hl:hh, :] 
+            _cols = _cols.flatten()
+            _data = _data.flatten()
+
+            csrs.append(torch.sparse_csr_tensor(crow, _cols, _data, size=shape_out, device=device))
+
+        ret = csrs
+    return ret 
+
 
 def get_svds(self, **kwargs):
     target_modules = kwargs['target_modules'] 
     path = Path(kwargs['path'])
     name = kwargs['name']
+    q = kwargs['rank'] if 'rank' in kwargs else 300
+    channel_wise = kwargs['channel_wise'] if 'channel_wise' in kwargs else True
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
     # create folder
@@ -131,20 +145,34 @@ def get_svds(self, **kwargs):
         if verbose: print('module: ', module)
         if isinstance(module, torch.nn.Conv2d):
             in_shape = self._hooks[mk].in_shape
-            W_ = c2s(in_shape, module, device=self.device) 
-            U, s, V = torch.svd_lowrank(W_, q=300)
-            Vh = V.T
+            W_ = c2s(in_shape, module, channel_wise=channel_wise, device=self.device) 
+
+            # same as `if channel_wise:`
+            if isinstance(W_, list):
+                uu, ss, vv = [], [], []
+                for csr in tqdm(W_):
+                    _u, _s, _v = torch.svd_lowrank(csr, q=q)
+                    uu.append(_u.detach().cpu())
+                    ss.append(_s.detach().cpu())
+                    vv.append(_v.detach().cpu().T)
+                U = torch.stack(uu)
+                s = torch.stack(ss)
+                Vh = torch.stack(vv)
+            else:
+                U, s, V = torch.svd_lowrank(W_, q=q)
+                U, s, Vh = U.detach().cpu(), s.detach().cpu(), V.detach().cpu().T
 
         elif isinstance(module, torch.nn.Linear):
             W_ = torch.hstack((weight, bias.reshape(-1,1)))
             U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
+            U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
         else:
             raise RuntimeError('Unsuported layer type')
 
         _svds[mk] = TensorDict({
-                'U': MMT(U.detach().cpu()),
-                's': MMT(s.detach().cpu()),
-                'Vh': MMT(Vh.detach().cpu())
+                'U': MMT(U),
+                's': MMT(s),
+                'Vh': MMT(Vh)
                 })
 
     if verbose: print(f'saving {file_path}')

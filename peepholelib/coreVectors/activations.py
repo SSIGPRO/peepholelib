@@ -20,6 +20,7 @@ def get_activations(self, **kwargs):
 
     datasets = kwargs['datasets']
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
+    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
     key_list = kwargs['key_list'] if 'key_list' in kwargs else ['image', 'label']
     ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
@@ -50,15 +51,12 @@ def get_activations(self, **kwargs):
             self._actds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
 
             #------------------------
-            # copy images and labels
+            # Pre-allocation 
             #------------------------
-            
-            # create dataloader of input dataset and activations
-            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
-            dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False)
-
             if verbose: print('Allocating images and labels')
-            data = next(iter(dl_ds))
+            _data = [datasets[ds_key][0]]
+            data = ds_parser(_data, key_list=key_list)
+
             for key in key_list:
                 _d = data[key][0]
                 # pre-allocation activations
@@ -66,12 +64,24 @@ def get_activations(self, **kwargs):
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
                     self._actds[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape))
+           
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers for reading and writting
+            self._actds[ds_key].close()
+            self._actds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+            #------------------------
+            # copy images and labels
+            #------------------------
+            # create dataloader of input dataset and activations
+            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
+            dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False, num_workers=n_threads)
 
             if verbose: print('Copying images and labels')
             for data_in, data_t in tqdm(zip(dl_ds, dl_act), disable=not verbose, total=ceil(n_samples/bs)): 
                 for key in key_list:
                     data_t[key] = data_in[key]
-
+            
         #------------------------------------------------
         # pre-allocate predictions, results, activations
         #------------------------------------------------
@@ -132,7 +142,7 @@ def get_activations(self, **kwargs):
         # ---------------------------------------
         
         # create a temp dataloader to iterate over images
-        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False) 
+        act_dl = DataLoader(act_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False, num_workers=n_threads) 
         
         if verbose: print('Computing activations')
         for act_data in tqdm(act_dl, disable=not verbose):

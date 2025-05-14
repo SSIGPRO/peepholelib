@@ -16,7 +16,9 @@ class ClassifierBase(DrillBase):
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
-        # computed in fit()
+        # number of classes in classifier a.k.a. number of clusters
+        self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None# computed in fit()
+
         self._classifier = None
 
         # set in fit()
@@ -28,6 +30,10 @@ class ClassifierBase(DrillBase):
         # defined in __init__(), used in save() and load()
         self._clas_path = None
         self._empp_file = None
+        
+        # used in save() or load()
+        self._suffix += f'.nl_class={self.nl_class}'
+
         return
     
     @abc.abstractmethod
@@ -69,7 +75,7 @@ class ClassifierBase(DrillBase):
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
         for act, cvs in tqdm(zip(acts_dl, cvs_dl), disable=not verbose):
-            data, label = self.parser(act=act, cvs=cvs, **self.parser_kwargs)
+            data, label = self.parser(act=act, cvs=cvs)
             data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
             
@@ -96,7 +102,7 @@ class ClassifierBase(DrillBase):
         if self._empp == None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
         _empp = self._empp.to(self.device)
-        data = self.parser(cvs=cvs, **self.parser_kwargs)
+        data = self.parser(cvs=cvs)
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
         lp = cp@_empp
         lp /= lp.sum(dim=1, keepdim=True)
