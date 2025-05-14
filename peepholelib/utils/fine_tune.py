@@ -28,16 +28,25 @@ def fine_tune(**kwargs):
     ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
-    # training
-    lr = kwargs['lr']
+    # training artifacts
     _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss  
-    loss_fn = _l()
+    loss_kwargs = kwargs['loss_kwargs'] if 'loss_kwargs' in kwargs else {'reduction': 'mean'}
+    _opt = kwargs['optimizer'] if 'optimizer' in kwargs else torch.optim.SGD
+    optim_kwargs = kwargs['optim_kwargs'] if 'optim_kwargs' in kwargs else dict()
+    pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else partial(torch.argmax, axis=1)  
+
+    # training progress
+    lr = kwargs['lr']
     iterations = kwargs['iterations'] if 'iterations' in kwargs else 'full' 
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 256 
     max_epochs = kwargs['max_epochs'] if 'max_epochs' in kwargs else 1e3
+    
+    # create training artifacts
+    loss_fn = _l()
+    optim = _opt(model._model.parameters(), lr=lr, **optim_kwargs)
+
+    # saving
     save_every = kwargs['save_every'] if 'save_every' in kwargs else 100
-    _opt = kwargs['optimizer'] if 'optimizer' in kwargs else torch.optim.SGD
-    optim_kwargs = kwargs['optim_kwargs'] if 'optim_kwargs' in kwargs else dict()
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
     
     # TODO add lr scheduling
@@ -46,8 +55,6 @@ def fine_tune(**kwargs):
     assert(isinstance(ds, DatasetBase))
     assert(isinstance(iterations, int) or iterations == 'full')
     
-    # construct optimizer
-    optim = _opt(model._model.parameters(), lr=lr, **optim_kwargs)
 
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
@@ -66,6 +73,8 @@ def fine_tune(**kwargs):
 
     train_losses = torch.zeros(max_epochs, requires_grad=False)
     val_losses = torch.zeros(max_epochs, requires_grad=False)
+    train_acc = torch.zeros(max_epochs, requires_grad=False)
+    val_acc = torch.zeros(max_epochs, requires_grad=False)
     
     # load model and training data
     if path.exists():
@@ -82,9 +91,13 @@ def fine_tune(**kwargs):
         _f = file.as_posix()+'.'+str(trained_for-1)+'.pt'
         if verbose: print(f'Loading {_f}')
         data = torch.load(_f) 
-
+        
+        # to save accuracies and losses
         train_losses[:trained_for] = data['train_losses']
         val_losses[:trained_for] = data['val_losses'] 
+        train_acc[:trained_for] = data['train_accuracy']
+        val_acc[:trained_for] = data['val_accuracy'] 
+
         model.load_checkpoint(
                 path = path,
                 name = _f,
@@ -104,41 +117,55 @@ def fine_tune(**kwargs):
     for epoch in range(initial_epoch, max_epochs):
         # peform train iterations
         loss_acc = 0.0
+        acc_acc = 0.0
+        samples_acc = 0
         for it, data in zip(range(iter_train), train_dl):
+            samples_acc += len(data)
             pred = model(data['image'].to(device))
             labels = data['label'].to(device)
             loss = loss_fn(pred, labels)
-            loss_acc += loss
             optim.zero_grad()
             loss.backward()
             optim.step()
-        train_losses[epoch] = (loss_acc/max_epochs).detach().cpu()
-        
+            loss_acc += loss*len(data)
+            acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
+        train_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
+        train_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
+
         # validation
         with torch.no_grad():
             loss_acc = 0.0
+            acc_acc = 0.0
+            samples_acc = 0
             for it, data in zip(range(iter_val), val_dl):
+                samples_acc += len(data)
                 pred = model(data['image'].to(device))
                 labels = data['label'].to(device)
                 loss = loss_fn(pred, labels)
-                loss_acc += loss
-            val_losses[epoch] = (loss_acc/max_epochs).detach().cpu()
-        
+                loss_acc += loss*len(data)
+                acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
+            val_losses[epoch] = (loss_acc/iter_val).detach().cpu()
+            val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
+
         if verbose: print(f'epoch `{epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]}')
         
         # saving and plotting
         if (epoch+1)%save_every == 0:
             _d = {
                   'train_losses': train_losses[:epoch+1],
-                  'val_losses': train_losses[:epoch+1],
+                  'train_accuracy': train_acc[:epoch+1],
+                  'val_losses': val_losses[:epoch+1],
+                  'val_accuracy': val_acc[:epoch+1],
                   'state_dict': model._model.state_dict(),
                   'optimizer': optim.state_dict()
                   }
             torch.save(_d, file.as_posix()+'.'+str(epoch)+'.pt')
 
             plt.figure()
-            plt.plot(train_losses.detach().cpu().numpy(), label=train_key)
-            plt.plot(val_losses.detach().cpu().numpy(), label=val_key)
+            plt.plot(train_losses.detach().cpu().numpy(), label='loss_'+train_key)
+            plt.plot(val_losses.detach().cpu().numpy(), label='loss_'+val_key)
+            plt.plot(train_acc.detach().cpu().numpy(), label='acc_'+train_key)
+            plt.plot(val_acc.detach().cpu().numpy(), label='acc_'+val_key)
             plt.semilogy()
             plt.xlabel('epoch')
             plt.ylabel('loss')
