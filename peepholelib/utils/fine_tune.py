@@ -61,9 +61,7 @@ def fine_tune(**kwargs):
     val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs_val, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads) 
     
     # to save losses
-    losses_file = path/(name+'.losses.pt')
-    plot_file = path/(name+'.losses.png')
-    models_path = path/'checkpoints' 
+    file = path/name
 
     train_losses = torch.zeros(max_epochs, requires_grad=False)
     val_losses = torch.zeros(max_epochs, requires_grad=False)
@@ -81,11 +79,13 @@ def fine_tune(**kwargs):
         else:
             if verbose: print(f'Found latest checkpoint for epoch {trained_for}. Resume training')
         
+        data = torch.load(file+'.'+str() 
         _tl, _vl = torch.load(losses_file)
         train_losses[:trained_for] = _tl[:trained_for]
         val_losses[:trained_for] = _tl[:trained_for]
 
-        _m_name = str(trained_for-1)+'.pt'
+        _m_name = 'model.'str(trained_for-1)+'.pt'
+        _o_name = 'opt.'str(trained_for-1)+'.pt'
         if verbose: print(f'Loading {(models_path/_m_name).as_posix()}')
         model.load_checkpoint(
                 path = models_path,
