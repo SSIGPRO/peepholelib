@@ -2,6 +2,7 @@
 from pathlib import Path
 from matplotlib import pyplot as plt
 from functools import partial
+from math import ceil
 
 # torch stuff
 import torch
@@ -31,8 +32,8 @@ def fine_tune(**kwargs):
     lr = kwargs['lr']
     _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss  
     loss_fn = _l()
-    iterations = kwargs['iterations'] if 'iterations' in kwargs else 1 
-    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 'full'
+    iterations = kwargs['iterations'] if 'iterations' in kwargs else 'full' 
+    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 256 
     max_epochs = kwargs['max_epochs'] if 'max_epochs' in kwargs else 1e3
     save_every = kwargs['save_every'] if 'save_every' in kwargs else 100
     _opt = kwargs['optimizer'] if 'optimizer' in kwargs else torch.optim.SGD
@@ -43,22 +44,22 @@ def fine_tune(**kwargs):
 
     assert(isinstance(model, ModelWrap))
     assert(isinstance(ds, DatasetBase))
-    assert(isinstance(bs, int) or bs == 'full')
+    assert(isinstance(iterations, int) or iterations == 'full')
     
     # construct optimizer
     optim = _opt(model._model.parameters(), lr=lr, **optim_kwargs)
 
-    if bs == 'full': 
+    if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
-        bs_train = len(ds._dss[train_key]) 
-        bs_val = len(ds._dss[val_key]) 
+        iter_train = ceil(len(ds._dss[train_key])/bs)
+        iter_val = ceil(len(ds._dss[val_key])/bs) 
     else:
-        bs_train = bs
-        bs_val = bs 
+        iter_train = iterations 
+        iter_val = iterations 
 
     # dataloader for the dataset
-    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs_train, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads)
-    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs_val, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads) 
+    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads)
+    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads) 
     
     # to save losses
     file = path/name
@@ -67,10 +68,9 @@ def fine_tune(**kwargs):
     val_losses = torch.zeros(max_epochs, requires_grad=False)
     
     # load model and training data
-    if models_path.exists():
-        ckps = sorted(list(models_path.glob('*.pt')))
-        _mp_posix = models_path.as_posix()
-        ckps_n = [int(ckp.as_posix().replace(_mp_posix,'').replace('/', '').replace('.pt','')) for ckp in ckps]
+    if path.exists():
+        ckps = sorted(list(path.glob('*.pt')))
+        ckps_n = [int(ckp.as_posix().replace(file.as_posix()+'.','').replace('/', '').replace('.pt','')) for ckp in ckps]
         trained_for = max(ckps_n)+1
         
         if trained_for >= max_epochs:
@@ -79,32 +79,32 @@ def fine_tune(**kwargs):
         else:
             if verbose: print(f'Found latest checkpoint for epoch {trained_for}. Resume training')
         
-        data = torch.load(file+'.'+str() 
-        _tl, _vl = torch.load(losses_file)
-        train_losses[:trained_for] = _tl[:trained_for]
-        val_losses[:trained_for] = _tl[:trained_for]
+        _f = file.as_posix()+'.'+str(trained_for-1)+'.pt'
+        if verbose: print(f'Loading {_f}')
+        data = torch.load(_f) 
 
-        _m_name = 'model.'str(trained_for-1)+'.pt'
-        _o_name = 'opt.'str(trained_for-1)+'.pt'
-        if verbose: print(f'Loading {(models_path/_m_name).as_posix()}')
+        train_losses[:trained_for] = data['train_losses']
+        val_losses[:trained_for] = data['val_losses'] 
         model.load_checkpoint(
-                path = models_path,
-                name = _m_name,
+                path = path,
+                name = _f,
                 vebose = verbose
                 )
+        optim.load_state_dict(data['optimizer']) 
+
         initial_epoch = trained_for 
     else:
         if verbose: print('No training ongoing, starting anew.')
         initial_epoch = 0
 
-    models_path.mkdir(parents=True, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True)
 
     # training loop
     if verbose: print('training------')
     for epoch in range(initial_epoch, max_epochs):
         # peform train iterations
         loss_acc = 0.0
-        for it, data in zip(range(iterations), train_dl):
+        for it, data in zip(range(iter_train), train_dl):
             pred = model(data['image'].to(device))
             labels = data['label'].to(device)
             loss = loss_fn(pred, labels)
@@ -117,7 +117,7 @@ def fine_tune(**kwargs):
         # validation
         with torch.no_grad():
             loss_acc = 0.0
-            for it, data in zip(range(iterations), val_dl):
+            for it, data in zip(range(iter_val), val_dl):
                 pred = model(data['image'].to(device))
                 labels = data['label'].to(device)
                 loss = loss_fn(pred, labels)
@@ -128,7 +128,13 @@ def fine_tune(**kwargs):
         
         # saving and plotting
         if (epoch+1)%save_every == 0:
-            torch.save(model._model.state_dict(), models_path/f'{epoch}.pt')
+            _d = {
+                  'train_losses': train_losses[:epoch],
+                  'val_losses': train_losses[:epoch],
+                  'state_dict': model._model.state_dict(),
+                  'optimizer': optim.state_dict()
+                  }
+            torch.save(_d, file.as_posix()+'.'+str(epoch)+'.pt')
 
             plt.figure()
             plt.plot(train_losses.detach().cpu().numpy(), label=train_key)
@@ -137,7 +143,4 @@ def fine_tune(**kwargs):
             plt.xlabel('epoch')
             plt.ylabel('loss')
             plt.legend()
-            plt.savefig(plot_file, dpi=300, bbox_inches='tight')
-        
-        # save losses every epoch
-        torch.save([train_losses, val_losses], losses_file)
+            plt.savefig(file.as_posix()+'losses.png', dpi=300, bbox_inches='tight')
