@@ -3,6 +3,7 @@ from pathlib import Path
 from matplotlib import pyplot as plt
 from functools import partial
 from math import ceil
+from time import time
 
 # torch stuff
 import torch
@@ -20,7 +21,7 @@ def fine_tune(**kwargs):
 
     path = Path(kwargs['path'])
     name = kwargs['name']
-    
+    model._model = torch.nn.DataParallel(model._model, device_ids=[1, 2, 3, 4, 5]) 
     # dataset 
     ds = kwargs['dataset']
     train_key = kwargs['train_key'] if 'train_key' in kwargs else 'train' 
@@ -119,6 +120,7 @@ def fine_tune(**kwargs):
     # training loop
     if verbose: print('training------')
     for epoch in range(initial_epoch, max_epochs):
+        t0 = time()
         # peform train iterations
         loss_acc = 0.0
         acc_acc = 0.0
@@ -151,7 +153,7 @@ def fine_tune(**kwargs):
                 acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
             val_losses[epoch] = (loss_acc/iter_val).detach().cpu()
             val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
-
+        print('time: ', time()-t0) 
         # step the scheduler
         if not scheduler == None: 
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
