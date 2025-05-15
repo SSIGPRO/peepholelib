@@ -7,6 +7,7 @@ def get_conceptogram_class(cv, ph, idx, target_layers, portion, ticks, k_rows, l
         raise ValueError('Number of target layers and ticks should be equal')
     
     output = cv._actds[portion]['output']
+    print(output[idx])
     SM = torch.nn.Softmax(dim=1)
     output = SM(output)[idx].unsqueeze(0)
     pred = cv._actds[portion][idx]['pred']
@@ -32,7 +33,7 @@ def get_conceptogram_class(cv, ph, idx, target_layers, portion, ticks, k_rows, l
     axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
     axs[1].set_yticks(tick_positions, tick_labels)
     axs[1].yaxis.tick_right()
-    axs[1].set_xlabel('VGG16 Layers')
+    axs[1].set_xlabel('Layers')
 
     pred_class = list_classes[int(pred.detach().cpu().numpy())]
     tick_position = int(pred.detach().cpu().numpy())

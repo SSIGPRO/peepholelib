@@ -92,7 +92,7 @@ class myDeepFool(AttackBase):
                 predicted_labels = y_predicted.argmax(axis = 1)
                 results = predicted_labels != labels
 
-                attack_TensorDict[loader_name]['image'][bn*bs:bn*bs+n_in] = images
+                attack_TensorDict[loader_name]['image'][bn*bs:bn*bs+n_in] = attack_images
                 attack_TensorDict[loader_name]['label'][bn*bs:bn*bs+n_in] = labels
                 attack_TensorDict[loader_name]['attack_success'][bn*bs:bn*bs+n_in] = results                
             
