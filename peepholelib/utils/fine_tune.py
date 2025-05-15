@@ -85,8 +85,8 @@ def fine_tune(**kwargs):
     val_acc = torch.zeros(max_epochs, requires_grad=False)
     
     # load model and training data
-    if path.exists():
-        ckps = sorted(list(path.glob('*.pt')))
+    ckps = sorted(list(path.glob('*.pt')))
+    if path.exists() and len(ckps) > 0:
         ckps_n = [int(ckp.as_posix().replace(file.as_posix()+'.','').replace('/', '').replace('.pt','')) for ckp in ckps]
         trained_for = max(ckps_n)+1
         
@@ -131,16 +131,16 @@ def fine_tune(**kwargs):
         acc_acc = 0.0
         samples_acc = 0
         for it, data in zip(range(iter_train), train_dl):
-            samples_acc += len(data)
+            n_samples = len(data['image'])
+            samples_acc += n_samples 
             pred = model(data['image'].to(device))
             labels = data['label'].to(device)
             loss = loss_fn(pred, labels)
             optim.zero_grad()
             loss.backward()
             optim.step()
-            loss_acc += loss*len(data)
+            loss_acc += loss*n_samples
             acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
-
         train_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
         train_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
 
@@ -150,13 +150,14 @@ def fine_tune(**kwargs):
             acc_acc = 0.0
             samples_acc = 0
             for it, data in zip(range(iter_val), val_dl):
-                samples_acc += len(data)
+                n_samples = len(data['image'])
+                samples_acc += n_samples 
                 pred = model(data['image'].to(device))
                 labels = data['label'].to(device)
                 loss = loss_fn(pred, labels)
-                loss_acc += loss*len(data)
+                loss_acc += loss*n_samples
                 acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
-            val_losses[epoch] = (loss_acc/iter_val).detach().cpu()
+            val_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
             val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
         # step the scheduler
         if not scheduler == None: 
