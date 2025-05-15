@@ -26,7 +26,6 @@ def fine_tune(**kwargs):
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
     devices = kwargs['devices'] if 'devices' in kwargs else None 
     if not devices == None: 
-        print(devices)
         model._model = DataParallel(model._model, device_ids=[i for i in devices]) 
 
     # dataset 
