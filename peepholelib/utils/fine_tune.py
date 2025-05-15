@@ -8,6 +8,7 @@ from time import time
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
+from torch.nn import DataParallel
 
 # our stuff
 from peepholelib.models.model_wrap import ModelWrap
@@ -21,13 +22,18 @@ def fine_tune(**kwargs):
 
     path = Path(kwargs['path'])
     name = kwargs['name']
-    model._model = torch.nn.DataParallel(model._model, device_ids=[1, 2, 3, 4, 5]) 
+
+    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
+    devices = kwargs['devices'] if 'devices' in kwargs else None 
+    if not devices == None: 
+        print(devices)
+        model._model = DataParallel(model._model, device_ids=[i for i in devices]) 
+
     # dataset 
     ds = kwargs['dataset']
     train_key = kwargs['train_key'] if 'train_key' in kwargs else 'train' 
     val_key = kwargs['val_key'] if 'val_key' in kwargs else 'val' 
     ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
-    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
     # training artifacts
     _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss
