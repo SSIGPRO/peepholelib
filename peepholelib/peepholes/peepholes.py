@@ -171,6 +171,36 @@ class Peepholes:
 
         return
     
+    def get_conceptograms(self, **kwargs):
+        '''
+        Get conceptograms from peepholes
+        '''
+        self.check_uncontexted()
+
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+
+        if self._phs == None:
+            raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
+        
+        self._conceptograms = {}
+        for ds_key in self._phs:
+            if verbose: print(f'\n ---- Getting conceptograms for {ds_key}\n')
+            file_path = self.path / (self.name + '.' + ds_key)
+    
+            #-----------------------------------------
+            # Check if peepholes exist before computing scores
+            #-----------------------------------------
+            n_samples = len(self._phs[ds_key])
+
+            for module in self.target_modules:
+                if module not in self._phs[ds_key]:
+                    raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
+                
+                if 'peepholes' not in self._phs[ds_key][module]:
+                    raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
+                
+            self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in self.target_modules],dim=1)
+
 
 
 
