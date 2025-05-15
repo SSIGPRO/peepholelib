@@ -158,7 +158,6 @@ def fine_tune(**kwargs):
                 acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
             val_losses[epoch] = (loss_acc/iter_val).detach().cpu()
             val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
-        print('time: ', time()-t0) 
         # step the scheduler
         if not scheduler == None: 
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -166,7 +165,7 @@ def fine_tune(**kwargs):
             else:
                 scheduler.step()
 
-        if verbose: print(f'epoch `{epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]}')
+        if verbose: print(f'epoch `{epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]} - train acc: {train_acc[epoch]} - val acc: {val_acc[epoch]} - time: {time()-t0}')
         
         # saving and plotting
         if (epoch+1)%save_every == 0:
