@@ -4,7 +4,7 @@ import torchvision
 from torch.nn.modules.utils import _reverse_repeat_tuple
 from torch.nn.functional import pad
     
-def svd_Linear(act_data, reduct_m, device):
+def svd_Linear(act_data, reduct_m, device, cv_shape):
 
     reduct_m = reduct_m.to(device)
     n_act = act_data.shape[0]
@@ -16,7 +16,7 @@ def svd_Linear(act_data, reduct_m, device):
 
     return cvs
 
-def svd_Linear_ViT(act_data, reduct_m, device):
+def svd_Linear_ViT(act_data, reduct_m, device, cv_shape):
 
     reduct_m = reduct_m.to(device)
     n_act = act_data.shape[0]
@@ -30,7 +30,7 @@ def svd_Linear_ViT(act_data, reduct_m, device):
 
     return cvs
 
-def svd_Conv2D(act_data, reduct_m, layer, device):
+def svd_Conv2D(act_data, reduct_m, layer, device, cv_shape):
     reduct_m = reduct_m.to(device)
     pad_mode = layer.padding_mode if layer.padding_mode != 'zeros' else 'constant'
     padding = _reverse_repeat_tuple(layer.padding, 2) 

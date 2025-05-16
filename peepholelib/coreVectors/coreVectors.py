@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 class CoreVectors():
     from .activations import get_activations
-    from .get_coreVectors import get_coreVectors
+    from .get_coreVectors import get_coreVectors, new_get_coreVectors
 
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])
@@ -62,7 +62,7 @@ class CoreVectors():
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
-            print('means: ', means['features.28'])
+            
             stds = self._corevds[wrt].std(dim=0)
 
         if target_layers != None:
