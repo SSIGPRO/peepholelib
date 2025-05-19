@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 class CoreVectors():
     from .activations import get_activations
-    from .get_coreVectors import get_coreVectors, new_get_coreVectors
+    from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])

@@ -49,6 +49,7 @@ def get_coreVectors(self, **kwargs):
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._actds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+            act_td = self._actds[ds_key]
 
             self._n_samples[ds_key] = len(self._actds[ds_key])
             
@@ -65,8 +66,11 @@ def get_coreVectors(self, **kwargs):
             #------------------------
             
             if verbose: print('Allocating images and labels')
-            _data = [datasets[ds_key][0]]
-            data = ds_parser(_data, key_list=key_list)
+            if ds_parser == from_dataset:
+                _data = [datasets[ds_key][0]]
+                data = ds_parser(_data, key_list=key_list)
+            else:
+                data = ds_parser(datasets[ds_key], key_list=key_list)
 
             for key in key_list:
                 _d = data[key][0]
@@ -98,14 +102,14 @@ def get_coreVectors(self, **kwargs):
             #------------------------------------------------
             act_td = self._actds[ds_key]
 
-            # to check if pred and results data exist 
-            has_pred = 'pred' in act_td 
+        # to check if pred and results data exist 
+        has_pred = 'pred' in act_td 
 
-            # allocate memory for pred and result
-            if not has_pred:
-                act_td['output'] = MMT.empty(shape=torch.Size((n_samples,num_classes)))
-                act_td['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-                act_td['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+        # allocate memory for pred and result
+        if not has_pred:
+            act_td['output'] = MMT.empty(shape=torch.Size((n_samples,num_classes)))
+            act_td['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
+            act_td['result'] = MMT.empty(shape=torch.Size((n_samples,)))
 
         #------------------------------------------------
         # pre-allocate corevectors
@@ -249,11 +253,12 @@ def get_coreVectors(self, **kwargs):
             cvs_td = self._corevds[ds_key]
             act_td = self._actds[ds_key]
 
-            has_pred = 'pred' in act_td 
-
             # ---------------------------------------
             # compute corevectors 
             # ---------------------------------------
+            if len(_modules_to_save) == 0:
+                print(f'No new core vectors for {ds_key}, skipping')
+                continue
 
             # create a temp dataloader to iterate over images
             cvs_dl = DataLoader(cvs_td, batch_size=bs, collate_fn = lambda x: x, shuffle=False, num_workers = n_threads) 
