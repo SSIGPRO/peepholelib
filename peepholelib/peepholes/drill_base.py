@@ -20,7 +20,8 @@ class DrillBase:
 
         # set in fit()
         self._cvs = None 
-
+        
+        # TODO: remove, defined in classifier_base
         # computer in compute_empirical_posteriors()
         self._empp = None
 
