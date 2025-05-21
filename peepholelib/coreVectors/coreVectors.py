@@ -8,20 +8,23 @@ from pathlib import Path
 from tqdm import tqdm
 
 class CoreVectors():
+    from .parse_ds import parse_ds 
     from .activations import get_activations
     from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])
-        self.name = Path(kwargs['name'])
+        self.name = kwargs['name']
         
         # create folder
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
+        # computed in parse_ds()
+        self._n_samples = {} 
+        self._dss = {}
 
         # computed in get_activations()
-        self._n_samples = {} 
         self._act_file_paths = {} 
         self._actds = {} 
 
