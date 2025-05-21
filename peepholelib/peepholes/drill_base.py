@@ -21,9 +21,6 @@ class DrillBase:
         # set in fit()
         self._cvs = None 
 
-        # computer in compute_empirical_posteriors()
-        self._empp = None
-
         # used in save() or load()
         self._suffix = f'.nl_model={self.nl_model}.n_features={self.n_features}'
         return

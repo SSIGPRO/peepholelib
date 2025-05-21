@@ -62,20 +62,20 @@ class ClassifierBase(DrillBase):
         - verbose (Bool): print some stuff
         '''
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        actds = kwargs['actds']
-        corevds = kwargs['corevds']
+        dss = kwargs['dataset']
+        cvs = kwargs['corevectors']
         bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
         # pre-allocate empirical posteriors
         _empp = torch.zeros(self.nl_class, self.nl_model)
         
         # create dataloaders
-        acts_dl = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x)
-        cvs_dl = DataLoader(corevds, batch_size=bs, collate_fn=lambda x: x)
+        dss_dl = DataLoader(dss, batch_size=bs, collate_fn=lambda x: x)
+        cvs_dl = DataLoader(cvs, batch_size=bs, collate_fn=lambda x: x)
 
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
-        for act, cvs in tqdm(zip(acts_dl, cvs_dl), disable=not verbose):
-            data, label = self.parser(act=act, cvs=cvs)
+        for _dss, _cvs in tqdm(zip(dss_dl, cvs_dl), disable=not verbose):
+            data, label = self.parser(cvs=_cvs, dss=_dss)
             data, label = data.to(self.device), label.to(self.device)
             preds = self._classifier.predict(data)
             

@@ -12,15 +12,15 @@ def trim_corevectors(**kwargs):
 
     """
     cvs = kwargs['cvs']
-    act = kwargs['act'] if 'act' in kwargs else None
+    dss = kwargs['dss'] if 'dss' in kwargs else None
     module = kwargs['module']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     cv_dim = kwargs['cv_dim']
 
-    if act == None:
+    if dss == None:
         return cvs[module][:,0:cv_dim]
     else:
-        return cvs[module][:,0:cv_dim], act[label_key]  
+        return cvs[module][:,0:cv_dim], dss[label_key]  
 
 def trim_channelwise_corevectors(**kwargs):
     """
