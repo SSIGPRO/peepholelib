@@ -34,8 +34,10 @@ def parse_ds(self, **kwargs):
     hooks = model.get_hooks()
     
     assert(isinstance(ds, DatasetBase))
-    
+
+    self._n_samples = {} 
     self._dss = {}
+    self._dss_file_paths = {}
     for ds_key in ds._dss:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/(self.name+'.dss.'+ds_key)

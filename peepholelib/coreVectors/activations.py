@@ -32,6 +32,7 @@ def get_activations(self, **kwargs):
         raise RuntimeError('No dataset parsed. Run `parse_ds()` first.')
     
     self._actds = {}
+    self._act_file_paths = {}
     for ds_key in self._dss:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/(self.name+'.activations.'+ds_key)

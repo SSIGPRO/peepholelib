@@ -21,16 +21,16 @@ class CoreVectors():
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
         # computed in parse_ds()
-        self._n_samples = {} 
-        self._dss_file_paths = {} 
+        self._n_samples = None 
+        self._dss_file_paths = None 
         self._dss = None 
 
         # computed in get_activations()
-        self._act_file_paths = {} 
+        self._act_file_paths = None
         self._actds = None
 
         # computed in get_coreVectors()
-        self._cvs_file_paths = {} 
+        self._cvs_file_paths = None 
         self._corevds = None 
 
         # set in normalize_corevectors() 
@@ -128,6 +128,11 @@ class CoreVectors():
         loaders = kwargs['loaders']
         norm_file = Path(kwargs['norm_file']) if 'norm_file' in kwargs else None 
 
+        self._n_samples = {}
+        self._cvs_file_paths = {}
+        self._dss_file_paths = {}
+        self._corevds = {}
+        self._dss = {}
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             

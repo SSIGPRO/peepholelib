@@ -36,6 +36,7 @@ def get_coreVectors(self, **kwargs):
         raise RuntimeError(f'Keys inconsistency between reduction_fns and target_modules \n reduction_fns keys: {reduction_fns.keys()} \n target_modules: {model._target_modules.keys()}')
     
     self._corevds = {}
+    self._cvs_file_paths = {}
     for ds_key in self._dss:
         #------------------------------------------------
         # pre-allocate corevectors
