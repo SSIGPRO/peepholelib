@@ -93,7 +93,7 @@ class Peepholes:
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
-                    phs[module]['peepholes'] = self._driller[module](cvs=cvs, acts=acts)
+                    phs[module]['peepholes'] = self._driller[module](cvs=cvs, acts=acts) 
 
         return 
 
