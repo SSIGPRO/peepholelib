@@ -57,10 +57,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
         # device for NN
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-        
         self._model = kwargs['model']
-        self._path = Path(kwargs['path'])
-        self._name = kwargs['name']
 
         # check and set model
         assert(issubclass(type(self._model), torch.nn.Module))
@@ -73,10 +70,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
         # set in set_target_modules()
         self._target_modules = None 
 
-        # computed in load_checkpoint()
-        self._checkpoint = None
-        self._state_dict = None
-        
         # computed in add_hooks()
         self._hooks = None
         self._si = None 
@@ -89,6 +82,47 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
     def __call__(self, x):
         return self._model(x)
+    
+    def update_output(self, **kwargs):
+        '''
+        Update the model output to one with size `to_n_classes`. This is done by substituting the model's output by, or appending a, new `torch.nn.Linear` layer accoding to `overwrite`.
+        The last layer is assumed to be `torch.nn.Linear` within a `torch.nn.Sequential` module.
+
+        Args:
+        - output_layer (str): The output layer of the model as per the state dict key
+        - to_n_classes (int): Number of output features of the new output layers 
+        - overwrite (bool): If True, the last layer will be substituted by a new (randomly initialize) layer with the same `in_features` and `out_features = to_n_classes`. If False a new `torch.nn.Linear(out_features, to_n_classes)` layer will be appended after the `output_layer` layer. 
+        
+        Returns:
+        - a thumbs up
+        '''
+
+        out_layer = kwargs['output_layer']
+        n_classes = kwargs['to_n_classes']
+        overwrite = kwargs['overwrite'] if  'overwrite' in kwargs else False
+        
+        keys = out_layer.split(".")[:-1]
+        temp = self._model
+        for p in keys:
+            #check that string part is actually a key in temp._modules
+            if p not in temp._modules.keys():
+                raise RuntimeError(f'seems like {p} is not in the NN, are you sure the output_layer is correct?') 
+            temp = temp._modules[p]
+
+        if not isinstance(temp, torch.nn.Sequential):
+            raise RuntimeError('Last module should be torch.nn.Sequential(). If you update the logic to handle any type of network, please submitt a PR.')
+
+        if not isinstance(temp[-1], torch.nn.Linear):
+            raise RuntimeError('Last layer is not a linear layer. I will not change it.')
+        
+        if overwrite:
+            in_size = temp[-1].in_features
+            temp[-1] = torch.nn.Linear(in_size, n_classes, device=self.device)
+        else:
+            out_size = temp[-1].out_features 
+            temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
+
+        return
 
     def load_checkpoint(self, **kwargs):
         '''
@@ -99,29 +133,20 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - a thumbs up
         '''
         # kwargs
-
+        _path = Path(kwargs['path'])
+        _name = kwargs['name']
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        file = self._path/self._name
+        file = _path/_name
         
         # take the checkpoint and the state_dict from the saved file
-        self._checkpoint = torch.load(file, map_location=self.device)
-        if 'state_dict' in self._checkpoint:
-            self._state_dict = self._checkpoint['state_dict']
+        _checkpoint = torch.load(file, map_location=self.device)
+        if 'state_dict' in _checkpoint:
+            _state_dict = _checkpoint['state_dict']
         else:
-            self._state_dict = self._checkpoint  # Assume the entire model's state dictionary is stored directly
+            _state_dict = _checkpoint  # Assume the entire model's state dictionary is stored directly
                     
-        # verbose - see what is saved in the checkpoint (except for the state_dict)
-        if verbose:
-            print('\n-----------------\ncheckpoint\n-----------------')
-            for k, v in self._checkpoint.items():
-                if k != 'state_dict':
-                    print(k, v)
-                else:
-                    print('state_dict keys: \n', v.keys(), '\n')
-            print('-----------------\n')
-        
         # assign model    
-        self._model.load_state_dict(self._state_dict) 
+        self._model.load_state_dict(_state_dict) 
         
         return
     
@@ -140,7 +165,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         keys = module_name.split(".")
 
         for p in keys:
-            #check that all the strings in parts are actually keys of the dict temp._modules
+            #check that string part is actually a key in temp._modules
             if p not in temp._modules.keys():
                 return None
             temp = temp._modules[p]

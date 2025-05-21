@@ -2,12 +2,14 @@ import torch
 from torch.utils.data import random_split
 from torch.utils.data import DataLoader
 from torch.utils.data import WeightedRandomSampler
+from peepholelib.datasets.dataset_base import DatasetBase 
 
-def random_subsampling(dss, perc):
-    out_dss = {}
-    for k in dss:
-        out_dss[k], _ = random_split(dss[k], [perc, 1.0-perc])
-    return out_dss
+def random_subsampling(ds, perc):
+    assert(isinstance(ds, DatasetBase))
+    
+    for k in ds._dss:
+        ds._dss[k], _ = random_split(ds._dss[k], [perc, 1.0-perc])
+    return 
 
 def dist_preserving(data, n, weights='label'):
     if torch.is_tensor(weights) and len(weights.shape) == 1:

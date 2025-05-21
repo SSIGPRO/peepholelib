@@ -10,15 +10,17 @@ from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
 # Our stuff
-from .parsers import from_dataset
-from .prediction_fns import multilabel_classification
+from peepholelib.models.model_wrap import ModelWrap
+from peepholelib.datasets.dataset_base import DatasetBase 
+from peepholelib.coreVectors.parsers import from_dataset
+from peepholelib.coreVectors.prediction_fns import multilabel_classification
     
 def get_activations(self, **kwargs):
     self.check_uncontexted()
     
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
-    datasets = kwargs['datasets']
+    ds = kwargs['datasets']
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
@@ -30,8 +32,11 @@ def get_activations(self, **kwargs):
     num_classes = self._model.num_classes
     device = self._model.device 
     hooks = model.get_hooks()
+    
+    assert(isinstance(model, ModelWrap))
+    assert(isinstance(ds, DatasetBase))
 
-    for ds_key in datasets:
+    for ds_key in ds._dss:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/('activations.'+ds_key)
         self._act_file_paths[ds_key] = file_path     
@@ -45,7 +50,7 @@ def get_activations(self, **kwargs):
             n_samples = self._n_samples[ds_key]
             if verbose: print('loaded n_samples: ', n_samples)
         else:
-            self._n_samples[ds_key] = len(datasets[ds_key])
+            self._n_samples[ds_key] = len(ds._dss[ds_key])
             n_samples = self._n_samples[ds_key] 
             if verbose: print('created persistent tensor dict with n_samples: ', n_samples)
             self._actds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
@@ -54,8 +59,8 @@ def get_activations(self, **kwargs):
             # Pre-allocation 
             #------------------------
             if verbose: print('Allocating images and labels')
-            _data = [datasets[ds_key][0]]
-            data = ds_parser(_data, key_list=key_list)
+            _data = [ds._dss[ds_key][0]]
+            data = ds_parser(_data)
 
             for key in key_list:
                 _d = data[key][0]
@@ -74,7 +79,7 @@ def get_activations(self, **kwargs):
             # copy images and labels
             #------------------------
             # create dataloader of input dataset and activations
-            dl_ds = DataLoader(dataset=datasets[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
+            dl_ds = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=False) 
             dl_act = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False, num_workers=n_threads)
 
             if verbose: print('Copying images and labels')
@@ -151,7 +156,7 @@ def get_activations(self, **kwargs):
             
             # do not save predictions and results if it is already there
             if not has_pred:
-                predicted_labels = pred_fn(y_predicted)
+                predicted_labels = pred_fn(y_predicted).detach().cpu()
                 act_data['output'] = y_predicted
                 act_data['pred'] = predicted_labels
                 act_data['result'] = predicted_labels == act_data['label']

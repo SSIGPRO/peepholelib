@@ -7,60 +7,64 @@
 # TODO – consider applying light augmentation to the val split (open issue).
 # ---------------------------------------------------------------------
 
-# peepholelib imports
-from .dataset_base import DatasetBase
-from .transforms import vgg16_imagenet, vgg16_imagenet_augmentations
-
+# general python stuff
 from pathlib import Path
-from typing import Dict
+
+# torch stuff
 import torch
 from torch.utils.data import DataLoader
-from torchvision import datasets
+from torchvision.datasets import ImageNet as IN1K
+
+# peepholelib imports
+from peepholelib.datasets.dataset_base import DatasetBase
+from peepholelib.datasets.transforms import vgg16_imagenet
 
 class ImageNet(DatasetBase):
     """
     ImageNet‑1K loader (train & val).
     Expects:
-        <data_path>/train/<class>/*.JPEG
-        <data_path>/val/<class>/*.JPEG
-    Returns from load_data():
-        {'train': DataLoader, 'val': DataLoader}
+        data_path (str): imagenet download folder
+    Returns:
+        - a thumbs up
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.dataset = "imagenet-1k"
         print(f"dataset: {self.dataset}")
+        return
 
-    def load_data(self, *, batch_size: int, seed: int,
-                  transform=None, augmentation_transform=None) -> Dict[str, DataLoader]:
+    def load_data(self, **kwargs):
+        '''
+        Load and prepare Imagenet data.
+        
+        Args:
+        - seed (int): Random seed for reproducibility.
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: ImageNet1k for vgg16 transform)
+        
+        Returns:
+        - a thumbs up
+        '''
 
-        transform = transform or vgg16_imagenet
-        augmentation_transform = (
-            augmentation_transform if augmentation_transform is not None else transform
-        )
+        transform = kwargs['transform'] if 'transform' in kwargs else vgg16_imagenet
 
-        root = Path(self.data_path).expanduser().resolve()
-        train_dir, val_dir = root / "train", root / "val"
-        if not train_dir.is_dir():
-            raise FileNotFoundError(f"Missing {train_dir}")
-
+        seed = kwargs['seed']
         torch.manual_seed(seed)
 
         # datasets
-        train_ds = datasets.ImageFolder(train_dir, transform=augmentation_transform)
-        val_ds   = datasets.ImageFolder(val_dir,   transform=transform)
-
-        # dataloaders
-        self._dls = {
-            "train": DataLoader(train_ds, batch_size=batch_size, shuffle=True,
-                                num_workers=8, pin_memory=True),
-            "val":   DataLoader(val_ds,   batch_size=batch_size, shuffle=False,
-                                num_workers=8, pin_memory=True),
-        }
+        train_ds = IN1K(
+                root = self.data_path,
+                split = 'train',
+                transform=transform
+                )
+        val_ds = IN1K(
+                root = self.data_path,
+                split = 'val',
+                transform=transform
+                )
 
         # metadata
         self._dss = {"train": train_ds, "val": val_ds}
         self._classes = {i: c for i, c in enumerate(train_ds.classes)}
 
-        return self._dls
+        return
