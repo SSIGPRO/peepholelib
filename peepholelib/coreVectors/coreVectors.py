@@ -22,15 +22,16 @@ class CoreVectors():
         self._model = kwargs['model'] if 'model' in kwargs else None  
         # computed in parse_ds()
         self._n_samples = {} 
-        self._dss = {}
+        self._dss_file_paths = {} 
+        self._dss = None 
 
         # computed in get_activations()
         self._act_file_paths = {} 
-        self._actds = {} 
+        self._actds = None
 
         # computed in get_coreVectors()
         self._cvs_file_paths = {} 
-        self._corevds = {} 
+        self._corevds = None 
 
         # set in normalize_corevectors() 
         self._norm_mean = None 
@@ -130,12 +131,12 @@ class CoreVectors():
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             
-            self._cvs_file_paths[ds_key] = self.path/(self.name.name+'.'+ds_key)
-            self._act_file_paths[ds_key] = self.path/('activations.'+ds_key)
+            self._cvs_file_paths[ds_key] = self.path/(self.name+'.'+ds_key)
+            self._dss_file_paths[ds_key] = self.path/(self.name+'.dss.'+ds_key)
 
-            if verbose: print(f'Loading files {self._cvs_file_paths[ds_key]} and {self._act_file_paths[ds_key]} from disk. ')
+            if verbose: print(f'Loading files {self._cvs_file_paths[ds_key]} and {self._dss_file_paths[ds_key]} from disk. ')
             self._corevds[ds_key] = PersistentTensorDict.from_h5(self._cvs_file_paths[ds_key], mode='r')
-            self._actds[ds_key] = PersistentTensorDict.from_h5(self._act_file_paths[ds_key], mode='r')
+            self._dss[ds_key] = PersistentTensorDict.from_h5(self._dss_file_paths[ds_key], mode='r')
 
             self._n_samples[ds_key] = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', self._n_samples[ds_key])
@@ -153,19 +154,26 @@ class CoreVectors():
     def __exit__(self, exc_type, exc_val, exc_tb):
         verbose = True 
 
-        if self._corevds == None:
-            if verbose: print('no corevds to close.')
+        if self._dss == None:
+            if verbose: print('no dss to close.')
         else:
-            for ds_key in self._corevds:
+            for ds_key in self._dss:
                 if verbose: print(f'closing {ds_key}')
-                self._corevds[ds_key].close()
-            
+                self._dss[ds_key].close()
+
         if self._actds == None:
             if verbose: print('no actds to close.')
         else:
             for ds_key in self._actds:
                 if verbose: print(f'closing {ds_key}')
                 self._actds[ds_key].close()
+
+        if self._corevds == None:
+            if verbose: print('no corevds to close.')
+        else:
+            for ds_key in self._corevds:
+                if verbose: print(f'closing {ds_key}')
+                self._corevds[ds_key].close()
 
         self._is_contexted = False 
         return

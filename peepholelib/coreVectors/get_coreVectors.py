@@ -35,6 +35,7 @@ def get_coreVectors(self, **kwargs):
     if reduction_fns.keys() != model._target_modules.keys(): 
         raise RuntimeError(f'Keys inconsistency between reduction_fns and target_modules \n reduction_fns keys: {reduction_fns.keys()} \n target_modules: {model._target_modules.keys()}')
     
+    self._corevds = {}
     for ds_key in self._dss:
         #------------------------------------------------
         # pre-allocate corevectors
@@ -65,7 +66,7 @@ def get_coreVectors(self, **kwargs):
             if not (mk in self._corevds[ds_key]):
                 if verbose: print('allocating core vectors for module: ', mk)
 
-                if not self._actds == {}:
+                if not self._actds == None:
                     # get cv shape from data
                     _a0 = activations_parser(self._actds[ds_key][0])[mk]
                     _act0 = _a0.reshape((1,)+_a0.shape)
@@ -100,7 +101,7 @@ def get_coreVectors(self, **kwargs):
         if verbose: print(f'\n ---- Getting corevectors for {ds_key}\n')
 
         cvs_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads) 
-        if not self._actds == {}:
+        if not self._actds == None:
             if verbose: print('Using saved activation')
 
             act_dl = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=activations_parser, shuffle=False, num_workers = n_threads)

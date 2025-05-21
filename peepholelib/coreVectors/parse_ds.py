@@ -34,10 +34,12 @@ def parse_ds(self, **kwargs):
     hooks = model.get_hooks()
     
     assert(isinstance(ds, DatasetBase))
-
+    
+    self._dss = {}
     for ds_key in ds._dss:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/(self.name+'.dss.'+ds_key)
+        self._dss_file_paths[ds_key] = file_path
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
