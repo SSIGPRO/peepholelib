@@ -103,7 +103,7 @@ class CoreVectors():
             _cvs_file_paths = self.path/(self.name+'.'+ds_key)
             _dss_file_paths = self.path/('dss.'+ds_key)
 
-            if verbose: print(f'Loading files {self._cvs_file_paths[ds_key]} and {self._dss_file_paths[ds_key]} from disk. ')
+            if verbose: print(f'Loading files {_cvs_file_paths} and {_dss_file_paths} from disk. ')
             self._corevds[ds_key] = PersistentTensorDict.from_h5(_cvs_file_paths, mode='r')
             self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode='r')
 
