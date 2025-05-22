@@ -4,11 +4,11 @@ def trim_corevectors(**kwargs):
 
     Args:
         cvs (PersistentTensorDict): TensorDict for corevectors inside `peepholelib.CoreVectors` class.
-        act (PersistentTensorDict): TensorDict for the activations inside `peepholelib.CoreVectors` class
+        dss (PersistentTensorDict): TensorDict for the dataset inside `peepholelib.CoreVectors` class
         module (str): target module key.
         label_key (str): key to get labels from
     Returns:
-        Trimmed activations and correspective labels 
+        Trimmed corevectors and correspective labels 
 
     """
     cvs = kwargs['cvs']
@@ -30,15 +30,15 @@ def trim_channelwise_corevectors(**kwargs):
 
     Args:
         cvs (PersistentTensorDict): TensorDict for corevectors inside `peepholelib.CoreVectors` class.
-        act (PersistentTensorDict): TensorDict for the activations inside `peepholelib.CoreVectors` class
+        dss (PersistentTensorDict): TensorDict for dataset inside `peepholelib.CoreVectors` class
         module (str): target module key.
         label_key (str): key to get labels from
     Returns:
-        Trimmed activations and correspective labels 
+        Trimmed corevectors and correspective labels 
 
     """
     cvs = kwargs['cvs']
-    act = kwargs['act'] if 'act' in kwargs else None
+    dss = kwargs['dss'] if 'dss' in kwargs else None
     module = kwargs['module']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     cv_dim = kwargs['cv_dim']
@@ -56,10 +56,10 @@ def trim_channelwise_corevectors(**kwargs):
         _tcv = _cv[:,cols,0:cv_dim] # timmed cv
         _trcv = _tcv.reshape(_ns, len(cols)*cv_dim) # trimmed and reshaped cv
 
-    if act == None:
+    if dss == None:
         return _trcv 
     else:
-        return _trcv, act[label_key]  
+        return _trcv, dss[label_key]  
 
 def get_images(**kwargs):
     """

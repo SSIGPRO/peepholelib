@@ -39,7 +39,7 @@ class Peepholes:
         
         Args:
         - verbose (bool): print progress messages
-        - corevectors (peepholelib.CoreVectors): corevectors object containing corevectors and activations
+        - corevectors (peepholelib.CoreVectors): corevectors object containing corevectors and datasets 
         - batchsize (int): batchsize to process corevectors into peepholes
         '''
         self.check_uncontexted()
@@ -52,7 +52,7 @@ class Peepholes:
         bs = kwargs['batch_size']
         n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
 
-        for (ds_key, cvds), ( _, actds) in zip(cvs._corevds.items(), cvs._actds.items()):
+        for (ds_key, cvds), ( _, dssds) in zip(cvs._corevds.items(), cvs._dss.items()):
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
             
@@ -76,7 +76,7 @@ class Peepholes:
                     #------------------------
                     if verbose: print('allocating peepholes for module: ', module)
                     self._phs[ds_key][module] = TensorDict(batch_size=n_samples)
-                    self._phs[ds_key][module]['peepholes'] = MMT.empty(shape=(n_samples, self._driller[module].nl_model))
+                    self._phs[ds_key][module]['peepholes'] = MMT.empty(shape=(n_samples, self._drillers[module].nl_model))
                     modules_to_compute.append(module)
                 else:
                     if verbose: print(f'Peepholes for {module} already present. Skipping.')
@@ -92,11 +92,11 @@ class Peepholes:
             # create dataloaders
             dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads)
             dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
-            dl_act = DataLoader(actds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+            dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
-            for cvs, acts, phs in tqdm(zip(dl_cvs, dl_act, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
+            for cvs, dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
-                    phs[module]['peepholes'] = self._driller[module](cvs=cvs, acts=acts)
+                    phs[module]['peepholes'] = self._drillers[module](cvs=cvs, dss=dss)
 
         return 
 
@@ -205,123 +205,7 @@ class Peepholes:
 
             self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in self.target_modules],dim=1)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def get_dataloaders(self, **kwargs):
-        self.check_uncontexted()
-
-        batch_dict = kwargs['batch_dict'] if 'batch_dict' in kwargs else {key: 64 for key in self._phs}
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-
-        if self._loaders:
-            if verbose: print('Loaders exist. Returning existing ones.')
-            return self._loaders
-
-        _loaders = {}
-        for key in self._phs:
-            if verbose: print('creating dataloader for: ', key)
-            _loaders[key] = DataLoader(
-                    dataset = self._phs[key],
-                    batch_size = batch_dict[key], 
-                    collate_fn = lambda x: x
-                    )
-
-        self._loaders = _loaders 
-        return self._loaders
+        return
 
     def __enter__(self):
         self._is_contexted = True
