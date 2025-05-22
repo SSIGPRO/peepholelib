@@ -18,7 +18,7 @@ class Peepholes:
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # Set in get_peepholes() 
-        self.target_modules = None kwargs['target_modules'] # list of peep modules
+        self.target_modules = kwargs['target_modules'] # list of peep modules
         self._drillers = None 
 
         # computed in get_peepholes

@@ -31,7 +31,6 @@ def parse_ds(self, **kwargs):
     model = self._model
     num_classes = self._model.num_classes
     device = self._model.device 
-    hooks = model.get_hooks()
     
     assert(isinstance(ds, DatasetBase))
 
