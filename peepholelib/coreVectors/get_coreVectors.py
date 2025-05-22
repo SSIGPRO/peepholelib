@@ -67,9 +67,9 @@ def get_coreVectors(self, **kwargs):
             if not (mk in self._corevds[ds_key]):
                 if verbose: print('allocating core vectors for module: ', mk)
 
-                if not self._actds == None:
+                if ('in_activations' in self._dss) or ('out_activations' in self._dss):
                     # get cv shape from data
-                    _a0 = activations_parser(self._actds[ds_key][0])[mk]
+                    _a0 = activations_parser(self._dss[ds_key][0])[mk]
                     _act0 = _a0.reshape((1,)+_a0.shape)
                 else:
                     # Dry run to get shape
@@ -102,7 +102,8 @@ def get_coreVectors(self, **kwargs):
         if verbose: print(f'\n ---- Getting corevectors for {ds_key}\n')
 
         cvs_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads) 
-        if not self._actds == None:
+
+        if ('in_activations' in self._dss) or ('out_activations' in self._dss):
             if verbose: print('Using saved activation')
 
             act_dl = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=activations_parser, shuffle=False, num_workers = n_threads)

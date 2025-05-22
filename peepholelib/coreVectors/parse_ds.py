@@ -35,25 +35,20 @@ def parse_ds(self, **kwargs):
     
     assert(isinstance(ds, DatasetBase))
 
-    self._n_samples = {} 
     self._dss = {}
-    self._dss_file_paths = {}
     for ds_key in ds._dss:
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
-        file_path = self.path/(self.name+'.dss.'+ds_key)
-        self._dss_file_paths[ds_key] = file_path
+        file_path = self.path/('dss.'+ds_key)
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
-            self._n_samples[ds_key] = len(self._dss[ds_key])
+            n_samples = len(self._dss[ds_key])
             
-            n_samples = self._n_samples[ds_key]
             if verbose: print('loaded n_samples: ', n_samples)
         else:
-            self._n_samples[ds_key] = len(ds._dss[ds_key])
-            n_samples = self._n_samples[ds_key] 
+            n_samples = len(ds._dss[ds_key])
             if verbose: print('created datasets dict with n_samples: ', n_samples)
             self._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             

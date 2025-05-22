@@ -13,13 +13,13 @@ from peepholelib.peepholes import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
-        self.target_modules = kwargs['target_modules'] # list of peep modules
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-        # (dict) one classifier per module
-        self._driller = kwargs['driller'] 
+        # Set in get_peepholes() 
+        self.target_modules = None kwargs['target_modules'] # list of peep modules
+        self._drillers = None 
 
         # computed in get_peepholes
         self._phs = {} 
@@ -43,6 +43,9 @@ class Peepholes:
         - batchsize (int): batchsize to process corevectors into peepholes
         '''
         self.check_uncontexted()
+
+        self._drillers = kwargs['drillers'] 
+        self.target_modules = kwargs['target_modules'] # list of peep modules
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         cvs = kwargs['corevectors'] 
