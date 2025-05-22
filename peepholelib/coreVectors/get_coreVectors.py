@@ -25,26 +25,32 @@ def get_coreVectors(self, **kwargs):
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
-    model = self._model 
-    device = self._model.device 
-    hooks = model.get_hooks()
-
     reduction_fns = kwargs['reduction_fns'] if 'reduction_fns' in kwargs else lambda x, y:x[y]
     activations_parser = kwargs['activations_parser'] if 'activations_parser' in kwargs else get_in_activations
 
+    # check for activations
+    has_acts = ('in_activations' in self._dss) or ('out_activations' in self._dss)
+    if not has_acts:
+        save_input = kwargs['save_input'] if 'save_input' in kwargs else True
+        save_output = kwargs['save_output'] if 'save_output' in kwargs else False 
+
+    model = self._model 
+    device = self._model.device 
+
     if reduction_fns.keys() != model._target_modules.keys(): 
         raise RuntimeError(f'Keys inconsistency between reduction_fns and target_modules \n reduction_fns keys: {reduction_fns.keys()} \n target_modules: {model._target_modules.keys()}')
-    
+
+    # set the model to get activations
+    if not has_acts:
+        model.set_activations(save_input=save_input, save_output=save_output)
+
     self._corevds = {}
-    self._cvs_file_paths = {}
     for ds_key in self._dss:
         #------------------------------------------------
         # pre-allocate corevectors
         #------------------------------------------------
-
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
         file_path = self.path/(self.name+'.'+ds_key)
-        self._cvs_file_paths[ds_key] = file_path
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
@@ -53,9 +59,9 @@ def get_coreVectors(self, **kwargs):
             if verbose: print('loaded n_samples: ', n_samples)
             self._corevds[ds_key].batch_size = torch.Size((n_samples,)) 
         else:
-            n_samples = self._n_samples[ds_key]
+            n_samples = len(self._dss[ds_key])
             self._corevds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-            if verbose: print('loader n_samples: ', n_samples) 
+            if verbose: print('created corevectors with n_samples: ', n_samples) 
 
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
         
@@ -66,20 +72,14 @@ def get_coreVectors(self, **kwargs):
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
                 if verbose: print('allocating core vectors for module: ', mk)
-
-                if ('in_activations' in self._dss) or ('out_activations' in self._dss):
+                if has_acts:
                     # get cv shape from data
-                    _a0 = activations_parser(self._dss[ds_key][0])[mk]
-                    _act0 = _a0.reshape((1,)+_a0.shape)
+                    _act0 = activations_parser(self._dss[ds_key][0:1])[mk]
                 else:
                     # Dry run to get shape
                     with torch.no_grad():
                         model(self._dss[ds_key][0:1]['image'].to(device))
-                        
-                    if model._si:
-                        _act0 = hooks[mk].in_activations[:] 
-                    elif model._so:
-                        _act0 = hooks[mk].out_activations[:] 
+                        _act0 = activations_parser(model._acts)[mk]
                     
                 cv_shape = reduction_fns[mk](act_data=_act0).shape[1:]
 
@@ -103,14 +103,14 @@ def get_coreVectors(self, **kwargs):
 
         cvs_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads) 
 
-        if ('in_activations' in self._dss) or ('out_activations' in self._dss):
-            if verbose: print('Using saved activation')
+        if has_acts:
+            if verbose: print('Using saved activations')
 
             act_dl = DataLoader(self._actds[ds_key], batch_size=bs, collate_fn=activations_parser, shuffle=False, num_workers = n_threads)
 
             for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
                 for mk in _modules_to_save:
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data)
+                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk])
             
         else:
             if verbose: print('Getting activations from model')
@@ -122,12 +122,11 @@ def get_coreVectors(self, **kwargs):
                     model(ds_data['image'].to(device))
                     
                 for mk in _modules_to_save:
-                    if model._si:
-                        act_data = hooks[mk].in_activations[:] 
-                    elif model._so:
-                        act_data = hooks[mk].out_activations[:] 
+                    act_data = activations_parser(model._acts)
+                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk])
 
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data)
+    # reset the model to NOT get activations
+    model.set_activations(save_input=False, save_output=False)
 
     return
               

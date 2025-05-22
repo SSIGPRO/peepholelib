@@ -58,9 +58,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._model = self._model.to(self.device)
         self._model.eval()
 
-        # set in set_model()
-        self.num_classes = None
-
         # set in set_target_modules()
         self._target_modules = None 
         self._hooks = None
@@ -121,10 +118,9 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         # get activations in a dict (similar to corevectors structure)
         if self._si or self._so:
-            self._acts = {
-                    'in_activations': {},
-                    'out_activations': {},
-                    }
+            self._acts = {}
+            if self._si: self._acts['in_activations'] = {}
+            if self._so: self._acts['out_activations'] = {}
 
             for mk in self._target_modules:
                 if self._si:
@@ -245,8 +241,3 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         return
 
-    def get_target_modules(self):
-        if not self._target_modules:
-            raise RuntimeError('No target_modules available. Please run set_target_modules() first.')
-
-        return self._target_modules

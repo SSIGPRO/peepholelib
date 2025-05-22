@@ -1,6 +1,5 @@
 # General python stuff
 from tqdm import tqdm
-from functools import partial
 from math import ceil
 
 # torch stuff
@@ -29,7 +28,6 @@ def parse_ds(self, **kwargs):
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
 
     model = self._model
-    num_classes = self._model.num_classes
     device = self._model.device 
     
     assert(isinstance(ds, DatasetBase))
@@ -54,10 +52,13 @@ def parse_ds(self, **kwargs):
             #------------------------
             # Pre-allocation 
             #------------------------
-            # dry parser run to get shapes
             if verbose: print(f'Allocating {key_list}')
-            _data = [ds._dss[ds_key][0]]
-            data = ds_parser(_data)
+
+            # dry run to get shapes
+            data = ds_parser([ds._dss[ds_key][0]])
+            with torch.no_grad():
+                _res = model(data['image'].to(device))
+                num_classes = _res.shape[1]
 
             for key in key_list:
                 _d = data[key][0]
@@ -69,7 +70,7 @@ def parse_ds(self, **kwargs):
              
             if verbose: print(f'Allocating output, pred, result')
             # allocate memory for pred and result
-            self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,num_classes)))
+            self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
             self._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
             self._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
 
@@ -82,7 +83,7 @@ def parse_ds(self, **kwargs):
             # copy images and labels
             #------------------------
             # create dataloader of input dataset and activations
-            dl_ori = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=False) 
+            dl_ori = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=ds_parser, shuffle=False) 
             dl_dst = DataLoader(self._dss[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False, num_workers=n_threads)
 
             if verbose: print('Parsing dataset')
