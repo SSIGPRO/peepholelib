@@ -13,6 +13,7 @@ from peepholelib.peepholes import drill_base as driller
 
 class Peepholes:
     def __init__(self, **kwargs):
+        # TODO: target modules and drillers should be in get_peepholes
         self.target_modules = kwargs['target_modules'] # list of peep modules
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
