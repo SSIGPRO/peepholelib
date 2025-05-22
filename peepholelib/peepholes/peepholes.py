@@ -93,6 +93,11 @@ class Peepholes:
             dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads)
             dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+
+            if len(modules_to_compute) == 0:
+                if verbose: print('No modules to compute for {ds_key}. Skipping.')
+                continue
+
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for cvs, dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
