@@ -14,7 +14,7 @@ def get_conceptogram(**kwargs):
     Args:
         portion (str): portion of dataset, usually train, test, or eval
         sample (int): Index of the sample to visualize.
-        ppepholes (Peepholes): Peepholes (already initialized).
+        peepholes (Peepholes): Peepholes (already initialized).
         ds (Dataset): Dataset
         corevecs (CoreVectors): Core vectors 
         ph_config_names (list): List of peephole configuration names.
@@ -30,8 +30,13 @@ def get_conceptogram(**kwargs):
     samples = kwargs['samples']
     target_layers = kwargs['target_layers']
     classes = kwargs['classes'] 
+    ticks = kwargs['ticks']
+    krows = kwargs['krows'] if 'krows' in kwargs else 3
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else partial(softmax, dim=0)
+
+    if len(target_layers) != len(ticks):
+        raise ValueError('Number of target layers and ticks should be equal')
 
     # getting data from corevectors
     _acts = cvs._actds[portion][samples] 
@@ -49,33 +54,44 @@ def get_conceptogram(**kwargs):
         output = pred_fn(_act['output'])
         conf = output.max() 
 
-        fig = plt.figure(figsize=(10,13))
-        gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2], wspace=0, hspace=0.1, figure=fig)
-        gss = gs[1].subgridspec(1, len(target_layers)+1)
-        gs.tight_layout(fig, pad=0.1)
+        _, idx_topk = torch.topk(_c.sum(dim=0), krows,sorted=False)
+        classes_topk = [classes[i] for i in idx_topk.tolist()]
+        tick_positions = idx_topk.cpu().tolist()
+        print(tick_positions)
+
+        tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
+        print(tick_labels)
+
+        fig = plt.figure(figsize=(5,20))
+        gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
+        gss = gs[1].subgridspec(1, 2)
+        gs.tight_layout(fig, pad=1)
         axs = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gss[0,:-1]), fig.add_subplot(gss[0,-1])]
 
         # Plot the image
         axs[0].imshow(_act['image'].permute(1,2,0))
         axs[0].axis('off')
-        axs[0].set_title(f'True label: {classes[label]} - Pred label: {classes[pred]} - Confidence: {conf*100:.2f}%')
+        axs[0].set_title(f'True label: {classes[label]}', fontweight='bold')
 
         # Plot the conceptogram
-        axs[1].imshow(1-_c.T, cmap='YlGnBu', aspect='auto', vmin=0.0, vmax=1.0)
-        axs[1].set_xticks(ticks=torch.arange(len(target_layers)), labels = target_layers, rotation=90)
-        axs[1].tick_params(axis='y', which='both', top=False, bottom=False, left=False, right=False, labelleft=False, labelright=False)
+        axs[1].imshow(_c.T, aspect=1.2, vmin=0.0, vmax=1.0)
+        axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
+        axs[1].set_yticks(tick_positions, tick_labels)
+        axs[1].yaxis.tick_right()
         axs[1].set_xlabel('Layers')
 
         # Plot the bar with nn's sofmaxed output
-        axs[2].imshow(1-output.reshape(-1,1), cmap='YlGnBu', vmin=0.0, vmax=1.0)
+        axs[2].imshow(output.reshape(-1,1), vmin=0.0, vmax=1.0)
+        #axs[2].set_title(f'Pred label: {classes[pred]}')
         axs[2].set_xticks([])
-        axs[2].set_yticks(torch.arange(len(classes)), [f'{classes[l]}' for l in classes.keys()])
+        axs[2].set_yticks([pred])
+        axs[2].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold')
         axs[2].yaxis.set_label_position("right")
         axs[2].yaxis.tick_right()
         axs[2].set_xlabel('Output')
         
         # save conceptogram
-        plt.savefig(path/f'{name}.{sample}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(path/f'{name}.{portion}.{sample}.png', dpi=300, bbox_inches='tight')
         plt.close()
         print(f"Conceptogram saved to {path}")
     return
