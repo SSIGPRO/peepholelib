@@ -20,9 +20,6 @@ class DeepMahalanobisDistance(DrillBase):
         self.magnitude = kwargs['magnitude']
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
 
-        # used in __call__()
-        self.hooks = self.model.get_hooks()
-
         # computed in fit()
         self._means = {} 
         self._precision = {}
@@ -34,6 +31,10 @@ class DeepMahalanobisDistance(DrillBase):
         self.dmd_folder = self.path/(self.name+self._suffix)
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt' 
+
+        # set model to save output activations
+        # TODO: a bit ugly to leave this setted, should set both to False after finishing the peepholes computation
+        self.model.set_activations(save_input=False, save_output=True)
         return
     
     def load(self, **kwargs):
@@ -57,13 +58,13 @@ class DeepMahalanobisDistance(DrillBase):
         """
 
         cvs = kwargs['corevectors']
-        acts = kwargs['activations']
+        dss = kwargs['dataset']
         label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label'
         
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
-        labels = acts[label_key].int()
+        labels = dss[label_key].int()
         self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
         for i in range(self.nl_model):
@@ -80,7 +81,6 @@ class DeepMahalanobisDistance(DrillBase):
         Compute the proposed Mahalanobis confidence score on input dataset
         return: Mahalanobis score from layer_index It computes the score for a single layer at the time
 
-
         sample_mean is a DICT of a number of elemnts that is equal to the number of layers present in target layers. Each element is a tensor 
         of dim (n_classes, dim of the coreavg) in layer features.28 it will be(100,512)
         precision is a DICT of precision matrices one for each layer
@@ -89,10 +89,10 @@ class DeepMahalanobisDistance(DrillBase):
         magnitude = self.magnitude
         std = self.std_transform
         
-        acts = kwargs['acts']
+        dss = kwargs['dss']
 
         # get input image and set gradient to modify it
-        data = self.parser(act = acts)
+        data = self.parser(dss = dss)
         data = data.to(self.device)
         data.requires_grad_(True)
         n_samples = data.shape[0]
@@ -107,7 +107,7 @@ class DeepMahalanobisDistance(DrillBase):
         if self._layer == 'output':
             output = self.model(data.to(self.device))
         else:
-            output = self.hooks[self._layer].out_activations[:]
+            output = self.model._acts['out_activations'][self._layer]
             output = output.view(output.size(0), output.size(1), -1)
             output = torch.mean(output, 2)
         
@@ -143,7 +143,7 @@ class DeepMahalanobisDistance(DrillBase):
         if self._layer == 'output':
             output = self.model(tempInputs.to(self.device)) 
         else:
-            output = self.hooks[self._layer].out_activations[:]
+            output = self.model._acts['out_activations'][self._layer]
             output = output.view(output.size(0), output.size(1), -1)
             output = torch.mean(output, 2)
 

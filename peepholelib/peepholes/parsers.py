@@ -71,5 +71,5 @@ def get_images(**kwargs):
     Returns:
         image (torch.Tensor): images saved in the activations.  
     """
-    img = kwargs['act']['image']
+    img = kwargs['dss']['image']
     return img 
