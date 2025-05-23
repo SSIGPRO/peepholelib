@@ -112,9 +112,10 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
 
 
 def get_svds(self, **kwargs):
-    target_modules = kwargs['target_modules'] 
     path = Path(kwargs['path'])
     name = kwargs['name']
+    target_modules = kwargs['target_modules'] 
+    sample_in = kwargs['sample_in']
     q = kwargs['rank'] if 'rank' in kwargs else 300
     channel_wise = kwargs['channel_wise'] if 'channel_wise' in kwargs else True
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
@@ -142,9 +143,15 @@ def get_svds(self, **kwargs):
         weight = module.weight 
         bias = module.bias 
 
-        if verbose: print('module: ', module)
         if isinstance(module, torch.nn.Conv2d):
-            in_shape = self._hooks[mk].in_shape
+            # dry run to get shape
+            self.set_activations(save_input=True, save_output=False)
+            with torch.no_grad():
+                _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
+                self(_in)
+                in_shape = self._acts['in_activations'][mk].shape[1:]
+            self.set_activations(save_input=False, save_output=False)
+
             W_ = c2s(in_shape, module, channel_wise=channel_wise, device=self.device) 
 
             # same as `if channel_wise:`
