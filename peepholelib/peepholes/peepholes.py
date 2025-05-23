@@ -191,7 +191,7 @@ class Peepholes:
         if self._phs == None:
             raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
 
-        self._conceptograms = {}
+        _conceptograms = {}
         for ds_key in self._phs:
             if verbose: print(f'\n ---- Getting conceptograms for {ds_key}\n')
             file_path = self.path / (self.name + '.' + ds_key)
@@ -208,9 +208,9 @@ class Peepholes:
                 if 'peepholes' not in self._phs[ds_key][module]:
                     raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
 
-            self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in self.target_modules],dim=1)
+            _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in self.target_modules],dim=1)
 
-        return
+        return _conceptograms
 
     def __enter__(self):
         self._is_contexted = True

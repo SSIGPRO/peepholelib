@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
+# TODO: give a better name
 def evaluate_dists(**kwargs):
     phs = kwargs['peepholes']
     dss = kwargs['dataset']
@@ -64,6 +65,7 @@ def evaluate_dists(**kwargs):
 
     return m_ok, s_ok, m_ko, s_ko
 
+# TODO: give a better name
 def evaluate(**kwargs): 
     phs = kwargs['peepholes']
     cvs = kwargs['corevectors']
@@ -108,3 +110,12 @@ def evaluate(**kwargs):
         plt.close()
 
     return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
+
+def conceptogram_entropy(**kwargs):
+    phs = kwargs['peepholes']
+    cvs = kwargs['corevectors']
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+
+    # compute conceptogram entropy
+    cps = phs.get_conceptograms(verbose)['test'] 
+
