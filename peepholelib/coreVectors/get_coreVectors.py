@@ -28,8 +28,11 @@ def get_coreVectors(self, **kwargs):
     reduction_fns = kwargs['reduction_fns'] if 'reduction_fns' in kwargs else lambda x, y:x[y]
     activations_parser = kwargs['activations_parser'] if 'activations_parser' in kwargs else get_in_activations
 
-    # check for activations
-    has_acts = ('in_activations' in self._dss) or ('out_activations' in self._dss)
+    # check for activations in all cv._dss
+    has_acts = True
+    for _ds in self._dss.values():
+        has_acts = has_acts and ('in_activations' in _ds) or ('out_activations' in _ds)
+
     if not has_acts:
         save_input = kwargs['save_input'] if 'save_input' in kwargs else True
         save_output = kwargs['save_output'] if 'save_output' in kwargs else False 
@@ -80,7 +83,6 @@ def get_coreVectors(self, **kwargs):
                     with torch.no_grad():
                         model(self._dss[ds_key][0:1]['image'].to(device))
                         _act0 = activations_parser(model._acts)[mk]
-                    
                 cv_shape = reduction_fns[mk](act_data=_act0).shape[1:]
 
                 self._corevds[ds_key][mk] = MMT.empty(shape=((n_samples,)+cv_shape))

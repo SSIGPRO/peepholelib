@@ -39,7 +39,7 @@ def get_conceptogram(**kwargs):
         raise ValueError('Number of target layers and ticks should be equal')
 
     # getting data from corevectors
-    _acts = cvs._actds[portion][samples] 
+    _dss = cvs._dss[portion][samples] 
     _phs = phs._phs[portion][samples]
     
     conceptos = []
@@ -48,10 +48,10 @@ def get_conceptogram(**kwargs):
         conceptos.append(_c)
 
     path.mkdir(parents=True, exist_ok=True)
-    for _act, _c, sample in zip(_acts, conceptos, samples):
-        label = int(_act[label_key])
-        pred = int(_act['pred'])
-        output = pred_fn(_act['output'])
+    for _d, _c, sample in zip(_dss, conceptos, samples):
+        label = int(_d[label_key])
+        pred = int(_d['pred'])
+        output = pred_fn(_d['output'])
         conf = output.max() 
 
         _, idx_topk = torch.topk(_c.sum(dim=0), krows,sorted=False)
@@ -69,7 +69,7 @@ def get_conceptogram(**kwargs):
         axs = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gss[0,:-1]), fig.add_subplot(gss[0,-1])]
 
         # Plot the image
-        axs[0].imshow(_act['image'].permute(1,2,0))
+        axs[0].imshow(_d['image'].permute(1,2,0))
         axs[0].axis('off')
         axs[0].set_title(f'True label: {classes[label]}', fontweight='bold')
 
