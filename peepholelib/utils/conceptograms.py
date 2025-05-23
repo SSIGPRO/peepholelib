@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec 
 from functools import partial
 
-def get_conceptogram(**kwargs):
+def plot_conceptogram(**kwargs):
     """
     Generate a detailed conceptogram (with network output) for a specific sample.
 
@@ -29,11 +29,16 @@ def get_conceptogram(**kwargs):
     portion = kwargs['portion']
     samples = kwargs['samples']
     target_layers = kwargs['target_layers']
-    classes = kwargs['classes'] 
-    ticks = kwargs['ticks']
-    krows = kwargs['krows'] if 'krows' in kwargs else 3
-    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else partial(softmax, dim=0)
+    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label'
+
+    # plot text related
+    classes = kwargs['classes'] 
+    alt_score = kwargs['alt_score'] if 'alt_score' in kwargs else None 
+    alt_score_name = kwargs['alt_score_name'] if 'alt_score_name' in kwargs else 'alt_score' 
+    ticks = kwargs['ticks'] if 'ticks' in kwargs else target_layers
+    krows = kwargs['krows'] if 'krows' in kwargs else 3
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
 
     if len(target_layers) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
@@ -46,6 +51,9 @@ def get_conceptogram(**kwargs):
     for _ph in _phs:
         _c = torch.stack([_ph[layer]['peepholes'] for layer in target_layers])
         conceptos.append(_c)
+    
+    #parse alt_scores into a dict for easy access
+    _alt_score = alt_score if alt_score == None else {_sample:_score for _sample, _score in zip(samples, alt_score)}
 
     path.mkdir(parents=True, exist_ok=True)
     for _d, _c, sample in zip(_dss, conceptos, samples):
@@ -57,10 +65,8 @@ def get_conceptogram(**kwargs):
         _, idx_topk = torch.topk(_c.sum(dim=0), krows,sorted=False)
         classes_topk = [classes[i] for i in idx_topk.tolist()]
         tick_positions = idx_topk.cpu().tolist()
-        print(tick_positions)
 
         tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
-        print(tick_labels)
 
         fig = plt.figure(figsize=(5,20))
         gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
@@ -71,7 +77,11 @@ def get_conceptogram(**kwargs):
         # Plot the image
         axs[0].imshow(_d['image'].permute(1,2,0))
         axs[0].axis('off')
-        axs[0].set_title(f'True label: {classes[label]}', fontweight='bold')
+        
+        if alt_score == None:
+            axs[0].set_title(f'True label: {classes[label]}', fontweight='bold')
+        else:
+            axs[0].set_title(f'True label: {classes[label]} - {alt_score_name}: {_alt_score[sample]:.2f}', fontweight='bold')
 
         # Plot the conceptogram
         axs[1].imshow(_c.T, aspect=1.2, vmin=0.0, vmax=1.0)
@@ -93,6 +103,6 @@ def get_conceptogram(**kwargs):
         # save conceptogram
         plt.savefig(path/f'{name}.{portion}.{sample}.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print(f"Conceptogram saved to {path}")
+        if verbose: print(f"Conceptogram saved to {path}")
     return
 
