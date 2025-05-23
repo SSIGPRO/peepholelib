@@ -13,42 +13,36 @@ class Hook:
         self._si = save_input
         self._so = save_output
         
-        self.in_shape = None
-        self.out_shape = None
-
-        self.in_activations = None 
-        self.out_activations = None 
+        self.i_act = None 
+        self.o_act = None 
         return
     
     def register(self, module):
         # check is already registered to a module 
         if self.module or self.handle:
-            self.handle.remove()
-            self.handle = None
-            self.module = None
+            self.unregister()        
         
         self.module = module 
         self.handle = module.register_forward_hook(self)
         return self.handle
     
-    def set_shapes(self):
-        if self._si:
-            self.in_shape = self.in_activations.shape[1:]
-        if self._so:
-            self.out_shape = self.out_activations.shape[1:]
-
+    def unregister(self):
+        if self.handle:
+            self.handle.remove()
+        self.handle = None
+        self.module = None
         return
 
     def __call__(self, module, module_in, module_out):
         if self._si: 
-            self.in_activations = module_in[0]
+            self.i_act = module_in[0]
         if self._so: 
-            self.out_activations = module_out
+            self.o_act = module_out
 
         return
 
     def __str__(self):
-        return f"\nInputs shape: {self.in_activations.shape}\nOutputs shape: {self.out_activations.shape}\n"
+        return f"\nInputs shape: {self.i_act.shape}\nOutputs shape: {self.o_act.shape}\n"
 
 class ModelWrap(metaclass=abc.ABCMeta):
 
@@ -64,24 +58,78 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._model = self._model.to(self.device)
         self._model.eval()
 
-        # set in set_model()
-        self.num_classes = None
-
         # set in set_target_modules()
         self._target_modules = None 
-
-        # computed in add_hooks()
         self._hooks = None
-        self._si = None 
-        self._so = None 
         
         # computed in get_svds()
         self._svds = None
 
+        # set on __call__()
+        self._acts = None
+
+        # set on set_activation()
+        self._si = False 
+        self._so = False 
+
+        return
+    
+    def set_activations(self, **kwargs):
+        '''
+        Set the model to save activations upon __call__()
+
+        Args:
+        - save_input (bool): True to save IN activations, False ignores activations
+        - save_output (bool): True to save OUT activations, False ignores activations
+        - verbose (bool): print progress messages
+        '''
+        # Hooks params
+        self._si = kwargs['save_input'] if 'save_input' in kwargs else False 
+        self._so = kwargs['save_output'] if 'save_output' in kwargs else False 
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+
+        if (not self._si) and (not self._so):
+            if self._hooks: 
+                if verbose: print('Not saving activations. Removing Hooks')
+
+                for key in self._hooks:
+                    self._hooks[key].unregister()
+
+                self._hooks = None
+                self._acts = None
+            return
+        else:
+            _hooks = {}
+            for key in self._target_modules:
+                if verbose: print('Adding hook to module: ', key)
+                                                                       
+                module = self._target_modules[key]
+                hook = Hook(save_input=self._si, save_output=self._so)
+                handle = hook.register(module)
+                                                                       
+                _hooks[key] = hook
+            
+            self._hooks = _hooks
+
         return
 
     def __call__(self, x):
-        return self._model(x)
+        res = self._model(x)
+
+        # get activations in a dict (similar to corevectors structure)
+        if self._si or self._so:
+            self._acts = {}
+            if self._si: self._acts['in_activations'] = {}
+            if self._so: self._acts['out_activations'] = {}
+
+            for mk in self._target_modules:
+                if self._si:
+                    self._acts['in_activations'][mk] = self._hooks[mk].i_act
+                
+                if self._so:
+                    self._acts['out_activations'][mk] = self._hooks[mk].o_act 
+
+        return res 
     
     def update_output(self, **kwargs):
         '''
@@ -127,6 +175,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
     def load_checkpoint(self, **kwargs):
         '''
         Args:
+        - name (str): name of file
+        - path (pathlib.Path|str): folder path for file
         - verbose (bool): If True, print checkpoint information.
         
         Returns:
@@ -180,8 +230,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - target_modules (list): list of keys from the state dict
         '''
         key_list = kwargs['target_modules']
+        
         _dict = {}
-
         for _str in key_list:
             _m = self.get_module(key=_str)
             if _m != None:
@@ -191,54 +241,3 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         return
 
-    def dry_run(self, **kwargs):
-        '''
-        A dry run is used to collect information from the module, such as activation's sizes
-
-        Args:
-        - x (tensor) - one input for the model set with set_model().
-        '''
-        _img = kwargs['x'].to(self.device)
-        output = self._model(_img)
-        self.num_classes = output.shape[1]
-        
-        if not self._hooks:
-            raise RuntimeError('No hooks available. Please run set_hooks() first.')
-
-        for hk in self._hooks:
-            self._hooks[hk].set_shapes()
-
-        return
-
-    def get_target_modules(self):
-        if not self._target_modules:
-            raise RuntimeError('No target_modules available. Please run set_target_modules() first.')
-
-        return self._target_modules
-
-    def add_hooks(self, **kwargs):
-        self._si = kwargs['save_input'] if 'save_input' in kwargs else True 
-        self._so = kwargs['save_output'] if 'save_output' in kwargs else False 
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        
-        if not self._target_modules:
-            raise RuntimeError('No target_modules available. Please run set_target_modules() first.')
-
-        _hooks = {}
-        for key in self._target_modules:
-            if verbose: print('Adding hook to module: ', key)
-
-            module = self._target_modules[key]
-            hook = Hook(save_input=self._si, save_output=self._so)
-            handle = hook.register(module)
-
-            _hooks[key] = hook
-        
-        self._hooks = _hooks
-        return 
-
-    def get_hooks(self):
-        if not self._hooks:
-            raise RuntimeError('No hooks available. Please run add_hooks() first.')
-        return self._hooks
-    

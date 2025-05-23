@@ -8,26 +8,23 @@ from pathlib import Path
 from tqdm import tqdm
 
 class CoreVectors():
+    from .parse_ds import parse_ds 
     from .activations import get_activations
     from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
         self.path = Path(kwargs['path'])
-        self.name = Path(kwargs['name'])
+        self.name = kwargs['name']
         
         # create folder
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
-
-        # computed in get_activations()
-        self._n_samples = {} 
-        self._act_file_paths = {} 
-        self._actds = {} 
+        # computed in parse_ds() and get_activations()
+        self._dss = None 
 
         # computed in get_coreVectors()
-        self._cvs_file_paths = {} 
-        self._corevds = {} 
+        self._corevds = None 
 
         # set in normalize_corevectors() 
         self._norm_mean = None 
@@ -52,6 +49,9 @@ class CoreVectors():
         wrt = kwargs['wrt'] if 'wrt' in kwargs else None
         to_file = Path(kwargs['to_file']) if 'to_file' in kwargs  else None
         target_layers = kwargs['target_layers'] if 'target_layers' in kwargs else None
+        
+        if self._corevds == None:
+            raise RuntimeError('No corevectors to normalize. Run get_corevectors() first.')
 
         if wrt == None and from_file == None:
             raise RuntimeError(f'Specify `wrt` or `from_file`.')
@@ -62,7 +62,7 @@ class CoreVectors():
         else: # wrt will not be None
             if verbose: print(f'Computing normalization from {wrt}')
             means = self._corevds[wrt].mean(dim=0)
-            print('means: ', means['features.28'])
+            
             stds = self._corevds[wrt].std(dim=0)
 
         if target_layers != None:
@@ -88,35 +88,6 @@ class CoreVectors():
 
         return
 
-    def get_dataloaders(self, **kwargs):
-        self.check_uncontexted()
-        
-        _bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
-        if isinstance(_bs, int):
-            batch_dict = {key: _bs for key in self._corevds}
-        elif isinstance(_bs, dict):
-            batch_dict = _bs
-        else:
-            raise RuntimeError('Batch size should be a dict or an integer')
-
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        if self._loaders:
-            if verbose: print('Loaders exist. Returning existing ones.')
-            return self._loaders
-
-        # Create dataloader for each corevecs TensorDicts 
-        _loaders = {}
-        for ds_key in self._corevds:
-            if verbose: print('creating dataloader for: ', ds_key)
-            _loaders[ds_key] = DataLoader(
-                    dataset = self._corevds[ds_key],
-                    batch_size = batch_dict[ds_key], 
-                    collate_fn = lambda x: x
-                    )
-
-        self._loaders = _loaders 
-        return self._loaders
-    
     def load_only(self, **kwargs):
         self.check_uncontexted()
 
@@ -124,18 +95,20 @@ class CoreVectors():
         loaders = kwargs['loaders']
         norm_file = Path(kwargs['norm_file']) if 'norm_file' in kwargs else None 
 
+        self._corevds = {}
+        self._dss = {}
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             
-            self._cvs_file_paths[ds_key] = self.path/(self.name.name+'.'+ds_key)
-            self._act_file_paths[ds_key] = self.path/('activations.'+ds_key)
+            _cvs_file_paths = self.path/(self.name+'.'+ds_key)
+            _dss_file_paths = self.path/('dss.'+ds_key)
 
-            if verbose: print(f'Loading files {self._cvs_file_paths[ds_key]} and {self._act_file_paths[ds_key]} from disk. ')
-            self._corevds[ds_key] = PersistentTensorDict.from_h5(self._cvs_file_paths[ds_key], mode='r')
-            self._actds[ds_key] = PersistentTensorDict.from_h5(self._act_file_paths[ds_key], mode='r')
+            if verbose: print(f'Loading files {_cvs_file_paths} and {_dss_file_paths} from disk. ')
+            self._corevds[ds_key] = PersistentTensorDict.from_h5(_cvs_file_paths, mode='r')
+            self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode='r')
 
-            self._n_samples[ds_key] = len(self._corevds[ds_key])
-            if verbose: print('loaded n_samples: ', self._n_samples[ds_key])
+            _n_samples = len(self._corevds[ds_key])
+            if verbose: print('loaded n_samples: ', _n_samples)
        
         if norm_file != None:
             if verbose: print('Loading normalization info.')
@@ -150,19 +123,19 @@ class CoreVectors():
     def __exit__(self, exc_type, exc_val, exc_tb):
         verbose = True 
 
+        if self._dss == None:
+            if verbose: print('no dss to close.')
+        else:
+            for ds_key in self._dss:
+                if verbose: print(f'closing {ds_key}')
+                self._dss[ds_key].close()
+
         if self._corevds == None:
             if verbose: print('no corevds to close.')
         else:
             for ds_key in self._corevds:
                 if verbose: print(f'closing {ds_key}')
                 self._corevds[ds_key].close()
-            
-        if self._actds == None:
-            if verbose: print('no actds to close.')
-        else:
-            for ds_key in self._actds:
-                if verbose: print(f'closing {ds_key}')
-                self._actds[ds_key].close()
 
         self._is_contexted = False 
         return

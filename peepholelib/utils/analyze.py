@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 
 def evaluate_dists(**kwargs):
     phs = kwargs['peepholes']
-    acts = kwargs['activations']
+    dss = kwargs['dataset']
 
     score_type = kwargs['score_type']
     bins = kwargs['bins'] if 'bins' in kwargs else 100
@@ -29,7 +29,7 @@ def evaluate_dists(**kwargs):
 
         for i, ds_key in enumerate(phs._phs.keys()):       # train val test
             if verbose: print(f'Evaluating {ds_key}')
-            results = acts[ds_key]['result']
+            results = dss[ds_key]['result']
             scores = phs._phs[ds_key][module]['score_'+score_type]
             oks = (scores[results == True]).detach().cpu().numpy()
             kos = (scores[results == False]).detach().cpu().numpy()
