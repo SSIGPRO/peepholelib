@@ -69,7 +69,7 @@ class ImageNet(DatasetBase):
 
         return
     
-    def __getitem__(self, idx):
+    def get(self, ds_key, idx):
         '''
         Get item from the dataset.
         
@@ -82,5 +82,5 @@ class ImageNet(DatasetBase):
         '''
         if not self._dss:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
-        idx_, ds_key = idx
-        return self._dss[ds_key][idx_]
+        data = {'image': torch.tensor(self._dss[ds_key][idx][0]), 'label': torch.tensor(self._dss[ds_key][idx][1])}
+        return data
