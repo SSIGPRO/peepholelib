@@ -68,3 +68,19 @@ class ImageNet(DatasetBase):
         self._classes = {i: c for i, c in enumerate(train_ds.classes)}
 
         return
+    
+    def __getitem__(self, idx):
+        '''
+        Get item from the dataset.
+        
+        Args:
+        - idx (int): Index of the item to get.
+        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
+        
+        Returns:
+        - a tuple of (image, label)
+        '''
+        if not self._dss:
+            raise RuntimeError('Data not loaded. Please run load_data() first.')
+        idx_, ds_key = idx
+        return self._dss[ds_key][idx_]

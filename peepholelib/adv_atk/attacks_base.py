@@ -10,6 +10,8 @@ from pathlib import Path as Path
 import abc 
 
 def ftd(data, key_list):
+    print('data', data)
+    print('key_list', key_list)
     r = {}
     for k in key_list:
         r[k] = data[k]
@@ -31,13 +33,29 @@ class AttackBase(DatasetBase):
     
     def load_data(self, **kwargs):
         if not self.atk_path.exists(): raise RuntimeError(f'Attack path {self.atk_path} does not exist. Please run get_ds_attack() first.')
+        print(self.atk_path)
         self._dss = {}
         if self.verbose: print(f'File {self.atk_path} exists.')
         for ds_key in self._loaders:
             self._dss[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
 
-
     @abc.abstractmethod
     def get_ds_attack(self):
         raise NotImplementedError()
+    
+    def get(self, ds_key, idx):
+        '''
+        Get item from the dataset.
+        
+        Args:
+        - idx (int): Index of the item to get.
+        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
+        
+        Returns:
+        - a tuple of (image, label)
+        '''
+        if not self._dss:
+            raise RuntimeError('Data not loaded. Please run load_data() first.')
+        
+        return self._dss[ds_key][idx]
     

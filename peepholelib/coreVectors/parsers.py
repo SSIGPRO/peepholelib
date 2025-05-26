@@ -1,7 +1,9 @@
 import torch
 
-def from_dataset(batch):
+def from_dataset(batch, key_list):
+    print(*batch)
     images, labels = zip(*batch)
     images, labels = torch.stack(images), torch.tensor(labels)
-    return {'image': images, 'label': labels}
+    
+    return {key_list[0]: images, key_list[1]: labels}
 
