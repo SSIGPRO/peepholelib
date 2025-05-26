@@ -56,20 +56,21 @@ def parse_ds(self, **kwargs):
             if verbose: print(f'Allocating {key_list}')
 
             # dry run to get shapes
-            data = ds_parser(ds.get(ds_key,0), key_list=key_list)
-            data['image'] = data['image'].unsqueeze(0)  if data['image'].ndim == 3 else data['image']
+            
+            data = ds.get(ds_key, 0)
+
             with torch.no_grad():
-                _res = model(data['image'].to(device))
+                _res = model(data['image'].unsqueeze(0).to(device))
                 num_classes = _res.shape[1]
 
             for key in key_list:
-                print(key)
                 _d = data[key]
                 # pre-allocation activations
                 if _d.shape == torch.Size([]):
                     self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
                     self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape))
+            print(f'Pre-allocated {key_list} with shapes: {[self._dss[ds_key][key].shape for key in key_list]}')
              
             if verbose: print(f'Allocating output, pred, result')
             # allocate memory for pred and result
@@ -86,7 +87,6 @@ def parse_ds(self, **kwargs):
             # copy images and labels
             #------------------------
             # create dataloader of input dataset and activations
-            print('before the dataloader',key_list)
             dl_ori = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=partial(ds_parser, key_list=key_list), shuffle=False) 
             dl_dst = DataLoader(self._dss[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False, num_workers=n_threads)
 

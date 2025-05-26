@@ -104,4 +104,5 @@ class Cifar(DatasetBase):
         '''
         if not self._dss:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
-        return [self._dss[ds_key][idx]]
+        data = {'image': torch.tensor(self._dss[ds_key][idx][0]), 'label': torch.tensor(self._dss[ds_key][idx][1])}
+        return data
