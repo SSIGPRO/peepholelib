@@ -53,27 +53,16 @@ class myPGD(AttackBase):
         self.atk_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}/random_start_{self.random_start}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
         
-        if self.atk_path.exists():
-            self._atkds = {}
-            if self.verbose: print(f'File {self.atk_path} exists.')
-            for ds_key in self._loaders:
-                try:
-                    self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
-                except FileNotFoundError as e:
-                    print(f"File not found: {e}. Please check if the dataset has been generated correctly.")
-                # self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
-        else:
-            
-            self.atk = torchattacks.PGD(model=self.model, 
-                                        eps=self.eps, 
-                                        alpha=self.alpha, 
-                                        steps=self.steps,
-                                        random_start=self.random_start)
-            if self.mode == 'random':
-                self.atk.set_mode_targeted_random(quiet=False)
-            elif self.mode == 'least-likely':
-                self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
-                self.atk.get_least_likely_label
+        self.atk = torchattacks.PGD(model=self.model, 
+                                    eps=self.eps, 
+                                    alpha=self.alpha, 
+                                    steps=self.steps,
+                                    random_start=self.random_start)
+        if self.mode == 'random':
+            self.atk.set_mode_targeted_random(quiet=False)
+        elif self.mode == 'least-likely':
+            self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
+            self.atk.get_least_likely_label
             
     def get_ds_attack(self):
         
@@ -112,5 +101,5 @@ class myPGD(AttackBase):
             n_threads = 32
             if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._atkds = attack_TensorDict
+            self._dss = attack_TensorDict
       

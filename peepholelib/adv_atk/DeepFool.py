@@ -42,19 +42,11 @@ class myDeepFool(AttackBase):
         self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
         self.device = kwargs['device'] 
         self.atk_path = self.path/Path(f'model_{self.name_model}/steps_{self.steps}/overshoot_{self.overshoot}')
-        print(self._loaders)
 
-
-        if self.atk_path.exists():
-            self._atkds = {}
-            if self.verbose: print(f'File {self.atk_path} exists.')
-            for ds_key in self._loaders:
-                self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
-        else:
             
-            self.atk = torchattacks.DeepFool(model=self.model,
-                                             steps=self.steps,
-                                             overshoot=self.overshoot)
+        self.atk = torchattacks.DeepFool(model=self.model,
+                                            steps=self.steps,
+                                            overshoot=self.overshoot)
 
     def get_ds_attack(self):
         self.atk_path.mkdir(parents=True, exist_ok=True)
@@ -98,5 +90,5 @@ class myDeepFool(AttackBase):
             
             if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._atkds = attack_TensorDict
+            self._dss = attack_TensorDict
 
