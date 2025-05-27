@@ -60,7 +60,7 @@ def parse_ds(self, **kwargs):
             data = ds.get(ds_key, 0)
 
             with torch.no_grad():
-                _res = model(data['image'].unsqueeze(0).to(device))
+                _res = model(data['image'].to(device))
                 num_classes = _res.shape[1]
 
             for key in key_list:
