@@ -55,7 +55,7 @@ class AttackBase(DatasetBase):
         if not self._dss:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         data = {'image': self._dss[ds_key]['image'][idx].unsqueeze(0),
-                'label': self._dss[ds_key]['label'][idx],
-                'attack_success': self._dss[ds_key]['attack_success'][idx]}
+                'label': self._dss[ds_key]['label'][idx].unsqueeze(0),
+                'attack_success': self._dss[ds_key]['attack_success'][idx].unsqueeze(0)}
         return data
     

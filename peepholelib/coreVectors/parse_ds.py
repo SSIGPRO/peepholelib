@@ -64,10 +64,7 @@ def parse_ds(self, **kwargs):
             for key in data.keys():
                 _d = data[key]
                 # pre-allocation activations
-                if _d.shape == torch.Size([]):
-                    self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
-                else:
-                    self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
+                self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
              
             if verbose: print(f'Allocating output, pred, result')
             # allocate memory for pred and result
@@ -92,7 +89,6 @@ def parse_ds(self, **kwargs):
                 for key in data_in.keys():
                     
                     data_t[key] = data_in[key]
-                    if key == 'label': print(data_t[key])
             
                 # ---------------------------------------
                 # compute predictions and get activations
