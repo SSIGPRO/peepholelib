@@ -52,24 +52,16 @@ class myBIM(AttackBase):
         self.atk_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
 
+        self.atk = torchattacks.BIM(model=self.model, 
+                                    eps=self.eps, 
+                                    alpha=self.alpha, 
+                                    steps=self.steps)
 
-        if self.atk_path.exists():
-            self._atkds = {}
-            if self.verbose: print(f'File {self.atk_path} exists.')
-            for ds_key in self._loaders:
-                self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
-        else:
-            
-            self.atk = torchattacks.BIM(model=self.model, 
-                                        eps=self.eps, 
-                                        alpha=self.alpha, 
-                                        steps=self.steps)
-
-            if self.mode == 'random':
-                self.atk.set_mode_targeted_random(quiet=False)
-            elif self.mode == 'least-likely':
-                self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
-                self.atk.get_least_likely_label
+        if self.mode == 'random':
+            self.atk.set_mode_targeted_random(quiet=False)
+        elif self.mode == 'least-likely':
+            self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
+            self.atk.get_least_likely_label
 
     def get_ds_attack(self):
         self.atk_path.mkdir(parents=True, exist_ok=True)
@@ -112,5 +104,5 @@ class myBIM(AttackBase):
             
             # if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._atkds = attack_TensorDict
+            self._dss = attack_TensorDict
 

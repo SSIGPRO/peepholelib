@@ -90,3 +90,19 @@ class Cifar(DatasetBase):
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
         return 
+    
+    def get(self, ds_key, idx):
+        '''
+        Get item from the dataset.
+        
+        Args:
+        - idx (int): Index of the item to get.
+        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
+        
+        Returns:
+        - a tuple of (image, label)
+        '''
+        if not self._dss:
+            raise RuntimeError('Data not loaded. Please run load_data() first.')
+        
+        return [self._dss[ds_key][idx]]

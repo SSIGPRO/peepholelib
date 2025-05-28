@@ -611,25 +611,18 @@ class myCW(AttackBase):
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
         self.atk_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
-
-        if self.atk_path.exists():
-            self._atkds = {}
-            if self.verbose: print(f'File {self.atk_path} exists.')
-            for ds_key in self._loaders:
-                self._atkds[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
-        else:
             
-            targeted = False if self.mode == None else True
-            
-            self.atk = L2Adversary(targeted=targeted, 
-                                   confidence=self.confidence, 
-                                   c_range=self.c_range,
-                                   search_steps=5, 
-                                   max_steps=self.max_steps, 
-                                   abort_early=True,
-                                   box=(-3, 3), 
-                                   optimizer_lr=self.optimizer_lr, 
-                                   init_rand=False)
+        targeted = False if self.mode == None else True
+        
+        self.atk = L2Adversary(targeted=targeted, 
+                                confidence=self.confidence, 
+                                c_range=self.c_range,
+                                search_steps=5, 
+                                max_steps=self.max_steps, 
+                                abort_early=True,
+                                box=(-3, 3), 
+                                optimizer_lr=self.optimizer_lr, 
+                                init_rand=False)
             
     def get_ds_attack(self):
         self.atk_path.mkdir(parents=True, exist_ok=True)
@@ -692,4 +685,4 @@ class myCW(AttackBase):
             n_threads = 32
             if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._atkds = attack_TensorDict
+            self._dss = attack_TensorDict

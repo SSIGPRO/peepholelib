@@ -17,6 +17,10 @@ class DatasetBase(metaclass=abc.ABCMeta):
     def load_data(self):
         raise NotImplementedError()
     
+    @abc.abstractmethod
+    def get(self):
+        raise NotImplementedError()
+    
     def get_classes(self):
         if not self._classes:
             raise RuntimeError('Data not loaded. Please run model.load_data() first.')
