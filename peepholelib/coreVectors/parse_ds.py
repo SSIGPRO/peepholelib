@@ -52,12 +52,13 @@ def parse_ds(self, **kwargs):
             #------------------------
             # Pre-allocation 
             #------------------------
-            if verbose: print(f'Allocating {key_list}')
+            # if verbose: print(f'Allocating {key_list}')
 
             # dry run to get shapes
-            data = parse_fn(ds[ds_key][0])
+            data = ds_parser(ds.get(ds_key,0))
+            print(data['image'].shape, data['label'].shape)
             with torch.no_grad():
-                _res = model(data['image'].unsqueeze(0).to(device))
+                _res = model(data['image'].to(device))
                 num_classes = _res.shape[1]
 
             for key in data.keys():
@@ -67,7 +68,6 @@ def parse_ds(self, **kwargs):
                     self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,))) 
                 else:
                     self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
-            print(f'Pre-allocated {key_list} with shapes: {[self._dss[ds_key][key].shape for key in key_list]}')
              
             if verbose: print(f'Allocating output, pred, result')
             # allocate memory for pred and result
@@ -90,7 +90,9 @@ def parse_ds(self, **kwargs):
             if verbose: print('Parsing dataset')
             for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
                 for key in data_in.keys():
+                    
                     data_t[key] = data_in[key]
+                    if key == 'label': print(data_t[key])
             
                 # ---------------------------------------
                 # compute predictions and get activations
