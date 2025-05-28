@@ -187,6 +187,7 @@ class Peepholes:
         self.check_uncontexted()
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+        target_modules = kwargs['target_modules'] if 'target_modules' in kwargs else None
 
         if self._phs == None:
             raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
@@ -201,14 +202,14 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            for module in self.target_modules:
+            for module in target_modules if not target_modules is None else self._phs[ds_key].keys():
                 if module not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
 
                 if 'peepholes' not in self._phs[ds_key][module]:
                     raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
 
-            self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in self.target_modules],dim=1)
+            self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in (target_modules if target_modules is not None else self._phs[ds_key].keys())],dim=1)
 
         return
 
