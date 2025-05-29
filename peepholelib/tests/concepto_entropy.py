@@ -3,48 +3,53 @@ from torch.distributions import Categorical
 from torch.nn.functional import softmax as sm
 
 
-def ghl_score(cps):
+def ghl_score(cps, basis, weights):
     ns = cps.shape[0]
     nd = cps.shape[1]
     nc = cps.shape[2]
     
-    rbari = (cps.sum(dim=1)/nd).sqrt()
-    #print('rbari: ', rbari)
+    # some checks
+    if not weights == 'entropy' and not (isinstance(weights, list) and len(weights) == nd):
+        raise RuntimeError('Weights should be \'entropy\' or a list with a value for each peephole in the conceptogram')
+    
+    if not basis == 'from-baricenter' and not (torch.is_tensor(basis) and basis.shape == torch.Size((ns, nc))):
+        raise RuntimeError('Basis should be \'from-baricenter\' or a torch.tensor with shape == n_samples x n_peepholes in the conceptograms')
 
-    refs = torch.zeros(ns, nc)
-    bds = torch.inf*torch.ones(ns)
-    for i in range(nc):
-        # note that base == base.sqrt()
-        base = torch.zeros(nc)
-        base[i] = 1.0
-        #print('\n----- ', i)
-        #print('base: ', base)
-        # Hellinger distance form base
-        bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
-        #print('bd: ', bd)
-        #print('bds:', bds)
-        refs[bd<bds,:] = base
-        bds[bd<bds] = bd[bd<bds]
+
+    if basis == 'from-baricenter':
+        rbari = (cps.sum(dim=1)/nd).sqrt()
+        refs = torch.zeros(ns, nc)
+        bds = torch.inf*torch.ones(ns)
+        for i in range(nc):
+            # note that base == base.sqrt()
+            base = torch.zeros(nc)
+            base[i] = 1.0
+            # Hellinger distance form base
+            bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
+            refs[bd<bds,:] = base
+            bds[bd<bds] = bd[bd<bds]
+    else:
+        refs = basis
 
     refs = refs.unsqueeze(1)
-    #print('refs: ', refs)
     rcps = cps.sqrt()
-    #print('rcps: ', rcps)
     dists = (torch.tensor(1/2).sqrt())*(rcps-refs).norm(dim=2)
-    #print('dists: ', dists)
     
-    ents = torch.zeros(ns, nd)
-    for i in range(nd):
-        ents[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
+    if weights == 'entropy':
+        _w = torch.zeros(ns, nd)
+        for i in range(nd):
+            _w[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
+    else:
+        _w = torch.tensor(weights).unsqueeze(0)
 
-    s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
+    s = ((dists*_w).sum(dim=1))/_w.sum(dim=1)
     return s
 
-def ghl(cps):
+def ghl(cps, basis='from-baricenter', weights='entropy'):
     # to make it compliant with get_concemptograms()
     cps = cps.transpose(1, 2)
     # scores for min and max entropies
-    s = ghl_score(cps)
+    s = ghl_score(cps, basis, weights)
     return 1-s
 
 def gkl_score(cps):
@@ -68,7 +73,6 @@ def gkl_score(cps):
     refs = refs.unsqueeze(1)
     sm_cps = sm(cps, dim=2)
     dists = (refs*((refs/sm_cps).log())).sum(dim=2)
-    print(dists)
     
     ents = torch.zeros(ns, nd)
     for i in range(nd):
@@ -94,28 +98,34 @@ def gkl(cps):
     return ns
 
 if __name__ == "__main__":
-    ls = 3
-    cs = 4
-    bss = [5, 10, 50, 100]
+    nd = 3
+    nc = 4
+    ns = 5
 
-    rand = torch.rand((cs, ls)) 
+    rand = torch.rand((nc, nd)) 
     rand = rand/rand.sum(dim=0)
 
-    line = torch.zeros((cs, ls))
+    line = torch.zeros((nc, nd))
     line[0, :] = 1.0
     
-    half = torch.zeros(cs, ls)
+    half = torch.zeros(nc, nd)
     half[1, :] = 0.5
     half[2, :] = 0.5
+
+    unif = (1/nc)*torch.ones((nc, nd))
     
-    salt = torch.zeros((cs, ls))
-    for j, i in enumerate(torch.randperm(cs)[:ls]):
+    salt = torch.zeros((nc, nd))
+    for j, i in enumerate(torch.randperm(nc)[:nd]):
         salt[i, j] = 1.
     
-    unif = (1/cs)*torch.ones((cs, ls))
-    
+    #w = 'entropy'
+    w = (torch.arange(nd)+1).tolist()
+    #b = 'from-baricenter'
+    b = torch.zeros(ns, nc)
+    b[0,0] = b[1, 0] = b[2, 1] = b[3, 3] = b[4, salt.nonzero()[-1][0]] = 1.
+
     lbs = ['rand', 'line', 'half', 'unif', 'salt']
     cps = torch.stack([rand, line, half, unif, salt])
-    for l, s in zip(lbs, gkl(cps)):
+    for l, s in zip(lbs, ghl(cps, basis=b, weights=w)):
         print('-- score ', l, ': ', s)
 

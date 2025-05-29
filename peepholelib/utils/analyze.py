@@ -204,9 +204,11 @@ def conceptogram_ghl_entropy(**kwargs):
     phs = kwargs['peepholes']
     cvs = kwargs['corevectors']
     loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
+    basis = kwargs['basis'] if 'basis' in kwargs else 'from_baricenter' 
+    weights = kwargs['weights'] if 'weights' in kwargs else 'entropy' 
     bins = kwargs['bins'] if 'bins' in kwargs else 20 
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
     plot = kwargs['plot'] if 'plot' in kwargs else False
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
     # compute conceptogram entropy
     cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders)
@@ -219,34 +221,49 @@ def conceptogram_ghl_entropy(**kwargs):
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
     nc = cpss[loaders[0]].shape[2] # number of classes
 
+    # some checks
+    if not weights == 'entropy' and not (isinstance(weights, list) and len(weights) == nd):
+        raise RuntimeError(f'Weights should be \'entropy\' or a list with a value for each peephole in the conceptogram. Got {weights}')
+    
+    if not basis == 'from-baricenter' and not basis=='from_output':
+        raise RuntimeError(f'Basis should be \'from_baricenter\' or \'from_output\'. Got {basis}')
+
     # for saving means and stds
     m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
     for loader_n, ds_key in enumerate(loaders):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
         
-        rbari = (cps.sum(dim=1)/nd).sqrt()
-                                                                       
-        refs = torch.zeros(ns, nc)
-        bds = torch.inf*torch.ones(ns)
-        for i in range(nc):
-            # note that base == base.sqrt()
-            base = torch.zeros(nc)
-            base[i] = 1.0
-            # Hellinger distance form base
-            bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
-            refs[bd<bds,:] = base
-            bds[bd<bds] = bd[bd<bds]
-                                                                       
+        if basis == 'from-baricenter':
+            rbari = (cps.sum(dim=1)/nd).sqrt()
+            refs = torch.zeros(ns, nc)
+            bds = torch.inf*torch.ones(ns)
+            for i in range(nc):
+                # note that base == base.sqrt()
+                base = torch.zeros(nc)
+                base[i] = 1.0
+                # Hellinger distance form base
+                bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
+                refs[bd<bds,:] = base
+                bds[bd<bds] = bd[bd<bds]
+        elif basis == 'from_output':
+            _refs = torch.zeros(ns, nc)
+            idx = cvs._dss[ds_key]['pred'].int()
+            _refs[torch.arange(ns),idx] = 1.
+            refs = _refs
+
         refs = refs.unsqueeze(1)
         rcps = cps.sqrt()
         dists = (torch.tensor(1/2).sqrt())*(rcps-refs).norm(dim=2)
         
-        ents = torch.zeros(ns, nd)
-        for i in range(nd):
-            ents[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
-                                                                       
-        s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
+        if weights == 'entropy':
+            _w = torch.zeros(ns, nd)
+            for i in range(nd):
+                _w[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
+        else:
+            _w = torch.tensor(weights).unsqueeze(0)
+
+        s = ((dists*_w).sum(dim=1))/_w.sum(dim=1)
         # normalize it
         scores = 1-s
 
