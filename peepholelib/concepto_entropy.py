@@ -3,12 +3,12 @@ from torch.distributions import Categorical
 from torch.nn.functional import softmax as sm
 
 
-def ghl_score(x):
-    ns = x.shape[0]
-    nd = x.shape[1]
-    nc = x.shape[2]
+def ghl_score(cps):
+    ns = cps.shape[0]
+    nd = cps.shape[1]
+    nc = cps.shape[2]
     
-    rbari = (x.sum(dim=1)/nd).sqrt()
+    rbari = (cps.sum(dim=1)/nd).sqrt()
     #print('rbari: ', rbari)
 
     refs = torch.zeros(ns, nc)
@@ -28,30 +28,30 @@ def ghl_score(x):
 
     refs = refs.unsqueeze(1)
     #print('refs: ', refs)
-    rx = x.sqrt()
-    #print('rx: ', rx)
-    dists = (torch.tensor(1/2).sqrt())*(rx-refs).norm(dim=2)
+    rcps = cps.sqrt()
+    #print('rcps: ', rcps)
+    dists = (torch.tensor(1/2).sqrt())*(rcps-refs).norm(dim=2)
     #print('dists: ', dists)
     
     ents = torch.zeros(ns, nd)
     for i in range(nd):
-        ents[:,i] = Categorical(probs=x[:,i,:]).entropy() 
+        ents[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
 
     s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
     return s
 
-def ghl(x):
+def ghl(cps):
     # to make it compliant with get_concemptograms()
-    x = x.transpose(1, 2)
+    cps = cps.transpose(1, 2)
     # scores for min and max entropies
-    s = ghl_score(x)
+    s = ghl_score(cps)
     return 1-s
 
-def gkl_score(x):
-    ns = x.shape[0]
-    nd = x.shape[1]
-    nc = x.shape[2]
-    bari = sm(x.sum(dim=1)/nd, dim=1)
+def gkl_score(cps):
+    ns = cps.shape[0]
+    nd = cps.shape[1]
+    nc = cps.shape[2]
+    bari = sm(cps.sum(dim=1)/nd, dim=1)
 
     refs = torch.zeros(ns, nc)
     bds = torch.inf*torch.ones(ns)
@@ -66,22 +66,22 @@ def gkl_score(x):
 
     #(sm(b)*(sm(b)/sm(a)).log()).sum()
     refs = refs.unsqueeze(1)
-    sm_x = sm(x, dim=2)
-    dists = (refs*((refs/sm_x).log())).sum(dim=2)
+    sm_cps = sm(cps, dim=2)
+    dists = (refs*((refs/sm_cps).log())).sum(dim=2)
     print(dists)
     
     ents = torch.zeros(ns, nd)
     for i in range(nd):
-        ents[:,i] = Categorical(probs=x[:,i,:]).entropy() 
+        ents[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
 
     s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
     return s
 
-def gkl(x):
+def gkl(cps):
     # to make it compliant with get_concemptograms()
-    x = x.transpose(1, 2)
-    nd = x.shape[1]
-    nc = x.shape[2]
+    cps = cps.transpose(1, 2)
+    nd = cps.shape[1]
+    nc = cps.shape[2]
     a = torch.zeros(nc)
     a[0] = 1 
     b = torch.zeros(nc)
@@ -89,7 +89,7 @@ def gkl(x):
     # scores for min and max entropies
     max_e = ((sm(a, dim=0)*(sm(a, dim=0)/sm(b, dim=0)).log()).sum())*((nd-1)/nd)
     min_e = 0.0
-    s = gkl_score(x)
+    s = gkl_score(cps)
     ns = 1-(s-min_e)/(max_e-min_e)
     return ns
 
@@ -116,6 +116,6 @@ if __name__ == "__main__":
     
     lbs = ['rand', 'line', 'half', 'unif', 'salt']
     cps = torch.stack([rand, line, half, unif, salt])
-    for l, s in zip(lbs, ghl(cps)):
+    for l, s in zip(lbs, gkl(cps)):
         print('-- score ', l, ': ', s)
 
