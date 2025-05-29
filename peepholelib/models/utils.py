@@ -33,7 +33,7 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
     
     # divide the input channels and output channels in groups, if groups > 1
     if Cin % groups != 0: raise RuntimeError("Cin must be divisible by groups")
-    if Cout % groups != 0: raise RuntimeErrot("Cout must be divisible by groups")
+    if Cout % groups != 0: raise RuntimeError("Cout must be divisible by groups")
     
     Cin_g = Cin // groups  
     Cout_g = Cout // groups 
