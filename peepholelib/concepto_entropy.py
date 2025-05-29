@@ -1,9 +1,53 @@
 import torch
 from torch.distributions import Categorical
-from torch.nn.functional import kl_div as kl, softmax as sm
+from torch.nn.functional import softmax as sm
 
-def gf_score2(x):
+
+def ghl_score(x):
+    ns = x.shape[0]
+    nd = x.shape[1]
+    nc = x.shape[2]
+    
+    rbari = (x.sum(dim=1)/nd).sqrt()
+    #print('rbari: ', rbari)
+
+    refs = torch.zeros(ns, nc)
+    bds = torch.inf*torch.ones(ns)
+    for i in range(nc):
+        # note that base == base.sqrt()
+        base = torch.zeros(nc)
+        base[i] = 1.0
+        #print('\n----- ', i)
+        #print('base: ', base)
+        # Hellinger distance form base
+        bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
+        #print('bd: ', bd)
+        #print('bds:', bds)
+        refs[bd<bds,:] = base
+        bds[bd<bds] = bd[bd<bds]
+
+    refs = refs.unsqueeze(1)
+    #print('refs: ', refs)
+    rx = x.sqrt()
+    #print('rx: ', rx)
+    dists = (torch.tensor(1/2).sqrt())*(rx-refs).norm(dim=2)
+    #print('dists: ', dists)
+    
+    ents = torch.zeros(ns, nd)
+    for i in range(nd):
+        ents[:,i] = Categorical(probs=x[:,i,:]).entropy() 
+
+    s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
+    return s
+
+def ghl(x):
     # to make it compliant with get_concemptograms()
+    x = x.transpose(1, 2)
+    # scores for min and max entropies
+    s = ghl_score(x)
+    return 1-s
+
+def gkl_score(x):
     ns = x.shape[0]
     nd = x.shape[1]
     nc = x.shape[2]
@@ -15,7 +59,7 @@ def gf_score2(x):
         base = torch.zeros(nc)
         base[i] = 1.0
         base = sm(base, dim=0)
-        # distance form base
+        # KL distance form base
         bd = (base*((base/bari).log())).sum(dim=1)
         refs[bd<bds,:] = base
         bds[bd<bds] = bd[bd<bds]
@@ -33,7 +77,8 @@ def gf_score2(x):
     s = ((dists*ents).sum(dim=1))/ents.sum(dim=1)
     return s
 
-def concepto_entropy2(x):
+def gkl(x):
+    # to make it compliant with get_concemptograms()
     x = x.transpose(1, 2)
     nd = x.shape[1]
     nc = x.shape[2]
@@ -44,33 +89,7 @@ def concepto_entropy2(x):
     # scores for min and max entropies
     max_e = ((sm(a, dim=0)*(sm(a, dim=0)/sm(b, dim=0)).log()).sum())*((nd-1)/nd)
     min_e = 0.0
-    s = gf_score2(x)
-    ns = 1-(s-min_e)/(max_e-min_e)
-    return ns
-
-def gf_score(x):
-    ns = x.shape[0]
-    nc = x.shape[1]
-    nd = x.shape[2]
-    baris = x.sum(dim=2)/nd
-    dists = torch.zeros(x.shape)
-    ents = torch.zeros(ns, nd)
-
-    for i in range(nd):
-        dists[:,:,i] = kl(x[:,:,i], baris, reduction='none') 
-        ents[:,i] = Categorical(probs=x[:,:,i]).entropy() 
-    ents = ents.reshape(ns, 1, nd)
-
-    kull = (dists*ents).sum(dim=2)
-    s = kull.sum(dim=1)/ents.sum(dim=2).squeeze() 
-    return s
-
-def concepto_entropy(x):
-    # scores for min and max entropies
-    u = torch.ones(x.shape[1])/x.shape[1]
-    max_e = u*(u.log()-u)*x.shape[1]
-    min_e = 0.0
-    s = gf_score2(x)
+    s = gkl_score(x)
     ns = 1-(s-min_e)/(max_e-min_e)
     return ns
 
@@ -97,6 +116,6 @@ if __name__ == "__main__":
     
     lbs = ['rand', 'line', 'half', 'unif', 'salt']
     cps = torch.stack([rand, line, half, unif, salt])
-    for l, s in zip(lbs, concepto_entropy2(cps)):
+    for l, s in zip(lbs, ghl(cps)):
         print('-- score ', l, ': ', s)
 
