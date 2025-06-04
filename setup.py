@@ -12,7 +12,9 @@ setup(
     url='https://github.com/SSIGPRO/XAI',
     install_requires=[
         'numpy',
+        'torch',
         'tensordict',
+        'torchvision',
         'torchgmm',
         'seaborn',
         'cuda_selector',

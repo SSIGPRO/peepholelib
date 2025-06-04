@@ -46,7 +46,7 @@ class Hook:
 
 class ModelWrap(metaclass=abc.ABCMeta):
 
-    from .svd import get_svds
+    from .get_svds import get_svds
 
     def __init__(self, **kwargs):
         # device for NN
@@ -114,6 +114,14 @@ class ModelWrap(metaclass=abc.ABCMeta):
         return
 
     def __call__(self, x):
+        '''
+        Forwards the input through the model, and save activations if they are setted (see 'set_activations()') in self._acts.
+        
+        Args:
+            x (torch.tensor): the input
+        Returns:
+            res (torch.tensor): the model output
+        '''
         res = self._model(x)
 
         # get activations in a dict (similar to corevectors structure)
