@@ -125,7 +125,7 @@ def get_coreVectors(self, **kwargs):
                     
                 for mk in _modules_to_save:
                     act_data = activations_parser(model._acts)
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk])
+                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk]).cpu()
 
     # reset the model to NOT get activations
     model.set_activations(save_input=False, save_output=False)

@@ -1,42 +1,37 @@
 def trim_corevectors(**kwargs):
-    """
-    Trims corevectors from a give module.
-
-    Args:
-        cvs (PersistentTensorDict): TensorDict for corevectors inside `peepholelib.CoreVectors` class.
-        dss (PersistentTensorDict): TensorDict for the dataset inside `peepholelib.CoreVectors` class
-        module (str): target module key.
-        label_key (str): key to get labels from
-    Returns:
-        Trimmed corevectors and correspective labels 
-
-    """
     cvs = kwargs['cvs']
     dss = kwargs['dss'] if 'dss' in kwargs else None
     module = kwargs['module']
     label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
     cv_dim = kwargs['cv_dim']
 
+    # trim corevectors on the last dimension
+    tcvs = cvs[module][...,0:cv_dim]
+
     if dss == None:
-        return cvs[module][:,0:cv_dim]
+        return tcvs
     else:
-        return cvs[module][:,0:cv_dim], dss[label_key]  
+        labels =  dss[label_key]
+        return tcvs, labels  
 
 def trim_channelwise_corevectors(**kwargs):
     """
-    Trims multi channel corevectors from a give module. E.G., Conv2D corevectors with `channel_wise=True`.
-    Each row in these corevectors is one channel, and colums are the rank, so we trim alongside collumns.
-    Output is concatenated.
+    Trims multi channel corevectors obtained with `coreVectors.dimReduction.svds.conv2d_toeplitz_svd_projection()`.
+    Input shape is `[ns, ..., q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
+    Output shape is `[ns, X*cv_dim]`, the concatenation of the trimmed corevectors of all output channels.
 
     Args:
-        cvs (PersistentTensorDict): TensorDict for corevectors inside `peepholelib.CoreVectors` class.
-        dss (PersistentTensorDict): TensorDict for dataset inside `peepholelib.CoreVectors` class
+        cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
+        dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
         module (str): target module key.
         label_key (str): key to get labels from
-    Returns:
-        Trimmed corevectors and correspective labels 
+        cv_dim (int): desired dimension of corevector
 
+    Returns:
+        tcvs (torch.tensor): Trimmed corevectors and correspective labels
+        labels (torch.tensor): Labels from datasate for the samples. Only returned if `dss` is given
     """
+
     cvs = kwargs['cvs']
     dss = kwargs['dss'] if 'dss' in kwargs else None
     module = kwargs['module']
@@ -49,17 +44,41 @@ def trim_channelwise_corevectors(**kwargs):
     _nc = _cv.shape[1] # n channels
     _r  = _cv.shape[2] # rank
     
+    # trim and reshape cvs
     if cols is None:
-        _tcv = _cv[:,:,0:cv_dim] # timmed cv
-        _trcv = _tcv.reshape(_ns, _nc*cv_dim) # trimmed and reshaped cv
+        _tcv = _cv[:,:,0:cv_dim]
+        trcv = _tcv.reshape(_ns, _nc*cv_dim)
     else:
-        _tcv = _cv[:,cols,0:cv_dim] # timmed cv
-        _trcv = _tcv.reshape(_ns, len(cols)*cv_dim) # trimmed and reshaped cv
+        _tcv = _cv[:,cols,0:cv_dim]
+        trcv = _tcv.reshape(_ns, len(cols)*cv_dim)
 
     if dss == None:
-        return _trcv 
+        return trcv 
     else:
-        return _trcv, dss[label_key]  
+        labels =  dss[label_key]
+        return trcv, labels 
+
+def trim_kernel_corevectors(**kwargs):
+    cvs = kwargs['cvs']
+    dss = kwargs['dss'] if 'dss' in kwargs else None
+    module = kwargs['module']
+    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
+    cv_dim = kwargs['cv_dim']
+    
+    _cv = cvs[module]
+    _ns = _cv.shape[0] # n samples
+    _os = _cv.shape[1] # n kernels 
+    _r  = _cv.shape[2] # rank
+    
+    # trim and reshape cvs
+    _tcv = _cv[...,0:cv_dim]
+    trcv = _tcv.reshape(_ns, _os*cv_dim)
+    
+    if dss == None:
+        return trcv 
+    else:
+        labels =  dss[label_key]
+        return trcv, labels 
 
 def get_images(**kwargs):
     """
