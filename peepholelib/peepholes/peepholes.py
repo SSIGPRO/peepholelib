@@ -185,14 +185,14 @@ class Peepholes:
         Get conceptograms from peepholes
         '''
         self.check_uncontexted()
-
+        
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         target_modules = kwargs['target_modules'] if 'target_modules' in kwargs else None
 
         if self._phs == None:
             raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
 
-        self._conceptograms = {}
+        _conceptograms = {}
         for ds_key in self._phs:
             if verbose: print(f'\n ---- Getting conceptograms for {ds_key}\n')
             file_path = self.path / (self.name + '.' + ds_key)
@@ -211,7 +211,7 @@ class Peepholes:
 
             self._conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in (target_modules if target_modules is not None else self._phs[ds_key].keys())],dim=1)
 
-        return
+        return _conceptograms
 
     def __enter__(self):
         self._is_contexted = True

@@ -166,8 +166,8 @@ def get_svds(self, **kwargs):
                 s = torch.stack(ss)
                 Vh = torch.stack(vv)
             else:
-                U, s, V = torch.svd_lowrank(W_, q=q)
-                U, s, Vh = U.detach().cpu(), s.detach().cpu(), V.detach().cpu().T
+                U, s, Vh = torch.svd_lowrank(W_, q=q)
+                U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu().T
 
         elif isinstance(module, torch.nn.Linear):
             W_ = torch.hstack((weight, bias.reshape(-1,1)))
@@ -182,8 +182,8 @@ def get_svds(self, **kwargs):
                 'Vh': MMT(Vh)
                 })
 
-    if verbose: print(f'saving {file_path}')
     if len(_modules_to_compute) != 0:
+        if verbose: print(f'saving {file_path}')
         _svds.memmap(file_path)
     
     self._svds = _svds
