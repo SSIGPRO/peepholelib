@@ -49,9 +49,6 @@ def unroll_image(img, layer):
     sh, sw = stride
     dh, dw = dilation
 
-    oh = int(floor((ih - dh*(kh - 1) -1)/sh + 1))
-    ow = int(floor((iw - dw*(kw - 1) -1)/sw + 1))
-    print('out shape: ', oh, ow)
 
     koht = floor(kh/2) 
     kohb = kh - floor(kh/2) - 1 
@@ -65,12 +62,17 @@ def unroll_image(img, layer):
     pad_mode = pad_mode if pad_mode != 'zeros' else 'constant'
     ip = pad(img, pad=_reverse_repeat_tuple((ph, pw), 2), mode=pad_mode) 
     print('img pad:\n', ip)
+    iph = ip.shape[2]
+    ipw = ip.shape[3]
+    oh = int(floor((iph - dh*(kh - 1) -1)/sh + 1))
+    ow = int(floor((ipw - dw*(kw - 1) -1)/sw + 1))
+    print('out shape: ', oh, ow)
     
     ui = torch.zeros(ns, nci*kh*kw, oh*ow)
-    for _ho, _h in enumerate(range(koht, ih-kohb)):
-        for _wo, _w in enumerate(range(kowl, iw-kowr)):
-            print('limits: ', max(_h-koht, 0), min(_h+kohb+1, ih), max(_w-kowl,0), min(_w+kowr+1, iw))
-            oip = ip[:,:, max(_h-koht, 0):min(_h+kohb+1, ih), max(_w-kowl,0):min(_w+kowr+1, iw)]
+    for _ho, _h in enumerate(range(koht, iph-kohb)):
+        for _wo, _w in enumerate(range(kowl, ipw-kowr)):
+            print('limits: ', max(_h-koht, 0), min(_h+kohb+1, iph), max(_w-kowl,0), min(_w+kowr+1, ipw))
+            oip = ip[:,:, max(_h-koht, 0):min(_h+kohb+1, iph), max(_w-kowl,0):min(_w+kowr+1, ipw)]
             print('oip: ', oip)
             oipf = oip.flatten(start_dim=1, end_dim=-1)
             print('oipf: ', oipf)
