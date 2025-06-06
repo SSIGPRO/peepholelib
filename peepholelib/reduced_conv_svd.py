@@ -49,13 +49,6 @@ def unroll_image(img, layer):
     sh, sw = stride
     dh, dw = dilation
 
-
-    koht = floor(kh/2) 
-    kohb = kh - floor(kh/2) - 1 
-    kowr = floor(kw/2) 
-    kowl = kw - floor(kw/2) - 1
-    print('kernel offsets: ', koht, kohb, kowr, kowl)
-
     assert nc == nci, f'Number of channels in the input image {nc} does not match with the conv layer {nci}'
     
     # pad image
@@ -69,32 +62,21 @@ def unroll_image(img, layer):
     print('out shape: ', oh, ow)
     
     ui = torch.zeros(ns, nci*kh*kw, oh*ow)
-    for _ho, _h in enumerate(range(koht, iph-kohb)):
-        for _wo, _w in enumerate(range(kowl, ipw-kowr)):
-            print('limits: ', max(_h-koht, 0), min(_h+kohb+1, iph), max(_w-kowl,0), min(_w+kowr+1, ipw))
-            oip = ip[:,:, max(_h-koht, 0):min(_h+kohb+1, iph), max(_w-kowl,0):min(_w+kowr+1, ipw)]
+    for _h in range(oh):
+        for _w in range(ow):
+            print('hw: ', _h, _w)
+            lt = max(_h*sh, 0)
+            lb = min(_h*sh+kh, iph)
+            ll = max(_w*sw, 0)
+            lr = min(_w*sw+kw, ipw)
+            print('limits: ',lt, lb, ll, lr)
+            oip = ip[:,:, lt:lb, ll:lr]
             print('oip: ', oip)
             oipf = oip.flatten(start_dim=1, end_dim=-1)
             print('oipf: ', oipf)
-            ui[:,:, _ho*ow+_wo] = oipf
+            ui[:,:, _h*ow+_w] = oipf
     print(ui)
 
-    '''
-    # flattens the padded image
-    ipf = ip.reshape(ns, nc, (ih+2*ph)*(iw+2*pw))
-    print('ipf:\n', ipf)
-
-    # repeats it for each kernel dimension
-    ipfr = ipf.repeat(1, 1, kh*kw).reshape(ns, nc, kh*kw, (ih+2*ph)*(iw+2*pw))
-
-    # rotates the image repetitions to align then wirh the kernel values
-    base_shift = kohb*(iw+2*pw)+kowl 
-    print('base shift: ', base_shift)
-
-    for _h in range(kh):
-        for _w in range(kw):
-            ipfr[:,:, _w+_h*kw] = ipfr[:,:, _w+_h*kw].roll(base_shift-(_w+_h*(iw+2*pw)))
-    '''
     return ui, oh, ow 
 
 
@@ -121,8 +103,8 @@ if __name__ == '__main__':
         coc = 1#ri(2, 5)*groups # conv out channels (multiple of groups)
         sh = 1#ri(2, 10)
         sw = 1#ri(2, 10)
-        ph = 1#ri(2, 10) 
-        pw = 1#ri(2, 10) 
+        ph = 0#ri(2, 10) 
+        pw = 0#ri(2, 10) 
 
         print('\n-------------------------')
         print('cic, coc: ', cic, coc)
