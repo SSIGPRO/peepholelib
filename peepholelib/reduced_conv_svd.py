@@ -13,11 +13,12 @@ from math import *
 
 
 def channel_conv(layer):
-    uw = layer.weight.flatten(start_dim=1, end_dim=-1).repeat(1, layer.groups, 1)
-    print('unfolded weights:\n', uw)
-    uwr = uw.reshape(uw.shape[0], int(uw.shape[1]/layer.groups), uw.shape[2]*layer.groups)
-    print('unfolded weights:\n', uwr)
-    return uwr
+    uw = layer.weight.flatten(start_dim=1, end_dim=-1)
+
+    if not layer.bias == None:
+        uw = torch.hstack([uw, layer.bias.view(-1,1)])
+
+    return uw
 
 def unroll_image(img, layer):
     if not isinstance(layer, torch.nn.Conv2d):
@@ -28,9 +29,8 @@ def unroll_image(img, layer):
     groups = layer.groups
     pad_mode = layer.padding_mode
     
-    print('weight: ', weight)
-    print('img: ', img)
     # kernel offsets
+    cic, coc = weight.shape[0], weight.shape[1]
     kh, kw = weight.shape[2], weight.shape[3]
     ph, pw = layer.padding
     sh, sw = layer.stride
@@ -47,6 +47,10 @@ def unroll_image(img, layer):
             stride = (sh, sw)
             )
 
+    if not layer.bias == None:
+        ones = torch.ones(coc, 1, oh*ow).to(ui.device)
+        ui = torch.hstack((ui, ones))
+
     return ui, oh, ow 
 
 
@@ -61,17 +65,17 @@ if __name__ == '__main__':
     times = []
     torch.manual_seed(2)
     for i in range(1):
-        using_bias = False 
+        using_bias = True 
         channel_wise = True 
-        groups = 2#ri(1, 3)
-        nc = groups*1#ri(2, 5) # multiple of groups
+        groups = 1#ri(1, 3)
+        nc = groups*2#ri(2, 5) # multiple of groups
         kw = 2#ri(1, 2) # kernel width 
         kh = 2#ri(1, 2) # kernel height
         iw = 3#ri(2, 5) # image width
         ih = 3#ri(2, 5) # image height
         ns = 2 # n samples
         cic = nc # conv in channels 
-        coc = groups*1#ri(2, 5) # conv out channels (multiple of groups)
+        coc = groups*3#ri(2, 5) # conv out channels (multiple of groups)
         sh = 1#ri(2, 10)
         sw = 1#ri(2, 10)
         ph = 0#ri(2, 10) 
@@ -91,16 +95,6 @@ if __name__ == '__main__':
         
         x = torch.rand(ns, nc, ih, iw).to(device)
         r = c(x).to(device)
-
-        # pad input image
-        pad_mode = c.padding_mode if c.padding_mode != 'zeros' else 'constant'
-        x_pad = pad(x, pad=_reverse_repeat_tuple(c.padding, 2), mode=pad_mode) 
-         
-        # flatten and append 1 to the end of img if there is bias
-        if using_bias:
-            xu = torch.hstack((x_pad.flatten(), torch.ones(1))).to(device)
-        else:
-            xu = x_pad.flatten().to(device)
 
         # get the sparse representation
         my_csr = channel_conv(c)
