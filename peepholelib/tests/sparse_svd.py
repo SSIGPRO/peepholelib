@@ -1,10 +1,11 @@
 import sys
-sys.path.insert(0, '/home/leandro/repos/peepholelib')
+from pathlib import Path as Path
+sys.path.insert(0, (Path.home()/'repos/peepholelib').as_posix())
 
 from tqdm import tqdm
 
 import torch
-from peepholelib.models.svd import c2s as c2s
+from peepholelib.models.svd_fns import c2s
 from time import time
 from numpy.random import randint as ri
 from torch.nn.modules.utils import _reverse_repeat_tuple

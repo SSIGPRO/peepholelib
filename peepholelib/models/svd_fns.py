@@ -1,13 +1,10 @@
 # General python stuff
 from warnings import warn
-from pathlib import Path
-import numpy as np
 from tqdm import tqdm
 
 # torch stuff
 import torch
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
+from math import *
 
 def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, warns=True):
     if not isinstance(layer, torch.nn.Conv2d):
@@ -42,8 +39,8 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
     Cin_g = Cin // groups  
     Cout_g = Cout // groups 
 
-    Hout = int(np.floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
-    Wout = int(np.floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
+    Hout = int(floor((Hin - dilation[0]*(Hk - 1) -1)/stride[0] + 1))
+    Wout = int(floor((Win - dilation[1]*(Wk - 1) -1)/stride[1] + 1))
     output_size = Hout*Wout
     
     # getting columns
@@ -110,81 +107,45 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
         ret = csrs
     return ret 
 
+def linear_svd(**kwargs):
+    layer = kwargs['layer']
 
-def get_svds(self, **kwargs):
-    path = Path(kwargs['path'])
-    name = kwargs['name']
-    target_modules = kwargs['target_modules'] 
-    sample_in = kwargs['sample_in']
+    W_ = torch.hstack((layer.weight, bias.reshape(-1,1)))
+    U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
+
+    return U, s, Vh
+
+def conv2d_toeplitz_svd(**kwargs):
+    layer = kwargs['layer']
+    in_shape = kwargs['in_shape']
     q = kwargs['rank'] if 'rank' in kwargs else 300
     channel_wise = kwargs['channel_wise'] if 'channel_wise' in kwargs else True
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-    # create folder
-    path.mkdir(parents=True, exist_ok=True)
+    W_ = c2s(in_shape, layer, channel_wise=channel_wise, device=device) 
     
-    file_path = path/name
-    if file_path.exists():
-        if verbose: print(f'File {file_path} exists. Loading from disk.')
-        _svds = TensorDict.load_memmap(file_path)
-    else: 
-        _svds = TensorDict()
+    # same as `if channel_wise:`
+    if isinstance(W_, list):
+        uu, ss, vv = [], [], []
+        for csr in tqdm(W_):
+            _u, _s, _v = torch.svd_lowrank(csr, q=q)
+            uu.append(_u.detach().cpu())
+            ss.append(_s.detach().cpu())
+            vv.append(_v.detach().cpu().T)
+        U = torch.stack(uu)
+        s = torch.stack(ss)
+        Vh = torch.stack(vv)
+    else:
+        U, s, Vh = torch.svd_lowrank(W_, q=q)
 
-    _modules_to_compute = []
-    for mk in target_modules:
-        if mk in _svds.keys():
-            continue
-        _modules_to_compute.append(mk)
-    if verbose: print('modules to compute SVDs: ', _modules_to_compute)
-    
-    for mk in _modules_to_compute:
-        if verbose: print(f'\n ---- Getting SVDs for {mk}\n')
-        module = self._target_modules[mk]
-        weight = module.weight 
-        bias = module.bias 
+    return U, s, Vh
 
-        if isinstance(module, torch.nn.Conv2d):
-            # dry run to get shape
-            self.set_activations(save_input=True, save_output=False)
-            with torch.no_grad():
-                _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
-                self(_in)
-                in_shape = self._acts['in_activations'][mk].shape[1:]
-            self.set_activations(save_input=False, save_output=False)
+def conv2d_kernel_svd(**kwargs):
+    layer = kwargs['layer']
+    uw = layer.weight.flatten(start_dim=1, end_dim=-1)
+                                                       
+    if not layer.bias == None:
+        uw = torch.hstack([uw, layer.bias.view(-1,1)])
 
-            W_ = c2s(in_shape, module, channel_wise=channel_wise, device=self.device) 
-
-            # same as `if channel_wise:`
-            if isinstance(W_, list):
-                uu, ss, vv = [], [], []
-                for csr in tqdm(W_):
-                    _u, _s, _v = torch.svd_lowrank(csr, q=q)
-                    uu.append(_u.detach().cpu())
-                    ss.append(_s.detach().cpu())
-                    vv.append(_v.detach().cpu().T)
-                U = torch.stack(uu)
-                s = torch.stack(ss)
-                Vh = torch.stack(vv)
-            else:
-                U, s, V = torch.svd_lowrank(W_, q=q)
-                U, s, Vh = U.detach().cpu(), s.detach().cpu(), V.detach().cpu().T
-
-        elif isinstance(module, torch.nn.Linear):
-            W_ = torch.hstack((weight, bias.reshape(-1,1)))
-            U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
-            U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
-        else:
-            raise RuntimeError('Unsuported layer type')
-
-        _svds[mk] = TensorDict({
-                'U': MMT(U),
-                's': MMT(s),
-                'Vh': MMT(Vh)
-                })
-
-    if verbose: print(f'saving {file_path}')
-    if len(_modules_to_compute) != 0:
-        _svds.memmap(file_path)
-    
-    self._svds = _svds
-    return self._svds
+    U, s, Vh = torch.linalg.svd(uw, full_matrices=False)
+    return U, s, Vh

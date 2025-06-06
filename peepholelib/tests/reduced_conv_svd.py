@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '/home/leandro/repos/peepholelib')
-
 from tqdm import tqdm
 
 import torch
