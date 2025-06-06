@@ -26,57 +26,27 @@ def unroll_image(img, layer):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
 
     weight = layer.weight        
+    print('weigh: ', weight)
     bias = layer.bias
     groups = layer.groups
-    stride = layer.stride
-    padding = layer.padding
-    dilation = layer.dilation
     pad_mode = layer.padding_mode
-
-    if dilation != (1,1):
-            raise RuntimeError('This functions does not account for dilation, if you extendent it, please send us a PR ;).')
-
-    ns = img.shape[0]
-    nc = img.shape[1]
-    ih = img.shape[2]
-    iw = img.shape[3]
-    
-    nco, nci = weight.shape[0], weight.shape[1]
 
     # kernel offsets
     kh, kw = weight.shape[2], weight.shape[3]
-    ph, pw = padding
-    sh, sw = stride
-    dh, dw = dilation
-
-    assert nc == nci, f'Number of channels in the input image {nc} does not match with the conv layer {nci}'
+    ph, pw = layer.padding
+    sh, sw = layer.stride
+    dh, dw = layer.dilation
     
-    # pad image
-    pad_mode = pad_mode if pad_mode != 'zeros' else 'constant'
-    ip = pad(img, pad=_reverse_repeat_tuple((ph, pw), 2), mode=pad_mode) 
-    print('img pad:\n', ip)
-    iph = ip.shape[2]
-    ipw = ip.shape[3]
-    oh = int(floor((iph - dh*(kh - 1) -1)/sh + 1))
-    ow = int(floor((ipw - dw*(kw - 1) -1)/sw + 1))
-    print('out shape: ', oh, ow)
+    oh = int(floor((ih+2*ph - dh*(kh - 1) -1)/sh + 1))
+    ow = int(floor((iw+2*pw - dw*(kw - 1) -1)/sw + 1))
     
-    ui = torch.zeros(ns, nci*kh*kw, oh*ow)
-    for _h in range(oh):
-        for _w in range(ow):
-            print('hw: ', _h, _w)
-            lt = max(_h*sh, 0)
-            lb = min(_h*sh+kh, iph)
-            ll = max(_w*sw, 0)
-            lr = min(_w*sw+kw, ipw)
-            print('limits: ',lt, lb, ll, lr)
-            oip = ip[:,:, lt:lb, ll:lr]
-            print('oip: ', oip)
-            oipf = oip.flatten(start_dim=1, end_dim=-1)
-            print('oipf: ', oipf)
-            ui[:,:, _h*ow+_w] = oipf
-    print(ui)
-
+    ui = torch.nn.functional.unfold(
+            img,
+            kernel_size = (kh, kw),
+            dilation = (dh, dw),
+            padding = (ph, pw),
+            stride = (sh, sw)
+            )
     return ui, oh, ow 
 
 
@@ -92,19 +62,21 @@ if __name__ == '__main__':
     for i in range(1):
         using_bias = False 
         channel_wise = True 
-        groups = 1#ri(1, 3)
-        nc = 1#ri(2, 5)*groups # multiple of groups
+        groups = 2#ri(1, 3)
+        nc = groups*1#ri(2, 5) # multiple of groups
         kw = 2#ri(1, 2) # kernel width 
         kh = 2#ri(1, 2) # kernel height
         iw = 3#ri(2, 5) # image width
         ih = 3#ri(2, 5) # image height
-        ns = 1 # n samples
+        ns = 2 # n samples
         cic = nc # conv in channels 
-        coc = 1#ri(2, 5)*groups # conv out channels (multiple of groups)
+        coc = groups*2#ri(2, 5) # conv out channels (multiple of groups)
         sh = 1#ri(2, 10)
         sw = 1#ri(2, 10)
         ph = 0#ri(2, 10) 
         pw = 0#ri(2, 10) 
+        dh = 1#ri(2, 10) 
+        dw = 1#ri(2, 10) 
 
         print('\n-------------------------')
         print('cic, coc: ', cic, coc)
@@ -114,7 +86,7 @@ if __name__ == '__main__':
         print('padding h, w: ', ph, pw)
         print('groups: ', groups)
 
-        c = torch.nn.Conv2d(cic, coc, (kh, kw), bias=using_bias, stride=(sh, sw), dilation=(1,1), groups=groups, padding=(ph,pw))
+        c = torch.nn.Conv2d(cic, coc, (kh, kw), bias=using_bias, stride=(sh, sw), dilation=(dh,dw), groups=groups, padding=(ph,pw))
         
         x = torch.rand(ns, nc, ih, iw)
         r = c(x).to(device)
