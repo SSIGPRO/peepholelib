@@ -13,24 +13,23 @@ from math import *
 
 
 def channel_conv(layer):
-    weight = layer.weight        
-    bias = layer.bias
-    #print('weights: ', weight)
-    uw = weight.flatten(start_dim=1, end_dim=-1)
-    #print('unrolled weights: ', uw)
-
-    return uw
+    uw = layer.weight.flatten(start_dim=1, end_dim=-1).repeat(1, layer.groups, 1)
+    print('unfolded weights:\n', uw)
+    uwr = uw.reshape(uw.shape[0], int(uw.shape[1]/layer.groups), uw.shape[2]*layer.groups)
+    print('unfolded weights:\n', uwr)
+    return uwr
 
 def unroll_image(img, layer):
     if not isinstance(layer, torch.nn.Conv2d):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
 
     weight = layer.weight        
-    print('weigh: ', weight)
     bias = layer.bias
     groups = layer.groups
     pad_mode = layer.padding_mode
-
+    
+    print('weight: ', weight)
+    print('img: ', img)
     # kernel offsets
     kh, kw = weight.shape[2], weight.shape[3]
     ph, pw = layer.padding
@@ -39,7 +38,7 @@ def unroll_image(img, layer):
     
     oh = int(floor((ih+2*ph - dh*(kh - 1) -1)/sh + 1))
     ow = int(floor((iw+2*pw - dw*(kw - 1) -1)/sw + 1))
-    
+
     ui = torch.nn.functional.unfold(
             img,
             kernel_size = (kh, kw),
@@ -47,6 +46,7 @@ def unroll_image(img, layer):
             padding = (ph, pw),
             stride = (sh, sw)
             )
+
     return ui, oh, ow 
 
 
@@ -59,6 +59,7 @@ if __name__ == '__main__':
     q = 300
     errors = []
     times = []
+    torch.manual_seed(2)
     for i in range(1):
         using_bias = False 
         channel_wise = True 
@@ -70,7 +71,7 @@ if __name__ == '__main__':
         ih = 3#ri(2, 5) # image height
         ns = 2 # n samples
         cic = nc # conv in channels 
-        coc = groups*2#ri(2, 5) # conv out channels (multiple of groups)
+        coc = groups*1#ri(2, 5) # conv out channels (multiple of groups)
         sh = 1#ri(2, 10)
         sw = 1#ri(2, 10)
         ph = 0#ri(2, 10) 
@@ -86,9 +87,9 @@ if __name__ == '__main__':
         print('padding h, w: ', ph, pw)
         print('groups: ', groups)
 
-        c = torch.nn.Conv2d(cic, coc, (kh, kw), bias=using_bias, stride=(sh, sw), dilation=(dh,dw), groups=groups, padding=(ph,pw))
+        c = torch.nn.Conv2d(cic, coc, (kh, kw), bias=using_bias, stride=(sh, sw), dilation=(dh,dw), groups=groups, padding=(ph,pw), device=device)
         
-        x = torch.rand(ns, nc, ih, iw)
+        x = torch.rand(ns, nc, ih, iw).to(device)
         r = c(x).to(device)
 
         # pad input image
@@ -105,14 +106,14 @@ if __name__ == '__main__':
         my_csr = channel_conv(c)
         print('unrolled kernel: ', my_csr)
         
-        print('img:\n', x)
+        #print('img:\n', x)
         u_x_pad, oh, ow = unroll_image(x, c)
-        print('uxpad:\n', u_x_pad, u_x_pad.shape, ih, iw, ph, pw)
-        print('csr shape: ', my_csr.shape)
+        #print('uxpad:\n', u_x_pad, u_x_pad.shape, ih, iw, ph, pw)
+        #print('csr shape: ', my_csr.shape)
 
-        print('r:\n', r)
+        #print('r:\n', r)
         rr = (my_csr@u_x_pad).reshape(ns, coc, oh, ow)
-        print('rr:\n', rr)
+        print('erroe:', (rr-r).sum())
 
         quit()
         
