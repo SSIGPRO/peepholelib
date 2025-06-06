@@ -30,7 +30,6 @@ def unroll_image(img, layer):
     pad_mode = layer.padding_mode
     
     # kernel offsets
-    cic, coc = weight.shape[0], weight.shape[1]
     kh, kw = weight.shape[2], weight.shape[3]
     ph, pw = layer.padding
     sh, sw = layer.stride
@@ -48,7 +47,7 @@ def unroll_image(img, layer):
             )
 
     if not layer.bias == None:
-        ones = torch.ones(coc, 1, oh*ow).to(ui.device)
+        ones = torch.ones(ui.shape[0], 1, oh*ow).to(ui.device)
         ui = torch.hstack((ui, ones))
 
     return ui, oh, ow 
@@ -64,24 +63,24 @@ if __name__ == '__main__':
     errors = []
     times = []
     torch.manual_seed(2)
-    for i in range(1):
+    for i in range(30):
         using_bias = True 
         channel_wise = True 
         groups = 1#ri(1, 3)
-        nc = groups*2#ri(2, 5) # multiple of groups
-        kw = 2#ri(1, 2) # kernel width 
-        kh = 2#ri(1, 2) # kernel height
-        iw = 3#ri(2, 5) # image width
-        ih = 3#ri(2, 5) # image height
-        ns = 2 # n samples
+        nc = groups*ri(20, 50) # multiple of groups
+        kw = ri(10, 20) # kernel width 
+        kh = ri(10, 20) # kernel height
+        iw = ri(40, 50) # image width
+        ih = ri(40, 50) # image height
+        ns = 1 # n samples
         cic = nc # conv in channels 
-        coc = groups*3#ri(2, 5) # conv out channels (multiple of groups)
-        sh = 1#ri(2, 10)
-        sw = 1#ri(2, 10)
-        ph = 0#ri(2, 10) 
-        pw = 0#ri(2, 10) 
-        dh = 1#ri(2, 10) 
-        dw = 1#ri(2, 10) 
+        coc = groups*ri(20, 50) # conv out channels (multiple of groups)
+        sh = ri(2, 10)
+        sw = ri(2, 10)
+        ph = ri(2, 10) 
+        pw = ri(2, 10) 
+        dh = ri(1, 3) 
+        dw = ri(1, 3) 
 
         print('\n-------------------------')
         print('cic, coc: ', cic, coc)
@@ -98,39 +97,16 @@ if __name__ == '__main__':
 
         # get the sparse representation
         my_csr = channel_conv(c)
-        print('unrolled kernel: ', my_csr)
-        
-        #print('img:\n', x)
-        u_x_pad, oh, ow = unroll_image(x, c)
-        #print('uxpad:\n', u_x_pad, u_x_pad.shape, ih, iw, ph, pw)
-        #print('csr shape: ', my_csr.shape)
-
-        #print('r:\n', r)
-        rr = (my_csr@u_x_pad).reshape(ns, coc, oh, ow)
-        print('erroe:', (rr-r).sum())
-
-        quit()
+        ux, oh, ow = unroll_image(x, c)
         
         t0 = time()
         print('SVDing')
-        if isinstance(my_csr, list):
-            lc = []
-            for c in tqdm(my_csr):
-                _s, _v, _d = torch.svd_lowrank(c, q=q)
-                _lc = (_s@torch.diag(_v)@_d.T)
-
-                # move partial results to CPU to not fill the GPU
-                lc.append(_lc.detach().cpu())
-            lc = torch.vstack(lc).to(device)
-        else:
-            s, v, d = torch.svd_lowrank(my_csr, q=q)
-            lc = s@torch.diag(v)@d.T 
-
+        s, v, d = torch.linalg.svd(my_csr, full_matrices=False)
         print('SVDone')
-        print()
         t_curr = time()-t0
 
-        ru = lc@xu
+        lc = s@torch.diag(v)@d 
+        ru = (lc@ux).reshape(ns, coc, oh, ow)
         error = torch.norm(r-ru.reshape(r.shape))/torch.norm(r) 
         print('error ru: ', error)
         print('time: ', t_curr) 
