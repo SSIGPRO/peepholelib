@@ -27,13 +27,14 @@ def unroll_image(img, layer):
     pad_mode = layer.padding_mode
     
     # kernel offsets
+    _ih, _iw = img.shape[2], img.shape[3] 
     kh, kw = weight.shape[2], weight.shape[3]
     ph, pw = layer.padding
     sh, sw = layer.stride
     dh, dw = layer.dilation
     
-    oh = int(floor((ih+2*ph - dh*(kh - 1) -1)/sh + 1))
-    ow = int(floor((iw+2*pw - dw*(kw - 1) -1)/sw + 1))
+    oh = int(floor((_ih+2*ph - dh*(kh - 1) -1)/sh + 1))
+    ow = int(floor((_iw+2*pw - dw*(kw - 1) -1)/sw + 1))
 
     ui = torch.nn.functional.unfold(
             img,
@@ -61,6 +62,7 @@ if __name__ == '__main__':
     times = []
     torch.manual_seed(2)
     for i in range(30):
+        banana = 'potato'
         using_bias = True 
         channel_wise = True 
         groups = 1#ri(1, 3)

@@ -3,22 +3,32 @@ import torch
 import torchvision
 from torch.nn.modules.utils import _reverse_repeat_tuple
 from torch.nn.functional import pad
-    
-def svd_Linear(act_data, reduct_m, device):
 
-    reduct_m = reduct_m.to(device)
+# Our stuff 
+from peepholelib.coreVectors.dimReduction.utils import unroll_activations
+
+# TODO: add multiplication by diag(svd['s'])
+
+def linear_svd_projection(**kwargs):
+    act_data = kwargs['act_data'] 
+    svd = kwargs['svd'] 
+    device = kwargs['device'] 
+    
+    reduct_m = svd['Vh'].detach().to(device)
     n_act = act_data.shape[0]
     acts_flat = act_data.flatten(start_dim=1)
     ones = torch.ones(n_act, 1, device=device)
     _acts = torch.hstack((acts_flat, ones))
     cvs = (reduct_m@_acts.T).T
-    cvs = cvs.cpu()
 
     return cvs
 
-def svd_Linear_ViT(act_data, reduct_m, device):
+def linear_svd_projection_ViT(**kwargs):
+    act_data = kwargs['act_data'] 
+    svd = kwargs['svd'] 
+    device = kwargs['device'] 
 
-    reduct_m = reduct_m.to(device)
+    reduct_m = svd['Vh'].detach().to(device)
     n_act = act_data.shape[0]
     act_data = act_data[:, 0, :] # take 0-th patch
     
@@ -26,12 +36,16 @@ def svd_Linear_ViT(act_data, reduct_m, device):
     ones = torch.ones(n_act, 1, device=device)
     _acts = torch.hstack((acts_flat, ones))
     cvs = (reduct_m@_acts.T).T
-    cvs = cvs.cpu()
 
     return cvs
 
-def svd_Conv2D(act_data, reduct_m, layer, device):
-    reduct_m = reduct_m.to(device)
+def conv2d_toeplitz_svd_projection(**kwargs):
+    act_data = kwargs['act_data'] 
+    svd = kwargs['svd'] 
+    layer = kwargs['layer']
+    device = kwargs['device'] 
+
+    reduct_m = svd['Vh'].detach().to(device)
     pad_mode = layer.padding_mode if layer.padding_mode != 'zeros' else 'constant'
     padding = _reverse_repeat_tuple(layer.padding, 2) 
     n_act = act_data.shape[0]
@@ -56,6 +70,23 @@ def svd_Conv2D(act_data, reduct_m, layer, device):
     else:
         cvs = (reduct_m@_acts.T).T
 
-    cvs = cvs.cpu()
-        
+    return cvs
+
+def conv2d_kernel_svd_projection(**kwargs):
+    act_data = kwargs['act_data'] 
+    svd = kwargs['svd'] 
+    layer = kwargs['layer']
+    device = kwargs['device'] 
+
+    #print('layer: ', layer)
+    reduct_m = svd['Vh'].detach().to(device)
+    n_act = act_data.shape[0]
+    #print('act: ', act_data.shape)
+    #print('redu m: ', reduct_m.shape)
+    unrolled_acts, oh, ow = unroll_activations(acts=act_data, layer=layer)
+    #print('unrolled: ', unrolled_acts.shape)
+    #print(oh, ow)
+    cvs = reduct_m@unrolled_acts
+    #print('projected: ', p.shape)
+
     return cvs

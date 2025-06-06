@@ -49,6 +49,7 @@ def trim_channelwise_corevectors(**kwargs):
     _nc = _cv.shape[1] # n channels
     _r  = _cv.shape[2] # rank
     
+    print(_cv.shape)
     if cols is None:
         _tcv = _cv[:,:,0:cv_dim] # timmed cv
         _trcv = _tcv.reshape(_ns, _nc*cv_dim) # trimmed and reshaped cv
