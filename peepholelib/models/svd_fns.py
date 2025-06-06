@@ -110,7 +110,7 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
 def linear_svd(**kwargs):
     layer = kwargs['layer']
 
-    W_ = torch.hstack((layer.weight, bias.reshape(-1,1)))
+    W_ = torch.hstack((layer.weight, layer.bias.reshape(-1,1)))
     U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
 
     return U, s, Vh
@@ -138,7 +138,7 @@ def conv2d_toeplitz_svd(**kwargs):
     else:
         U, s, Vh = torch.svd_lowrank(W_, q=q)
 
-    return U, s, Vh
+    return U, s, Vh.T
 
 def conv2d_kernel_svd(**kwargs):
     layer = kwargs['layer']

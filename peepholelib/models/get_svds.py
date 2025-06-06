@@ -42,7 +42,7 @@ def get_svds(self, **kwargs):
             self(_in)
             in_shape = self._acts['in_activations'][mk].shape[1:]
         self.set_activations(save_input=False, save_output=False)
-        input(f'wait {mk}')        
+
         U, s, Vh = svd_fns[mk](layer=module, in_shape=in_shape) 
         U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
         _svds[mk] = TensorDict({
