@@ -105,7 +105,7 @@ def conv2d_kernel_svd_projection(**kwargs):
 
     Args:
     - act_data (torch.tensor): batched input activations
-    - svd (dict{torch.tensor}): SVDs of Toeplitz unrolled layer's kernel (see `models.svd_fns.conv2d_kernel_svd()`) 
+    - svd (dict{torch.tensor}): SVDs of kernel unrolled layer's kernel (see `models.svd_fns.conv2d_kernel_svd()`) 
     - layer (torch.nn.Conv2d): layer to get padding
     - device (torch.device): device to perform computations
     
@@ -118,14 +118,8 @@ def conv2d_kernel_svd_projection(**kwargs):
     layer = kwargs['layer']
     device = kwargs['device'] 
 
-    #print('layer: ', layer)
     reduct_m = svd['Vh'].detach().to(device)
     n_act = act_data.shape[0]
-    #print('act: ', act_data.shape)
-    #print('redu m: ', reduct_m.shape)
     unrolled_acts, ow, oh = unroll_conv2d_activations(acts=act_data, layer=layer)
-    #print('unrolled: ', unrolled_acts.shape)
-    #print('out sizes: ',oh, ow)
     cvs = (reduct_m@unrolled_acts).transpose(1, 2)
-    #print('projected: ', cvs.shape)
     return cvs
