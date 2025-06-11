@@ -9,6 +9,7 @@ import matplotlib.colors as colors
 # torch stuff
 import torch
 from peepholelib.peepholes.drill_base import DrillBase
+from peepholelib.coreVectors.dimReduction.avgPooling import ChannelWiseMean_conv
 from sklearn import covariance
 
 class DeepMahalanobisDistance(DrillBase): 
@@ -19,6 +20,7 @@ class DeepMahalanobisDistance(DrillBase):
         self._layer = kwargs['layer']
         self.magnitude = kwargs['magnitude']
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
+        self.parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
 
         # computed in fit()
         self._means = {} 
@@ -67,6 +69,7 @@ class DeepMahalanobisDistance(DrillBase):
         labels = dss[label_key].int()
         self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
+        
         for i in range(self.nl_model):
             self._means[i] = list_features[labels == i].mean(dim=0).to(self.device)
             list_features[labels == i] -= self._means[i]
@@ -90,6 +93,7 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         dss = kwargs['dss']
+        parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
 
         # get input image and set gradient to modify it
         data = self.parser(dss = dss)
@@ -107,9 +111,9 @@ class DeepMahalanobisDistance(DrillBase):
         if self._layer == 'output':
             output = self.model(data.to(self.device))
         else:
-            output = self.model._acts['out_activations'][self._layer]
-            output = output.view(output.size(0), output.size(1), -1)
-            output = torch.mean(output, 2)
+            output = self.parser_act(self.model._acts['out_activations'][self._layer])
+            # output = output.view(output.size(0), output.size(1), -1)
+            # output = torch.mean(output, 2)
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
@@ -143,9 +147,9 @@ class DeepMahalanobisDistance(DrillBase):
         if self._layer == 'output':
             output = self.model(tempInputs.to(self.device)) 
         else:
-            output = self.model._acts['out_activations'][self._layer]
-            output = output.view(output.size(0), output.size(1), -1)
-            output = torch.mean(output, 2)
+            output = self.parser_act(self.model._acts['out_activations'][self._layer])
+            # output = output.view(output.size(0), output.size(1), -1)
+            # output = torch.mean(output, 2)
 
         noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
