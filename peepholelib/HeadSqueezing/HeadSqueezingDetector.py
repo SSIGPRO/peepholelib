@@ -72,9 +72,7 @@ class HeadSqueezingDetector():
             ones = torch.ones(n_act, 1, device=self.device)
             _acts = torch.hstack((acts_flat, ones))
                 
-            self.output_dict['squeezed'] = (self._A@_acts.T).T
-            print()
-                
+            self.output_dict['squeezed'] = (self._A@_acts.T).T                
             self.output = self.score_fn(self.output_dict['ori'] - self.output_dict['squeezed'])
 
         elif mode == 'random':
