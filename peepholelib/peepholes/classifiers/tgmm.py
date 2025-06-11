@@ -16,7 +16,17 @@ class GMM(ClassifierBase): # quella buona
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
         
-        self._classifier = tGMM(num_components=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
+        self._classifier = tGMM(
+                num_components=self.nl_class,
+                **cls_kwargs,
+                trainer_params = dict(
+                    num_nodes = 1,
+                    accelerator = self.device.type,
+                    devices = [self.device.index],
+                    max_epochs = 50000,
+                    enable_progress_bar = True
+                    )
+                )
 
         self._clas_path = self.path/(self.name+'.GMM'+self._suffix)
         self._empp_file = self._clas_path/'empp.pt'
@@ -35,7 +45,9 @@ class GMM(ClassifierBase): # quella buona
             print('Parsing data')
 
         # temp dataloader for loading the whole dataset
+        print('parsing')
         data = self.parser(cvs=cvs)
+        print('parsed')
         
         if data.shape[1] != self.n_features:
             raise RuntimeError(f'Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
