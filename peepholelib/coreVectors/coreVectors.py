@@ -93,6 +93,7 @@ class CoreVectors():
 
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         loaders = kwargs['loaders']
+        mode = kwargs['mode'] if 'mode' in kwargs else 'r'
         norm_file = Path(kwargs['norm_file']) if 'norm_file' in kwargs else None 
 
         self._corevds = {}
@@ -104,8 +105,8 @@ class CoreVectors():
             _dss_file_paths = self.path/('dss.'+ds_key)
 
             if verbose: print(f'Loading files {_cvs_file_paths} and {_dss_file_paths} from disk. ')
-            self._corevds[ds_key] = PersistentTensorDict.from_h5(_cvs_file_paths, mode='r')
-            self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode='r')
+            self._corevds[ds_key] = PersistentTensorDict.from_h5(_cvs_file_paths, mode=mode)
+            self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode=mode)
 
             _n_samples = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
