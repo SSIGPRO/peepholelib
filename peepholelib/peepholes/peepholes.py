@@ -202,6 +202,7 @@ class Peepholes:
             # Check if peepholes exist before computing scores
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
+            print(self._phs[ds_key].keys())
 
             for module in target_modules if not target_modules is None else self._phs[ds_key].keys():
                 if module not in self._phs[ds_key]:

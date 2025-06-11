@@ -48,3 +48,13 @@ if __name__ == '__main__':
     print('after loading')
     td2 = PTD.from_h5('./banana', mode='r')
     p(td2, 5)
+    print('--------------')
+    print(td2)
+    td2.del_('a0')
+    print(td2)
+    print('--------------')
+
+    del td2
+
+    td3 = PTD.from_h5('./banana', mode='r')
+    print(td3)

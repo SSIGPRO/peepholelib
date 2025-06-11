@@ -170,6 +170,7 @@ def get_svds(self, **kwargs):
                 U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu().T
 
         elif isinstance(module, torch.nn.Linear):
+            print(bias)
             W_ = torch.hstack((weight, bias.reshape(-1,1)))
             U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
             U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
