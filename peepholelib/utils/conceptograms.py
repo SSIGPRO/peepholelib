@@ -52,9 +52,11 @@ def get_conceptogram(**kwargs):
         label = int(_d[label_key])
         pred = int(_d['pred'])
         output = pred_fn(_d['output'])
+        pred = output.argmax().item()
         conf = output.max() 
 
-        _, idx_topk = torch.topk(_c.sum(dim=0), krows,sorted=False)
+        _, idx_topk = torch.topk(_c.sum(dim=0), krows,sorted=True)
+
         classes_topk = [classes[i] for i in idx_topk.tolist()]
         tick_positions = idx_topk.cpu().tolist()
         print(tick_positions)
@@ -62,30 +64,32 @@ def get_conceptogram(**kwargs):
         tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
         print(tick_labels)
 
-        fig = plt.figure(figsize=(5,20))
+        fig = plt.figure(figsize=(20,20))
         gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
-        gss = gs[1].subgridspec(1, 2)
+        gss = gs[1].subgridspec(1, 2,  width_ratios=[3, 1])
         gs.tight_layout(fig, pad=1)
         axs = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gss[0,:-1]), fig.add_subplot(gss[0,-1])]
 
         # Plot the image
         axs[0].imshow(_d['image'].permute(1,2,0))
         axs[0].axis('off')
-        axs[0].set_title(f'True label: {classes[label]}', fontweight='bold')
+        axs[0].set_title(f'True label: {classes[label]}', fontweight='bold', fontsize=16)
 
         # Plot the conceptogram
-        axs[1].imshow(_c.T, aspect=1.2, vmin=0.0, vmax=1.0)
-        axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
-        axs[1].set_yticks(tick_positions, tick_labels)
+        font_size = 10 if len(ticks) <= 20 else 8
+        axs[1].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
+        axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=font_size)
+        axs[1].set_yticks(tick_positions)
+        axs[1].set_yticklabels(tick_labels, fontsize=16)
         axs[1].yaxis.tick_right()
         axs[1].set_xlabel('Layers')
 
         # Plot the bar with nn's sofmaxed output
         axs[2].imshow(output.reshape(-1,1), vmin=0.0, vmax=1.0)
-        #axs[2].set_title(f'Pred label: {classes[pred]}')
+        axs[2].set_title(f'Pred label: {classes[pred]}', fontsize=16)
         axs[2].set_xticks([])
         axs[2].set_yticks([pred])
-        axs[2].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold')
+        axs[2].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold', fontsize=16)
         axs[2].yaxis.set_label_position("right")
         axs[2].yaxis.tick_right()
         axs[2].set_xlabel('Output')
