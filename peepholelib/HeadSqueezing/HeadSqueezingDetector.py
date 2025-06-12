@@ -103,7 +103,7 @@ class HeadSqueezingDetector():
                             
                         score.append(self.score_fn(self.output_dict['ori'] - self.output_dict['squeezed']))
                     
-                    self.output = torch.mean(torch.stack(score), dim=0)
+                    self.output = torch.var(torch.stack(score), dim=0)
                     # print(score.shape)
 
         elif mode == 'last_k':
