@@ -1,6 +1,7 @@
 # Stuff used in evaluation ... will get out from here
 from collections import Counter
 import numpy as np
+from sklearn.metrics import roc_auc_score
 
 # plotting stuff
 from matplotlib import pyplot as plt
@@ -234,8 +235,15 @@ def conceptogram_cl_score(**kwargs):
     if not weights == None and not (isinstance(weights, list) and len(weights) == nd):
         raise RuntimeError('Weights should be \'None\' or a list with a value for each peephole in the conceptogram')
 
-    # for saving means and stds
-    m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
+    # prepare metrics dict
+    metrics = {
+        'auc': {},
+        'm_ok': {},
+        's_ok': {},
+        'm_ko': {},
+        's_ko': {}
+    }
+    
     for loader_n, ds_key in enumerate(loaders):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
@@ -258,9 +266,24 @@ def conceptogram_cl_score(**kwargs):
         results = cvs._dss[ds_key]['result']
         oks = (scores[results == True]).detach().cpu().numpy()
         kos = (scores[results == False]).detach().cpu().numpy()
-        m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-        m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
 
+        metrics['m_ok'][ds_key] = oks.mean()
+        metrics['s_ok'][ds_key] = oks.std()
+        metrics['m_ko'][ds_key] = kos.mean()
+        metrics['s_ko'][ds_key] = kos.std()
+
+        results_np = results.detach().cpu().numpy().astype(int)
+        scores_np = scores.detach().cpu().numpy()
+
+        try:
+            auc = roc_auc_score(results_np, scores_np)
+        except ValueError:
+            auc = float('nan')
+        metrics['auc'][ds_key] = auc
+
+        if verbose:
+            print(f'AUC for {ds_key} split: {auc:.4f}')
+        
         # plotting
         if plot:
             ax = axs[loader_n] 
@@ -268,11 +291,11 @@ def conceptogram_cl_score(**kwargs):
             sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
             ax.set_xlabel('score: Generalized f-KL')
             ax.set_ylabel('%')
-            ax.title.set_text(ds_key)
+            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
             ax.legend(title='dist')
 
     if plot:
         plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_CL.png', dpi=300, bbox_inches='tight')
         plt.close()
         
-    return scores, m_ok, s_ok, m_ko, s_ko
+    return scores, metrics
