@@ -113,6 +113,17 @@ def evaluate(**kwargs):
 
     return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
 
+def compute_top_k_accuracy(peepholes, targets, k):
+    """
+    peepholes: (Tensor [n_samples, n_classes])
+    targets: (Tensor [n_samples]) - true class labels
+    k: (int) - top-k to compute
+    """
+    topk = torch.topk(peepholes, k=k, dim=1).indices
+    targets = targets.unsqueeze(1).expand_as(topk)
+    correct = (topk == targets).any(dim=1).float()
+    return correct.mean().item()
+
 def conceptogram_ghl_score(**kwargs):
     phs = kwargs['peepholes']
     cvs = kwargs['corevectors']
