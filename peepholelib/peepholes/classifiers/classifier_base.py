@@ -38,7 +38,7 @@ class ClassifierBase(DrillBase):
     
     @abc.abstractmethod
     def load(self, **kwargs):
-        self._empp = torch.load(self._empp_file)
+        self._empp = torch.load(self._empp_file).to(self.device)
         pass 
 
     @abc.abstractmethod
@@ -87,7 +87,7 @@ class ClassifierBase(DrillBase):
 
         # replace NaN with 0
         _empp = torch.nan_to_num(_empp)
-        self._empp = _empp
+        self._empp = _empp.to(self.device)
         
         return 
     
@@ -101,10 +101,9 @@ class ClassifierBase(DrillBase):
         # # check for empiracal posterios `_empp`
         if self._empp == None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
-        _empp = self._empp.to(self.device)
         data = self.parser(cvs=cvs)
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
-        lp = cp@_empp
+        lp = cp@self._empp
         lp /= lp.sum(dim=1, keepdim=True)
 
         return lp

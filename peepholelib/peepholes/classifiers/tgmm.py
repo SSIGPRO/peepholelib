@@ -24,7 +24,7 @@ class GMM(ClassifierBase): # quella buona
                     accelerator = self.device.type,
                     devices = [self.device.index],
                     max_epochs = 50000,
-                    enable_progress_bar = True
+                    enable_progress_bar = False 
                     )
                 )
 
@@ -67,7 +67,7 @@ class GMM(ClassifierBase): # quella buona
         
         data = kwargs['data']
 
-        probs = torch.tensor(self._classifier.predict_proba(data), dtype=data.dtype)
+        probs = self._classifier.predict_proba(data).clone().detach()
 
         return probs   
     

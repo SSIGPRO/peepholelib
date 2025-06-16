@@ -10,7 +10,7 @@ import pandas as pd
 # torch stuff
 import torch
 from torch.distributions import Categorical
-from torcheval.metrics import AUC
+from torcheval.metrics import BinaryAUROC as AUC
 from torch.nn.functional import  softmax as sm
 
 # TODO: give a better name
