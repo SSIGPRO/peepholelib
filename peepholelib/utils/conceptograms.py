@@ -58,6 +58,7 @@ def plot_conceptogram(**kwargs):
         label = int(_d[label_key])
         pred = int(_d['pred'])
         output = pred_fn(_d['output'])
+        pred = output.argmax().item()
         conf = output.max() 
 
         _, idx_topk = torch.topk(_c.sum(dim=0), krows, sorted=True)
@@ -111,8 +112,9 @@ def plot_conceptogram(**kwargs):
             axs[1].set_title('Protoclass')
 
         # Plot the conceptogram
+        font_size = 10 if len(ticks) <= 20 else 8
         axs[-2].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
-        axs[-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
+        axs[-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=font_size)
         axs[-2].set_yticks(tick_positions, tick_labels)
         axs[-2].yaxis.tick_right()
         axs[-2].set_title('Conceptogram')
