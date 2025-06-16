@@ -1,7 +1,6 @@
 # Stuff used in evaluation ... will get out from here
 from collections import Counter
 import numpy as np
-from sklearn.metrics import roc_auc_score
 
 # plotting stuff
 from matplotlib import pyplot as plt
@@ -11,6 +10,7 @@ import pandas as pd
 # torch stuff
 import torch
 from torch.distributions import Categorical
+from torcheval.metrics import AUC
 from torch.nn.functional import  softmax as sm
 
 # TODO: give a better name
@@ -283,12 +283,11 @@ def conceptogram_cl_score(**kwargs):
         metrics['m_ko'][ds_key] = kos.mean()
         metrics['s_ko'][ds_key] = kos.std()
 
-        results_np = results.detach().cpu().numpy().astype(int)
-        scores_np = scores.detach().cpu().numpy()
-
         try:
-            auc = roc_auc_score(results_np, scores_np)
-        except ValueError:
+            auc_metric = AUC()
+            auc_metric.update(scores.detach().cpu(), results.to(dtype=torch.int32).detach().cpu())
+            auc = auc_metric.compute().item()
+        except Exception:
             auc = float('nan')
         metrics['auc'][ds_key] = auc
 
