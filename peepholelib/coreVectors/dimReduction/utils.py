@@ -53,4 +53,4 @@ def unroll_conv2d_activations(acts, layer):
         ones = torch.ones(ui.shape[0], 1, oh*ow).to(ui.device)
         ui = torch.hstack((ui, ones))
 
-    return ui, oh, ow 
+    return ui 

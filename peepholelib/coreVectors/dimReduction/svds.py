@@ -120,6 +120,6 @@ def conv2d_kernel_svd_projection(**kwargs):
 
     reduct_m = svd['Vh'].detach().to(device)
     n_act = act_data.shape[0]
-    unrolled_acts, ow, oh = unroll_conv2d_activations(acts=act_data, layer=layer)
+    unrolled_acts = unroll_conv2d_activations(acts=act_data, layer=layer)
     cvs = (reduct_m@unrolled_acts).transpose(1, 2)
     return cvs
