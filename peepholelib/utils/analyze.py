@@ -10,6 +10,7 @@ import pandas as pd
 # torch stuff
 import torch
 from torch.distributions import Categorical
+from torcheval.metrics import AUC
 from torch.nn.functional import  softmax as sm
 
 # TODO: give a better name
@@ -111,6 +112,17 @@ def evaluate(**kwargs):
         plt.close()
 
     return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
+
+def compute_top_k_accuracy(peepholes, targets, k):
+    """
+    peepholes: (Tensor [n_samples, n_classes])
+    targets: (Tensor [n_samples]) - true class labels
+    k: (int) - top-k to compute
+    """
+    topk = torch.topk(peepholes, k=k, dim=1).indices
+    targets = targets.unsqueeze(1).expand_as(topk)
+    correct = (topk == targets).any(dim=1).float()
+    return correct.mean().item()
 
 def conceptogram_ghl_score(**kwargs):
     phs = kwargs['peepholes']
@@ -234,8 +246,15 @@ def conceptogram_cl_score(**kwargs):
     if not weights == None and not (isinstance(weights, list) and len(weights) == nd):
         raise RuntimeError('Weights should be \'None\' or a list with a value for each peephole in the conceptogram')
 
-    # for saving means and stds
-    m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
+    # prepare metrics dict
+    metrics = {
+        'auc': {},
+        'm_ok': {},
+        's_ok': {},
+        'm_ko': {},
+        's_ko': {}
+    }
+    
     for loader_n, ds_key in enumerate(loaders):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
@@ -258,9 +277,23 @@ def conceptogram_cl_score(**kwargs):
         results = cvs._dss[ds_key]['result']
         oks = (scores[results == True]).detach().cpu().numpy()
         kos = (scores[results == False]).detach().cpu().numpy()
-        m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-        m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
 
+        metrics['m_ok'][ds_key] = oks.mean()
+        metrics['s_ok'][ds_key] = oks.std()
+        metrics['m_ko'][ds_key] = kos.mean()
+        metrics['s_ko'][ds_key] = kos.std()
+
+        try:
+            auc_metric = AUC()
+            auc_metric.update(scores.detach().cpu(), results.to(dtype=torch.int32).detach().cpu())
+            auc = auc_metric.compute().item()
+        except Exception:
+            auc = float('nan')
+        metrics['auc'][ds_key] = auc
+
+        if verbose:
+            print(f'AUC for {ds_key} split: {auc:.4f}')
+        
         # plotting
         if plot:
             ax = axs[loader_n] 
@@ -268,11 +301,11 @@ def conceptogram_cl_score(**kwargs):
             sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
             ax.set_xlabel('score: Generalized f-KL')
             ax.set_ylabel('%')
-            ax.title.set_text(ds_key)
+            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
             ax.legend(title='dist')
 
     if plot:
         plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_CL.png', dpi=300, bbox_inches='tight')
         plt.close()
         
-    return scores, m_ok, s_ok, m_ko, s_ko
+    return scores, metrics
