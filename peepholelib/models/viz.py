@@ -12,6 +12,7 @@ def viz_singular_values(wrap, dir_path):
         img_name = Path(key + '.png')
 
         fig = plt.figure(figsize=(8, 5))
+
         plt.plot(item['s'])
 
         plt.title(key)
@@ -21,6 +22,40 @@ def viz_singular_values(wrap, dir_path):
 
         #plt.show()
         plt.savefig(fname=dir_path/img_name)
+        plt.close(fig)
+
+def viz_singular_values_2(model, dir_path):
+    """
+    Plots singular values stored in model._svds[layer]['s'].
+    Works for both Conv2d and Linear layers because the SVD format is identical.
+    """
+
+    dir_path = Path(dir_path)
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+    for layer_name, svd_dict in model._svds.items():
+
+        s = svd_dict['s']         # (rank,) or (channels, rank)
+        img_name = Path(layer_name.replace('.', '_') + '.png')
+
+        fig = plt.figure(figsize=(8, 5))
+
+        if s.ndim == 1:
+            # Standard SVD
+            plt.plot(s)
+
+        else:
+            # Channel-wise Toeplitz SVD for Conv2d
+            for ch in range(s.shape[0]):
+                plt.plot(s[ch], alpha=0.6)
+
+        plt.title(layer_name)
+        plt.xlabel("Index")
+        plt.ylabel("Singular Value")
+        plt.yscale("log")
+        plt.grid(True, linestyle="--", alpha=0.5)
+
+        plt.savefig(dir_path / img_name)
         plt.close(fig)
 
 
@@ -93,3 +128,6 @@ def viz_compare_per_layer_type(wrap, dir_path):         #TODO remove self_attent
             
         plt.savefig(fname=dir_path/Path(key_layers))
         plt.close(fig)
+
+
+   

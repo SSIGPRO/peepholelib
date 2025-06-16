@@ -132,3 +132,13 @@ mobilenet_v2_cifar10_augumentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     mobilenet_v2
     ])
+
+#-----------------------------
+# Mobilenet on ImageNet
+#-----------------------------
+
+mobilenet_imagenet = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    ]) 
+

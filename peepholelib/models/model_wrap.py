@@ -67,6 +67,7 @@ class Hook:
 class ModelWrap(metaclass=abc.ABCMeta):
 
     from .get_svds import get_svds
+    from .get_rand_proj import get_random_projs
 
     def __init__(self, **kwargs):
         # device for NN
@@ -84,6 +85,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         # computed in get_svds()
         self._svds = None
+
+        self._rand_projs = None
 
         # set on __call__()
         self._acts = None

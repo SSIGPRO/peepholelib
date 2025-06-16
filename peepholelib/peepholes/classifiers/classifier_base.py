@@ -2,6 +2,9 @@
 import abc  
 from pathlib import Path
 from tqdm import tqdm
+from matplotlib import pyplot as plt
+import numpy as np
+
 
 # torch stuff
 import torch
@@ -102,6 +105,40 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         self._empp = _empp.to(self.device)
         
         return 
+    
+    def empirical_posterior_heatmap(self):
+        '''
+            Saves empirical posterior heatmap of each layer in the drillers directory
+        '''
+
+        if self._empp is None:
+            print(f"[{self.name}] No empirical posterior available.")
+            return
+
+        empp = self._empp  # shape: [n_clusters, n_classes]
+        print(f"Empirical Posterior shape for {self.name}: {empp.shape}")
+
+        dir = self._clas_path
+        dir.mkdir(parents=True, exist_ok=True)
+
+        fig, ax = plt.subplots(figsize=(12, 8))
+        im = ax.imshow(empp.cpu().numpy(), aspect='auto', cmap='viridis', interpolation='nearest')
+
+        ax.set_xlabel("Model Classes")
+        ax.set_ylabel("Cluster Index")
+        ax.set_title(f"Empirical Posterior - {self.name}")
+
+        ax.set_xticks(np.linspace(0, empp.shape[1] - 1, min(20, empp.shape[1]), dtype=int))
+        ax.set_yticks(np.linspace(0, empp.shape[0] - 1, min(20, empp.shape[0]), dtype=int))
+
+        fig.colorbar(im, ax=ax, label="P(g|c)")
+
+        filename = f"empirical_posterior_{self.name.replace('.', '_')}.png"
+        filepath = Path(dir) / filename
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=300)
+        plt.close()
+        print(f"Saved: {filepath}")
     
     def __call__(self, **kwargs):
         '''

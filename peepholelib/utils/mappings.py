@@ -14,3 +14,4 @@ def map_labels(**kwargs):
             if label in old_labels:
                 mapped_labels.append(new_label)
     return torch.tensor(mapped_labels)
+
