@@ -101,7 +101,7 @@ def conv2d_toeplitz_svd_projection(**kwargs):
 
 def conv2d_kernel_svd_projection(**kwargs):
     '''
-    Applies the kernel SVD projection to `torch.Conv2d` activations. The output has shape `[ns, q, ???]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
+    Applies the kernel SVD projection to `torch.Conv2d` activations. The output has shape `[ns, q, oh*ow]`, where `ns` is the number of samples in the batch, `q` the SVD rank, and `oh,ow` are the layer output image sizes.
 
     Args:
     - act_data (torch.tensor): batched input activations
