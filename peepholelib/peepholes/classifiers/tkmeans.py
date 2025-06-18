@@ -18,7 +18,17 @@ class KMeans(ClassifierBase): # quella buona
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
 
-        self._classifier = tKMeans(num_clusters=self.nl_class, **cls_kwargs, trainer_params=dict(num_nodes=1, accelerator=self.device.type, devices=[self.device.index], max_epochs=5000, enable_progress_bar=True))
+        self._classifier = tKMeans(
+                num_clusters = self.nl_class,
+                **cls_kwargs,
+                trainer_params = dict(
+                    num_nodes = 1,
+                    accelerator = self.device.type,
+                    devices = [self.device.index],
+                    max_epochs = 5000,
+                    enable_progress_bar = False
+                    )
+                )
 
         self._clas_path = self.path/(self.name+'.KMeans'+self._suffix)
         self._empp_file = self._clas_path/'empp.pt'
@@ -58,7 +68,7 @@ class KMeans(ClassifierBase): # quella buona
         
         data = kwargs['data']
 
-        distances = torch.tensor(self._classifier.transform(data), dtype=data.dtype)
+        distances = self._classifier.transform(data).clone().detach()
         
         # changing strategy: back to softmin
         probs = torch.nn.functional.softmin(distances, dim=1)
