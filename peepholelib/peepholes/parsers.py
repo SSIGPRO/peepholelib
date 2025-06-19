@@ -101,12 +101,12 @@ def trim_kernel_corevectors(**kwargs):
     
     _cv = cvs[module]
     _ns = _cv.shape[0] # n samples
-    _os = _cv.shape[1] # n kernels 
+    _ks = _cv.shape[1] # n kernels 
     _r  = _cv.shape[2] # rank
     
     # trim and reshape cvs
     _tcv = _cv[...,0:cv_dim]
-    trcv = _tcv.reshape(_ns, _os*cv_dim)
+    trcv = _tcv.reshape(_ns, _ks*cv_dim)
     
     if dss == None:
         return trcv 
