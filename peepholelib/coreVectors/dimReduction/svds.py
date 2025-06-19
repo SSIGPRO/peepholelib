@@ -7,8 +7,6 @@ from torch.nn.functional import pad
 # Our stuff 
 from peepholelib.coreVectors.dimReduction.utils import unroll_conv2d_activations
 
-# TODO: add multiplication by diag(svd['s'])
-
 def linear_svd_projection(**kwargs):
     '''
     Applies the SVD projection to `torch.Linear` activations. The output has shape `[ns, q]`, where `ns` is the number of samples in the batch, and `q` the SVD rank.
@@ -24,9 +22,14 @@ def linear_svd_projection(**kwargs):
 
     act_data = kwargs['act_data'] 
     svd = kwargs['svd'] 
+    use_s = kwargs.get('use_s', False)
     device = kwargs['device'] 
     
-    reduct_m = svd['Vh'].detach().to(device)
+    if use_s:
+        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+    else:
+        reduct_m = svd['Vh'].detach().to(device)
+
     n_act = act_data.shape[0]
     acts_flat = act_data.flatten(start_dim=1)
     ones = torch.ones(n_act, 1, device=device)
@@ -41,9 +44,14 @@ def linear_svd_projection_ViT(**kwargs):
     '''
     act_data = kwargs['act_data'] 
     svd = kwargs['svd'] 
+    use_s = kwargs.get('use_s', False)
     device = kwargs['device'] 
 
-    reduct_m = svd['Vh'].detach().to(device)
+    if use_s:
+        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+    else:
+        reduct_m = svd['Vh'].detach().to(device)
+
     n_act = act_data.shape[0]
     act_data = act_data[:, 0, :] # take 0-th patch
     
@@ -70,9 +78,14 @@ def conv2d_toeplitz_svd_projection(**kwargs):
     act_data = kwargs['act_data'] 
     svd = kwargs['svd'] 
     layer = kwargs['layer']
+    use_s = kwargs.get('use_s', False)
     device = kwargs['device'] 
 
-    reduct_m = svd['Vh'].detach().to(device)
+    if use_s:
+        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+    else:
+        reduct_m = svd['Vh'].detach().to(device)
+
     pad_mode = layer.padding_mode if layer.padding_mode != 'zeros' else 'constant'
     padding = _reverse_repeat_tuple(layer.padding, 2) 
     n_act = act_data.shape[0]
@@ -116,9 +129,14 @@ def conv2d_kernel_svd_projection(**kwargs):
     act_data = kwargs['act_data'] 
     svd = kwargs['svd'] 
     layer = kwargs['layer']
+    use_s = kwargs.get('use_s', False)
     device = kwargs['device'] 
+    
+    if use_s:
+        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+    else:
+        reduct_m = svd['Vh'].detach().to(device)
 
-    reduct_m = svd['Vh'].detach().to(device)
     n_act = act_data.shape[0]
     unrolled_acts = unroll_conv2d_activations(acts=act_data, layer=layer)
     cvs = (reduct_m@unrolled_acts).transpose(1, 2)

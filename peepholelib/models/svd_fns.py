@@ -10,12 +10,13 @@ from peepholelib.models.utils import c2s
 
 def linear_svd(**kwargs):
     layer = kwargs['layer']
+    q = kwargs['rank'] if 'rank' in kwargs else 300
     device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
     W_ = torch.hstack((layer.weight, layer.bias.reshape(-1,1))).to(device)
-    U, s, Vh = torch.linalg.svd(W_, full_matrices=False)
+    U, s, Vh = torch.svd_lowrank(W_, q)
 
-    return U, s, Vh
+    return U, s, Vh.T
 
 def conv2d_toeplitz_svd(**kwargs):
     layer = kwargs['layer']
@@ -45,6 +46,7 @@ def conv2d_toeplitz_svd(**kwargs):
 
 def conv2d_kernel_svd(**kwargs):
     layer = kwargs['layer']
+    q = kwargs['rank'] if 'rank' in kwargs else 300
     device = kwargs['device'] if 'device' in kwargs else 'cpu'
     uw = layer.weight.flatten(start_dim=1, end_dim=-1)
                                                        
@@ -52,5 +54,5 @@ def conv2d_kernel_svd(**kwargs):
         uw = torch.hstack([uw, layer.bias.view(-1,1)])
     
     uw = uw.to(device)
-    U, s, Vh = torch.linalg.svd(uw, full_matrices=False)
-    return U, s, Vh
+    U, s, Vh = torch.svd_lowrank(uw, q=q)
+    return U, s, Vh.T

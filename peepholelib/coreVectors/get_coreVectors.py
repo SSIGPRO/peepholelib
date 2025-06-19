@@ -71,20 +71,21 @@ def get_coreVectors(self, **kwargs):
         # check if module in and out activations exist
         _modules_to_save = []
 
-        # allocate for core vectors 
+        if has_acts:
+            # get cv shape from data
+            _act0 = activations_parser(self._dss[ds_key][0:1])
+        else:
+            # Dry run to get shape
+            with torch.no_grad():
+                model(self._dss[ds_key][0:1]['image'].to(device))
+                _act0 = activations_parser(model._acts)
+
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
-                if verbose: print('allocating core vectors for module: ', mk)
-                if has_acts:
-                    # get cv shape from data
-                    _act0 = activations_parser(self._dss[ds_key][0:1])[mk]
-                else:
-                    # Dry run to get shape
-                    with torch.no_grad():
-                        model(self._dss[ds_key][0:1]['image'].to(device))
-                        _act0 = activations_parser(model._acts)[mk]
-                cv_shape = reduction_fns[mk](act_data=_act0).shape[1:]
+                cv_shape = reduction_fns[mk](act_data=_act0[mk]).shape[1:]
 
+                # allocate for core vectors 
+                if verbose: print('allocating core vectors for module: ', mk)
                 self._corevds[ds_key][mk] = MMT.empty(shape=((n_samples,)+cv_shape))
                 _modules_to_save.append(mk)
 

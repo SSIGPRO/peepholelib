@@ -40,14 +40,10 @@ class GMM(ClassifierBase): # quella buona
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         cvs = kwargs['corevectors']
         
-        if verbose: 
-            print('\n ---- GMM classifier\n')
-            print('Parsing data')
+        if verbose: print('\n ---- GMM classifier\n')
 
         # temp dataloader for loading the whole dataset
-        print('parsing')
         data = self.parser(cvs=cvs)
-        print('parsed')
         
         if data.shape[1] != self.n_features:
             raise RuntimeError(f'Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
