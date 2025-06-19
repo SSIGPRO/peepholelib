@@ -127,6 +127,7 @@ def compute_top_k_accuracy(peepholes, targets, k):
 def conceptogram_ghl_score(**kwargs):
     phs = kwargs['peepholes']
     cvs = kwargs['corevectors']
+    target_layers = kwargs['target_layers']
     loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
     basis = kwargs['basis'] if 'basis' in kwargs else 'from_baricenter' 
     weights = kwargs['weights'] if 'weights' in kwargs else 'entropy' 
@@ -135,7 +136,7 @@ def conceptogram_ghl_score(**kwargs):
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
     # compute conceptogram entropy
-    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders)
+    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders, target_modules=target_layers)
 
     if plot:
         fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
@@ -217,15 +218,18 @@ def conceptogram_ghl_score(**kwargs):
 def conceptogram_cl_score(**kwargs):
     phs = kwargs['peepholes']
     cvs = kwargs['corevectors']
+    target_layers = kwargs['target_layers']
     loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
     basis = kwargs['basis'] if 'basis' in kwargs else 'from_baricenter' 
     weights = kwargs['weights'] if 'weights' in kwargs else None 
     bins = kwargs['bins'] if 'bins' in kwargs else 20 
     plot = kwargs['plot'] if 'plot' in kwargs else False
+    score_type = kwargs['score_type'] if  'score_type' in kwargs else 'entropy' # or 'max'
+
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
 
     # compute conceptogram entropy
-    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders)
+    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders, target_modules = target_layers)
 
     if plot:
         fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
@@ -234,13 +238,6 @@ def conceptogram_cl_score(**kwargs):
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
     nc = cpss[loaders[0]].shape[2] # number of classes
-
-    # for normalization
-    _line = torch.zeros(nc)
-    _line[0] = 1
-    min_e = Categorical(probs=_line).entropy()
-    _unif = torch.ones(nc)/nc
-    max_e = Categorical(probs=_unif).entropy()
 
     # some checks
     if not weights == None and not (isinstance(weights, list) and len(weights) == nd):
@@ -258,7 +255,7 @@ def conceptogram_cl_score(**kwargs):
     for loader_n, ds_key in enumerate(loaders):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
-        
+
         if weights == None:
             _w_cps = cps/nd
         else:
@@ -267,11 +264,25 @@ def conceptogram_cl_score(**kwargs):
                                                                    
         # the values are already divided in the if statement above
         _means = _w_cps.sum(dim=1)
-        
-        s = Categorical(probs=_means).entropy() 
-                                                                   
-        # normalize it
-        scores = 1-(s-min_e)/(max_e-min_e)
+
+        if score_type == 'entropy':
+            _line = torch.zeros(nc)
+            _line[0] = 1
+            min_e = Categorical(probs=_line).entropy()
+            _unif = torch.ones(nc)/nc
+            max_e = Categorical(probs=_unif).entropy()
+            s = Categorical(probs=_means).entropy() 
+            scores = 1-(s-min_e)/(max_e-min_e) # normalize 
+
+        elif score_type == 'max':
+            max_probs = _means.max(dim=1).values
+            min_p = 1.0 / nc  # uniform
+            max_p = 1.0       # one-hot
+            scores = (max_probs - min_p) / (max_p - min_p)
+       
+        else:
+            raise ValueError("Invalid score_metric. Only 'entropy' or 'max_softmax' are available.")
+
 
         # plotting 
         results = cvs._dss[ds_key]['result']
