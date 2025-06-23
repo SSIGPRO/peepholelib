@@ -1,6 +1,5 @@
-# Stuff used in evaluation ... will get out from here
-from collections import Counter
-import numpy as np
+# General pytho stuff
+from tqdm import tqdm
 
 # plotting stuff
 from matplotlib import pyplot as plt
@@ -13,106 +12,6 @@ from torch.distributions import Categorical
 from torcheval.metrics import BinaryAUROC as AUC
 from torch.nn.functional import  softmax as sm
 
-# TODO: give a better name
-def evaluate_dists(**kwargs):
-    phs = kwargs['peepholes']
-    dss = kwargs['dataset']
-
-    score_type = kwargs['score_type']
-    bins = kwargs['bins'] if 'bins' in kwargs else 100
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-
-    for module in phs.target_modules:
-        print(f'\n-------------\nEvaluating Distributions for module {module}\n-------------\n') 
-        
-        n_dss = len(phs._phs.keys())
-        fig, axs = plt.subplots(1, n_dss+1, sharex='all', sharey='all', figsize=(4*(1+n_dss), 4))
-        
-        m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
-
-        for i, ds_key in enumerate(phs._phs.keys()):       # train val test
-            if verbose: print(f'Evaluating {ds_key}')
-            results = dss[ds_key]['result']
-            scores = phs._phs[ds_key][module]['score_'+score_type]
-            oks = (scores[results == True]).detach().cpu().numpy()
-            kos = (scores[results == False]).detach().cpu().numpy()
-
-            m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-            m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
-
-            #--------------- 
-            # plotting
-            #---------------
-            ax = axs[i+1]
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: '+score_type)
-            ax.set_ylabel('%')
-            ax.title.set_text(ds_key)
-            ax.legend(title='dist')
-        
-        # plot train and test distributions
-        ax = axs[0]
-        scores = phs._phs['train'][module]['score_'+score_type].detach().cpu().numpy()
-        sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='train n=%d'%len(scores), alpha=0.5)
-        scores = phs._phs['val'][module]['score_'+score_type].detach().cpu().numpy()
-        sb.histplot(data=pd.DataFrame({'score': scores}), ax=ax, bins=bins, x='score', stat='density', label='val n=%d'%len(scores), alpha=0.5)
-        ax.set_ylabel('%')
-        ax.set_xlabel('score: '+score_type)
-        ax.legend(title='datasets')
-        plt.savefig((phs.path/phs.name).as_posix()+'.'+score_type+f'.dists.{module}.png', dpi=300, bbox_inches='tight')
-        plt.close()
-
-        if verbose: print('oks mean, std, n: ', m_ok, s_ok, len(oks), '\nkos, mean, std, n', m_ko, s_ko, len(kos))
-
-    return m_ok, s_ok, m_ko, s_ko
-
-# TODO: give a better name
-def evaluate(**kwargs): 
-    phs = kwargs['peepholes']
-    cvs = kwargs['corevectors']
-
-    score_type = kwargs['score_type']
-    
-    for module in phs.target_modules:
-        quantiles = torch.arange(0, 1, 0.001) # setting quantiles list
-        prob_train = phs._phs['train'][module]['peepholes']
-        prob_val = phs._phs['val'][module]['peepholes']
-        
-        # TODO: vectorize
-        conf_t = phs._phs['train'][module]['score_'+score_type].detach().cpu() 
-        conf_v = phs._phs['val'][module]['score_'+score_type].detach().cpu() 
-
-        th = [] 
-        lt = []
-        lf = []
-
-        c = cvs._actds['val']['result'].detach().cpu().numpy()
-        cntt = Counter(c) 
-        
-        for q in quantiles:
-            perc = torch.quantile(conf_t, q)
-            th.append(perc)
-            idx = torch.argwhere(conf_v > perc)[:,0]
-
-            # TODO: vectorize
-            cnt = Counter(c[idx]) 
-            lt.append(cnt[True]/cntt[True]) 
-            lf.append(cnt[False]/cntt[False])
-
-        plt.figure()
-        x = quantiles.numpy()
-        y1 = np.array(lt)
-        y2 = np.array(lf)
-        plt.plot(x, y1, label='OK', c='b')
-        plt.plot(x, y2, label='KO', c='r')
-        plt.plot(np.array([0., 1.]), np.array([1., 0.]), c='k')
-        plt.legend()
-        plt.savefig((phs.path/phs.name).as_posix()+'.'+score_type+f'.conf.{module}.png', dpi=300, bbox_inches='tight')
-        plt.close()
-
-    return np.linalg.norm(y1-y2), np.linalg.norm(y1-y2)
-
 def compute_top_k_accuracy(peepholes, targets, k):
     """
     peepholes: (Tensor [n_samples, n_classes])
@@ -124,108 +23,19 @@ def compute_top_k_accuracy(peepholes, targets, k):
     correct = (topk == targets).any(dim=1).float()
     return correct.mean().item()
 
-def conceptogram_ghl_score(**kwargs):
-    phs = kwargs['peepholes']
-    cvs = kwargs['corevectors']
-    loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
-    basis = kwargs['basis'] if 'basis' in kwargs else 'from_baricenter' 
-    weights = kwargs['weights'] if 'weights' in kwargs else 'entropy' 
-    bins = kwargs['bins'] if 'bins' in kwargs else 20 
-    plot = kwargs['plot'] if 'plot' in kwargs else False
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-
-    # compute conceptogram entropy
-    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders)
-
-    if plot:
-        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
-        _bins = torch.arange(0, 1+1/bins, 1/bins)
-
-    # sizes just to facilitate 
-    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
-    nc = cpss[loaders[0]].shape[2] # number of classes
-
-    # some checks
-    if not weights == 'entropy' and not (isinstance(weights, list) and len(weights) == nd):
-        raise RuntimeError(f'Weights should be \'entropy\' or a list with a value for each peephole in the conceptogram. Got {weights}')
-    
-    if not basis == 'from_baricenter' and not basis=='from_output':
-        raise RuntimeError(f'Basis should be \'from_baricenter\' or \'from_output\'. Got {basis}')
-
-    # for saving means and stds
-    m_ok, s_ok, m_ko, s_ko = {}, {}, {}, {}
-    for loader_n, ds_key in enumerate(loaders):
-        cps = cpss[ds_key]
-        ns = cps.shape[0] # number of samples
-        
-        if basis == 'from_baricenter':
-            rbari = (cps.sum(dim=1)/nd).sqrt()
-            refs = torch.zeros(ns, nc)
-            bds = torch.inf*torch.ones(ns)
-            for i in range(nc):
-                # note that base == base.sqrt()
-                base = torch.zeros(nc)
-                base[i] = 1.0
-                # Hellinger distance form base
-                bd = (torch.tensor(1/2).sqrt())*((rbari-base).norm(dim=1)) 
-                refs[bd<bds,:] = base
-                bds[bd<bds] = bd[bd<bds]
-        elif basis == 'from_output':
-            _refs = torch.zeros(ns, nc)
-            idx = cvs._dss[ds_key]['pred'].int()
-            _refs[torch.arange(ns),idx] = 1.
-            refs = _refs
-
-        refs = refs.unsqueeze(1)
-        rcps = cps.sqrt()
-        dists = (torch.tensor(1/2).sqrt())*(rcps-refs).norm(dim=2)
-        
-        if weights == 'entropy':
-            _w = torch.zeros(ns, nd)
-            for i in range(nd):
-                _w[:,i] = Categorical(probs=cps[:,i,:]).entropy() 
-        else:
-            _w = torch.tensor(weights).unsqueeze(0)
-
-        s = ((dists*_w).sum(dim=1))/_w.sum(dim=1)
-        # normalize it
-        scores = 1-s
-
-        # plotting 
-        results = cvs._dss[ds_key]['result']
-        oks = (scores[results == True]).detach().cpu().numpy()
-        kos = (scores[results == False]).detach().cpu().numpy()
-        m_ok[ds_key], s_ok[ds_key] = oks.mean(), oks.std()
-        m_ko[ds_key], s_ko[ds_key] = kos.mean(), kos.std()
-
-        # plotting
-        if plot:
-            ax = axs[loader_n] 
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: Generalized f-KL')
-            ax.set_ylabel('%')
-            ax.title.set_text(ds_key)
-            ax.legend(title='dist')
-
-    if plot:
-        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_gHL.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-    return scores, m_ok, s_ok, m_ko, s_ko
-
 def conceptogram_cl_score(**kwargs):
-    phs = kwargs['peepholes']
-    cvs = kwargs['corevectors']
-    loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
-    basis = kwargs['basis'] if 'basis' in kwargs else 'from_baricenter' 
-    weights = kwargs['weights'] if 'weights' in kwargs else None 
-    bins = kwargs['bins'] if 'bins' in kwargs else 20 
-    plot = kwargs['plot'] if 'plot' in kwargs else False
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    phs = kwargs.get('peepholes')
+    cvs = kwargs.get('corevectors')
+    loaders = kwargs.get('loaders', ['test'])
+    weights = kwargs.get('weights', None) 
+    bins = kwargs.get('bins', 20)
+    target_modules = kwargs.get('target_modules', None)
+    plot = kwargs.get('plot', False)
+    verbose = kwargs.get('verbose', False)
+    score_type = kwargs.get('score_type', 'entropy')
 
     # compute conceptogram entropy
-    cpss = phs.get_conceptograms(verbose=verbose, loaders=loaders)
+    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
         fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
@@ -246,18 +56,16 @@ def conceptogram_cl_score(**kwargs):
     if not weights == None and not (isinstance(weights, list) and len(weights) == nd):
         raise RuntimeError('Weights should be \'None\' or a list with a value for each peephole in the conceptogram')
 
-    # prepare metrics dict
-    metrics = {
+    # prepare returns dict
+    ret = {
+        'score': {}, 
         'auc': {},
-        'm_ok': {},
-        's_ok': {},
-        'm_ko': {},
-        's_ko': {}
     }
     
     for loader_n, ds_key in enumerate(loaders):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
+        results = cvs._dss[ds_key]['result']
         
         if weights == None:
             _w_cps = cps/nd
@@ -268,38 +76,38 @@ def conceptogram_cl_score(**kwargs):
         # the values are already divided in the if statement above
         _means = _w_cps.sum(dim=1)
         
-        s = Categorical(probs=_means).entropy() 
-                                                                   
-        # normalize it
-        scores = 1-(s-min_e)/(max_e-min_e)
-
-        # plotting 
-        results = cvs._dss[ds_key]['result']
-        oks = (scores[results == True]).detach().cpu().numpy()
-        kos = (scores[results == False]).detach().cpu().numpy()
-
-        metrics['m_ok'][ds_key] = oks.mean()
-        metrics['s_ok'][ds_key] = oks.std()
-        metrics['m_ko'][ds_key] = kos.mean()
-        metrics['s_ko'][ds_key] = kos.std()
+        if score_type == 'entropy':
+            s = Categorical(probs=_means).entropy() 
+                                                                
+            # normalize it
+            scores = 1-(s-min_e)/(max_e-min_e)
+        elif score_type == 'max_min':
+            _max = _means.max(dim=-1, keepdim=True).values
+            _min = _means.min(dim=-1, keepdim=True).values
+            scores = (_max-_min).squeeze()
 
         try:
             auc_metric = AUC()
-            auc_metric.update(scores.detach().cpu(), results.to(dtype=torch.int32).detach().cpu())
+            auc_metric.update(scores, results.int())
             auc = auc_metric.compute().item()
         except Exception:
             auc = float('nan')
-        metrics['auc'][ds_key] = auc
-
-        if verbose:
-            print(f'AUC for {ds_key} split: {auc:.4f}')
         
+        # Save returns
+        ret['score'][ds_key] = scores
+        ret['auc'][ds_key] = auc
+
+        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+
         # plotting
         if plot:
+            oks = (scores[results == True]).detach().cpu().numpy()
+            kos = (scores[results == False]).detach().cpu().numpy()
+
             ax = axs[loader_n] 
             sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
             sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: Generalized f-KL')
+            ax.set_xlabel('score: CL')
             ax.set_ylabel('%')
             ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
             ax.legend(title='dist')
@@ -308,4 +116,173 @@ def conceptogram_cl_score(**kwargs):
         plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_CL.png', dpi=300, bbox_inches='tight')
         plt.close()
         
-    return scores, metrics
+    return ret 
+
+def conceptogram_entropy_score(**kwargs):
+    phs = kwargs['peepholes']
+    cvs = kwargs['corevectors']
+    loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
+    bins = kwargs['bins'] if 'bins' in kwargs else 20 
+    target_modules = kwargs.get('target_modules', None)
+    plot = kwargs['plot'] if 'plot' in kwargs else False
+    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+
+    # compute conceptogram entropy
+    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+
+    if plot:
+        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
+        _bins = torch.arange(0, 1+1/bins, 1/bins)
+
+    # sizes just to facilitate 
+    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
+    nc = cpss[loaders[0]].shape[2] # number of classes
+
+    # for normalization
+    _line = torch.zeros(bins)
+    _line[0] = 1
+    min_e = Categorical(probs=_line).entropy()
+    _unif = torch.ones(bins)/bins
+    max_e = Categorical(probs=_unif).entropy()
+
+    # prepare returns dict
+    ret = {
+        'score': {}, 
+        'auc': {},
+    }
+
+    for loader_n, ds_key in enumerate(loaders):
+        cps = cpss[ds_key]
+        ns = cps.shape[0] # number of samples
+        results = cvs._dss[ds_key]['result']
+        
+        scores = torch.zeros(ns)
+        for i in range(ns):
+            v = torch.histogram(cps[i], bins).hist
+            s = Categorical(probs=v).entropy()
+            scores[i] = 1-(s-min_e)/(max_e-min_e)
+
+        try:
+            auc_metric = AUC()
+            auc_metric.update(scores, results.int())
+            auc = auc_metric.compute().item()
+        except Exception:
+            auc = float('nan')
+
+        # Save returns
+        ret['score'][ds_key] = scores 
+        ret['auc'][ds_key] = auc
+
+        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+        
+        # plotting
+        if plot:
+            oks = (scores[results == True]).detach().cpu().numpy()
+            kos = (scores[results == False]).detach().cpu().numpy()
+
+            ax = axs[loader_n] 
+            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
+            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
+            ax.set_xlabel('score: Entropy')
+            ax.set_ylabel('%')
+            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
+            ax.legend(title='dist')
+
+    if plot:
+        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_entropy.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    return ret 
+
+def conceptogram_protoclass_score(**kwargs):
+    phs = kwargs.get('peepholes')
+    cvs = kwargs.get('corevectors')
+    loaders = kwargs.get('loaders', ['test'])
+    target_modules = kwargs.get('target_modules', None)
+    proto_key = kwargs.get('proto_key', 'train')
+    bins = kwargs.get('bins', 20)
+    plot = kwargs.get('plot', False)
+    verbose = kwargs.get('verbose', False)
+
+    # compute conceptogram entropy
+    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+
+    if plot:
+        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
+        _bins = torch.arange(0, 1+1/bins, 1/bins)
+
+    # sizes just to facilitate 
+    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
+    nc = cpss[loaders[0]].shape[2] # number of classes
+
+    # compute proto-classes
+    cps = cpss[proto_key]
+    results = cvs._dss[proto_key]['result']
+    labels = cvs._dss[proto_key]['label']
+    confs = sm(cvs._dss[proto_key]['output'], dim=-1).max(dim=-1).values
+    
+    proto = torch.zeros(nc, nd, nc)
+    for i in range(nc):
+        cl = torch.logical_and(labels == i, results == 1)
+        idx = torch.logical_and(cl, confs>0.99)
+        _p = cps[idx].sum(dim=0)
+        _p /= _p.sum(dim=1, keepdim=True)
+        proto[i][:] = _p[:]
+
+    # for normalization
+    _line = torch.zeros(nc)
+    _line[0] = 1
+    min_e = Categorical(probs=_line).entropy()
+    _unif = torch.ones(nc)/nc
+    max_e = Categorical(probs=_unif).entropy()
+
+    # prepare returns dict
+    ret = {
+        'score': {},
+        'auc': {},
+        'protoclasses': proto,
+    }
+    
+    for loader_n, ds_key in enumerate(loaders):
+        cps = cpss[ds_key]
+        ns = cps.shape[0] # number of samples
+        results = cvs._dss[ds_key]['result']
+        labels = (cvs._dss[ds_key]['label']).int()
+
+        # main computation
+        _wcps = (proto[labels]*cps).sum(dim=1)
+        # normalization does not matter for entropy
+        s = Categorical(probs=_wcps).entropy() 
+        scores = 1-(s-min_e)/(max_e-min_e)
+
+        try:
+            auc_metric = AUC()
+            auc_metric.update(scores, results.int())
+            auc = auc_metric.compute().item()
+        except Exception:
+            auc = float('nan')
+
+
+        ret['score'][ds_key] = scores 
+        ret['auc'][ds_key] = auc
+
+        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+        
+        # plotting
+        if plot:
+            oks = (scores[results == True]).detach().cpu().numpy()
+            kos = (scores[results == False]).detach().cpu().numpy()
+            
+            ax = axs[loader_n] 
+            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
+            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
+            ax.set_xlabel('score: Proto-Class')
+            ax.set_ylabel('%')
+            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
+            ax.legend(title='dist')
+
+    if plot:
+        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_protoclass.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    return ret 

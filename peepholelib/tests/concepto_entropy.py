@@ -28,8 +28,13 @@ def cl_score(cps, weights=None):
         _w_cps = cps*_w/_w.sum()
 
     # the values are already divided in the if statement above
+    print('w cps: ', _w_cps)
     _means = _w_cps.sum(dim=1)
+    _max = _means.max(dim=-1, keepdim=True).values
+    _min = _means.min(dim=-1, keepdim=True).values
+    print((_max-_min).squeeze())
     
+    print('means: ', _means)
     s = Categorical(probs=_means).entropy() 
 
     return 1-(s-min_e)/(max_e-min_e)
@@ -48,7 +53,6 @@ def ghl_score(cps, basis='from_entropy', weights='entropy'):
     
     if not basis == 'from_baricenter' and not (torch.is_tensor(basis) and basis.shape == torch.Size((ns, nc))):
         raise RuntimeError('Basis should be \'from_baricenter\' or a torch.tensor with shape == n_samples x n_peepholes in the conceptograms')
-
 
     if basis == 'from_baricenter':
         rbari = (cps.sum(dim=1)/nd).sqrt()
@@ -83,6 +87,8 @@ if __name__ == "__main__":
     nd = 3
     nc = 4
     ns = 5
+    
+    torch.manual_seed(32)
 
     rand = torch.rand((nc, nd)) 
     rand = rand/rand.sum(dim=0)
@@ -101,7 +107,7 @@ if __name__ == "__main__":
         salt[i, j] = 1.
     
     #w = 'entropy'
-    w = (torch.arange(nd)+1).tolist()
+    w = torch.ones(nd).tolist()
     #b = 'from-baricenter'
     b = torch.zeros(ns, nc)
     b[0,0] = b[1, 0] = b[2, 1] = b[3, 3] = b[4, salt.nonzero()[-1][0]] = 1.
