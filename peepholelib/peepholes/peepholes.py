@@ -95,7 +95,7 @@ class Peepholes:
             dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
 
             if len(modules_to_compute) == 0:
-                if verbose: print('No modules to compute for {ds_key}. Skipping.')
+                if verbose: print(f'No modules to compute for {ds_key}. Skipping.')
                 continue
 
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
@@ -179,22 +179,28 @@ class Peepholes:
             self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode=mode)
 
         return
-    
 
     def get_conceptograms(self, **kwargs):
         '''
-        Get conceptograms from peepholes
+        Get conceptograms from peepholes. A conceptogram is the concatenation of peepholes for multiple modules.
+        
+        Args:
+        - target_modules (list[str]): list of target module keys
+        - loaders (list[str]): list of loaders (usually 'train', 'test', 'val' within self._phs 
+        - verbose (bool): print progress information
         '''
         self.check_uncontexted()
         
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        target_modules = kwargs['target_modules'] if 'target_modules' in kwargs else None
+        target_modules = kwargs.get('target_modules', None)
+        verbose = kwargs.get('verbose', False)
 
         if self._phs == None:
-            raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
+            raise RuntimeError('Peepholes not present. Please run get_peepholes() first.')
+
+        loaders = kwargs.get('loaders', list(self._phs))
 
         _conceptograms = {}
-        for ds_key in self._phs:
+        for ds_key in loaders:
             if verbose: print(f'\n ---- Getting conceptograms for {ds_key}\n')
             file_path = self.path / (self.name + '.' + ds_key)
 
