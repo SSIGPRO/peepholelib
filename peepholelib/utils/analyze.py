@@ -23,116 +23,39 @@ def compute_top_k_accuracy(peepholes, targets, k):
     correct = (topk == targets).any(dim=1).float()
     return correct.mean().item()
 
-def conceptogram_cl_score(**kwargs):
+def conceptogram_entropy_score(**kwargs):
+    '''
+    Compute the Entropy score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed as the entropy (`torch.distributions.Categorical.entropy()`) of the histogram of the conceptograms into `bins` bins.
+    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`. 
+
+    Args:
+    - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
+    - cvs (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'].
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
+    - bins (int): number of bins to construct the histogram of conceptoframs. Weakly affects the score.
+    - plot (bool): save figure with distributions of correctly and miss-classified samples.
+    - verbose (bool): print progress messages.
+
+    Returns:
+    - ret (dict('score': dict(), 'auc':dict())): entropy scores and AUC for each values in `loaders`.  
+    '''
+
     phs = kwargs.get('peepholes')
     cvs = kwargs.get('corevectors')
     loaders = kwargs.get('loaders', ['test'])
-    weights = kwargs.get('weights', None) 
-    bins = kwargs.get('bins', 20)
     target_modules = kwargs.get('target_modules', None)
+    bins = kwargs.get('bins', 50)
     plot = kwargs.get('plot', False)
     verbose = kwargs.get('verbose', False)
-    score_type = kwargs.get('score_type', 'entropy')
 
-    # compute conceptogram entropy
+    score_name = 'Entropy'
+
+    # get conceptogram 
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
         fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
-        _bins = torch.arange(0, 1+1/bins, 1/bins)
-
-    # sizes just to facilitate 
-    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
-    nc = cpss[loaders[0]].shape[2] # number of classes
-
-    # for normalization
-    _line = torch.zeros(nc)
-    _line[0] = 1
-    min_e = Categorical(probs=_line).entropy()
-    _unif = torch.ones(nc)/nc
-    max_e = Categorical(probs=_unif).entropy()
-
-    # some checks
-    if not weights == None and not (isinstance(weights, list) and len(weights) == nd):
-        raise RuntimeError('Weights should be \'None\' or a list with a value for each peephole in the conceptogram')
-
-    # prepare returns dict
-    ret = {
-        'score': {}, 
-        'auc': {},
-    }
-    
-    for loader_n, ds_key in enumerate(loaders):
-        cps = cpss[ds_key]
-        ns = cps.shape[0] # number of samples
-        results = cvs._dss[ds_key]['result']
-        
-        if weights == None:
-            _w_cps = cps/nd
-        else:
-            _w = torch.tensor(weights).unsqueeze(1)
-            _w_cps = cps*_w/_w.sum()
-                                                                   
-        # the values are already divided in the if statement above
-        _means = _w_cps.sum(dim=1)
-        
-        if score_type == 'entropy':
-            s = Categorical(probs=_means).entropy() 
-                                                                
-            # normalize it
-            scores = 1-(s-min_e)/(max_e-min_e)
-        elif score_type == 'max_min':
-            _max = _means.max(dim=-1, keepdim=True).values
-            _min = _means.min(dim=-1, keepdim=True).values
-            scores = (_max-_min).squeeze()
-
-        try:
-            auc_metric = AUC()
-            auc_metric.update(scores, results.int())
-            auc = auc_metric.compute().item()
-        except Exception:
-            auc = float('nan')
-        
-        # Save returns
-        ret['score'][ds_key] = scores
-        ret['auc'][ds_key] = auc
-
-        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
-
-        # plotting
-        if plot:
-            oks = (scores[results == True]).detach().cpu().numpy()
-            kos = (scores[results == False]).detach().cpu().numpy()
-
-            ax = axs[loader_n] 
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: CL')
-            ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
-            ax.legend(title='dist')
-
-    if plot:
-        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_CL.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-    return ret 
-
-def conceptogram_entropy_score(**kwargs):
-    phs = kwargs['peepholes']
-    cvs = kwargs['corevectors']
-    loaders = kwargs['loaders'] if 'loaders' in kwargs else ['test'] 
-    bins = kwargs['bins'] if 'bins' in kwargs else 20 
-    target_modules = kwargs.get('target_modules', None)
-    plot = kwargs['plot'] if 'plot' in kwargs else False
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-
-    # compute conceptogram entropy
-    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
-
-    if plot:
-        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
-        _bins = torch.arange(0, 1+1/bins, 1/bins)
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -155,61 +78,114 @@ def conceptogram_entropy_score(**kwargs):
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs._dss[ds_key]['result']
+        confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
         
+        # main computation
         scores = torch.zeros(ns)
         for i in range(ns):
             v = torch.histogram(cps[i], bins).hist
             s = Categorical(probs=v).entropy()
             scores[i] = 1-(s-min_e)/(max_e-min_e)
 
-        try:
-            auc_metric = AUC()
-            auc_metric.update(scores, results.int())
-            auc = auc_metric.compute().item()
-        except Exception:
-            auc = float('nan')
+        # compute AUC for score
+        s_auc = AUC().update(scores, results.int()).compute().item()
 
         # Save returns
         ret['score'][ds_key] = scores 
-        ret['auc'][ds_key] = auc
+        ret['auc'][ds_key] = s_auc
 
-        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+        if verbose: print(f'AUC for {ds_key} split: {s_auc:.4f}')
         
         # plotting
         if plot:
-            oks = (scores[results == True]).detach().cpu().numpy()
-            kos = (scores[results == False]).detach().cpu().numpy()
+            s_oks = scores[results == True]
+            s_kos = scores[results == False]
+            m_oks = confs[results == True]
+            m_kos = confs[results == False]
 
+            # compute AUC for model 
+            m_auc = AUC().update(confs, results.int()).compute().item()
+
+            df = pd.DataFrame({
+                'Value': torch.hstack((s_oks, s_kos, m_oks, m_kos)),
+                'Score': \
+                        [score_name+': OK' for i in range(len(s_oks))] + \
+                        [score_name+': KO' for i in range(len(s_kos))] + \
+                        ['Model: OK' for i in range(len(m_oks))] + \
+                        ['Model: KO' for i in range(len(m_kos))]
+                                                                                              
+                })
+            colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
+
+            # effective plotting
             ax = axs[loader_n] 
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: Entropy')
+            p = sb.kdeplot(
+                    data = df,
+                    ax = ax,
+                    x = 'Value',
+                    hue = 'Score',
+                    common_norm = False,
+                    palette = colors,
+                    clip = [0., 1.],
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+
+            lines = ['--', '-', '--', '-']
+            # set up linestyles
+            for ls, line in zip(lines, p.lines):
+                line.set_linestyle(ls)
+            
+            # set legend linestyle
+            if loader_n == 0:
+                handles = p.legend_.legend_handles[::-1]
+                for ls, h in zip(lines, handles):
+                    h.set_ls(ls)
+
+            ax.set_xlabel('Score')
             ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
-            ax.legend(title='dist')
+            ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
+
 
     if plot:
-        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_entropy.png', dpi=300, bbox_inches='tight')
+        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
         plt.close()
         
     return ret 
 
 def conceptogram_protoclass_score(**kwargs):
+    '''
+    Compute the Proto-Class score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
+    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`. 
+
+    Args:
+    - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
+    - cvs (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'].
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
+    - proto_key (str): the key in `loaders` to get compute the protoclasses from.
+    - plot (bool): save figure with distributions of correctly and miss-classified samples.
+    - verbose (bool): print progress messages.
+
+    Returns:
+    - ret (dict('score': dict(), 'auc':dict(), 'protoclasses':torch.tensor)): entropy scores and AUC for each values in `loaders`, and `protoclasses` for all classes with `shape=[n_model, n_modules, n_model]`, where `n_model` is the number of labels and `n_modules` the number of modules in `target_modules`.  
+    '''
+
     phs = kwargs.get('peepholes')
     cvs = kwargs.get('corevectors')
     loaders = kwargs.get('loaders', ['test'])
     target_modules = kwargs.get('target_modules', None)
     proto_key = kwargs.get('proto_key', 'train')
-    bins = kwargs.get('bins', 20)
     plot = kwargs.get('plot', False)
     verbose = kwargs.get('verbose', False)
+    
+    score_name = 'Proto-Class'
 
-    # compute conceptogram entropy
+    # get conceptogram 
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
         fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
-        _bins = torch.arange(0, 1+1/bins, 1/bins)
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -248,41 +224,75 @@ def conceptogram_protoclass_score(**kwargs):
         ns = cps.shape[0] # number of samples
         results = cvs._dss[ds_key]['result']
         labels = (cvs._dss[ds_key]['label']).int()
+        confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
 
         # main computation
         _wcps = (proto[labels]*cps).sum(dim=1)
+
         # normalization does not matter for entropy
         s = Categorical(probs=_wcps).entropy() 
         scores = 1-(s-min_e)/(max_e-min_e)
 
-        try:
-            auc_metric = AUC()
-            auc_metric.update(scores, results.int())
-            auc = auc_metric.compute().item()
-        except Exception:
-            auc = float('nan')
-
+        # compute AUC for score
+        s_auc = AUC().update(scores, results.int()).compute().item()
 
         ret['score'][ds_key] = scores 
-        ret['auc'][ds_key] = auc
+        ret['auc'][ds_key] = s_auc
 
-        if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+        if verbose: print(f'AUC for {ds_key} split: {s_auc:.4f}')
         
         # plotting
         if plot:
-            oks = (scores[results == True]).detach().cpu().numpy()
-            kos = (scores[results == False]).detach().cpu().numpy()
+            s_oks = scores[results == True]
+            s_kos = scores[results == False]
+            m_oks = confs[results == True]
+            m_kos = confs[results == False]
             
+            # compute AUC for model 
+            m_auc = AUC().update(confs, results.int()).compute().item()
+            
+            df = pd.DataFrame({
+                'Value': torch.hstack((s_oks, s_kos, m_oks, m_kos)),
+                'Score': \
+                        [score_name+': OK' for i in range(len(s_oks))] + \
+                        [score_name+': KO' for i in range(len(s_kos))] + \
+                        ['Model: OK' for i in range(len(m_oks))] + \
+                        ['Model: KO' for i in range(len(m_kos))]
+
+                })
+            colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
+
+            # effective plotting
             ax = axs[loader_n] 
-            sb.histplot(data=pd.DataFrame({'score': oks}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(oks), alpha=0.5)
-            sb.histplot(data=pd.DataFrame({'score': kos}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(kos), alpha=0.5)
-            ax.set_xlabel('score: Proto-Class')
+            p = sb.kdeplot(
+                    data = df,
+                    ax = ax,
+                    x = 'Value',
+                    hue = 'Score',
+                    common_norm = False,
+                    palette = colors,
+                    clip = [0., 1.],
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+
+            lines = ['--', '-', '--', '-']
+            # set up linestyles
+            for ls, line in zip(lines, p.lines):
+                line.set_linestyle(ls)
+            
+            # set legend linestyle
+            if loader_n == 0:
+                handles = p.legend_.legend_handles[::-1]
+                for ls, h in zip(lines, handles):
+                    h.set_ls(ls)
+
+            ax.set_xlabel('Score')
             ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
-            ax.legend(title='dist')
+            ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
 
     if plot:
-        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.concepto_protoclass.png', dpi=300, bbox_inches='tight')
+        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
         plt.close()
         
     return ret 
