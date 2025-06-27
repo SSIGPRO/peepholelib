@@ -59,6 +59,23 @@ vgg16_imagenet_augmentations = transforms.Compose([
     ])
 
 #-----------------------------
+# ViT on CIFAR 100
+#-----------------------------
+
+vit_b_16_cifar100 = transforms.Compose([
+    # uses interpolation=InterpolationMode.BILINEAR by default 
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=means['cifar100'], std=stds['cifar100'])
+])
+
+vit_b_16_cifar100_augumentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
+    vit_b_16_cifar100
+    ])
+
+#-----------------------------
 # Mobilenet on CIFAR 100
 #-----------------------------
 
