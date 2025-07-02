@@ -8,6 +8,7 @@ from pathlib import Path as Path
 # torch stuff
 import torch
 from torch.utils.data import random_split
+import pickle
 
 # CIFAR from torchvision
 from torchvision import datasets
@@ -106,3 +107,32 @@ class Cifar(DatasetBase):
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
         return [self._dss[ds_key][idx]]
+    
+    def get_superclass_mapping(self):
+        """
+        Returns a mapping  coarse class name -> list of fine class indices
+        """
+        meta_path = self.data_path / 'cifar-100-python' / 'meta'
+        train_path = self.data_path / 'cifar-100-python' / 'train'
+
+        with open(meta_path, 'rb') as f:
+            meta = pickle.load(f, encoding='latin1')
+
+        with open(train_path, 'rb') as f:
+            train_data = pickle.load(f, encoding='latin1')
+
+        coarse_names = meta['coarse_label_names']  # length 20
+
+        # Map fine_idx to coarse_idx 
+        mapping = {}
+        for fine_label, coarse_label in zip(train_data['fine_labels'], train_data['coarse_labels']):
+            if fine_label not in mapping:
+                mapping[fine_label] = coarse_label
+
+        # Build: coarse name → list of fine indices
+        coarse_to_fine_idx = {}
+        for fine_idx, coarse_idx in mapping.items():
+            coarse_name = coarse_names[coarse_idx]
+            coarse_to_fine_idx.setdefault(coarse_name, []).append(fine_idx)
+
+        return coarse_to_fine_idx

@@ -1,120 +1,61 @@
-import os
+from pathlib import Path
 from matplotlib import pyplot as plt
-import numpy as np
-from scipy.stats import entropy
-import torch
-import math
 
+def _get_empp_coverage_scores(**kwargs):
+    """
+    For each layer, computes:
+      - Class coverage: fraction of classes represented by at least one cluster.
+      - Cluster coverage: fraction of clusters representing at least one class.
 
-def empirical_posterior_heatmaps(drillers, dir):
-    os.makedirs(dir, exist_ok=True)
+    Returns:
+        Tuple of two dicts:
+        - class_scores[module] = class_coverage_percent
+        - cluster_scores[module] = cluster_coverage_percent
+    """
+    drillers = kwargs['drillers']
+    threshold = kwargs.get('threshold', 0.9) # % to be considered represented
 
-    for module_name, driller in drillers.items():
-        driller.load()
+    class_scores = {}
+    cluster_scores = {}
 
-        if not hasattr(driller, "_empp") or driller._empp is None:
-            print(f"No empirical posterior found for {module_name}, skipping.")
-            continue
-
+    for module, driller in drillers.items():
         empp = driller._empp  # shape: [n_clusters, n_classes]
-        print(f"Empirical Posterior shape for {module_name}: {empp.shape}")
 
-        fig, ax = plt.subplots(figsize=(12, 8))
-        im = ax.imshow(empp.cpu().numpy(), aspect='auto', cmap='viridis', interpolation='nearest')
-
-        ax.set_xlabel("Model Classes")
-        ax.set_ylabel("Cluster Index")
-        ax.set_title(f"Empirical Posterior - {module_name}")
-
-        ax.set_xticks(np.linspace(0, empp.shape[1] - 1, min(20, empp.shape[1]), dtype=int))
-        ax.set_yticks(np.linspace(0, empp.shape[0] - 1, min(20, empp.shape[0]), dtype=int))
-
-        fig.colorbar(im, ax=ax, label="P(g|c)")
-
-        filename = f"empirical_posterior_{module_name.replace('.', '_')}.png"
-        filepath = os.path.join(dir, filename)
-        plt.tight_layout()
-        plt.savefig(filepath, dpi=300)
-        plt.close()
-        print(f"Saved: {filepath}")
-
-def get_empp_class_coverage_scores(drillers, threshold=0.9):
-    """
-    For each layer, check if each class is represented in at least a cluster,
-    i.e., if any cluster assigns P(g|c) >= threshold for that class.
-
-    Returns a dictionary [module - coverage_percent] 
-    """
-    scores = {}
-
-    for module, driller in drillers.items():
-        driller.load()
-
-        if not hasattr(driller, "_empp") or driller._empp is None:
-            print(f" No empirical posterior found for {module}, skipping.")
-            continue
-
-        empp = driller._empp  # [n_clusters, n_classes]
-        empp = empp.cpu() if empp.is_cuda else empp
-
-        empp_t = empp.T
-
-        # For each class, check if any cluster has prob >= threshold
-        class_represented = (empp_t >= threshold).any(dim=1)  # shape: [n_classes]
-        n_represented = class_represented.sum().item()
+        # Class coverage
+        empp_t = empp.T  # shape: [n_classes, n_clusters]
+        class_represented = (empp_t >= threshold).any(dim=1)  # [n_classes]
         n_classes = empp.shape[1]
-        coverage = 100 * n_represented / n_classes
+        n_class_represented = class_represented.sum().item()
+        class_coverage = 100 * n_class_represented / n_classes
+        class_scores[module] = class_coverage
 
-        scores[module] = coverage
-
-        print(f"[{module}] {n_represented}/{n_classes} classes represented (≥ {threshold}) — {coverage:.2f}%")
-
-    return scores
-
-def get_empp_cluster_coverage_scores(drillers, threshold=0.9):
-    """
-    For each layer, check if each cluster is associated with at least one class,
-    i.e., if any class has P(g|c) >= threshold for that cluster.
-
-    Returns a dictionary [module - coverage_percent]
-    """
-    scores = {}
-
-    for module, driller in drillers.items():
-        driller.load()
-
-        if not hasattr(driller, "_empp") or driller._empp is None:
-            print(f" No empirical posterior found for {module}, skipping.")
-            continue
-
-        empp = driller._empp  # [n_clusters, n_classes]
-        empp = empp.cpu() if empp.is_cuda else empp
-
-        # For each cluster, check if any class gets high enough probability
-        cluster_active = (empp >= threshold).any(dim=1)  # shape: [n_clusters]
-        n_active = cluster_active.sum().item()
+        # Cluster coverage
+        cluster_active = (empp >= threshold).any(dim=1)  # [n_clusters]
         n_clusters = empp.shape[0]
-        coverage = 100 * n_active / n_clusters
+        n_cluster_active = cluster_active.sum().item()
+        cluster_coverage = 100 * n_cluster_active / n_clusters
+        cluster_scores[module] = cluster_coverage
 
-        scores[module] = coverage
+        print(f"[{module}] Class Coverage: {n_class_represented}/{n_classes} (≥ {threshold}) — {class_coverage:.2f}%")
+        print(f"[{module}] Cluster Coverage: {n_cluster_active}/{n_clusters} (≥ {threshold}) — {cluster_coverage:.2f}%")
 
-        print(f"[{module}] {n_active}/{n_clusters} clusters represented(≥ {threshold}) — {coverage:.2f}%")
+    return class_scores, cluster_scores
 
-    return scores
-
-def get_empp_coverage_scores(drillers, threshold=0.9):
+def empp_coverage_scores(**kwargs):
     """
-    Computes the average of class and cluster coverage for each layer.
-
-    Args:
-        drillers (dict): Dictionary of drillers per module.
-        threshold (float): Threshold for considering a class or cluster represented.
+    Computes and (optionally) plots class and cluster coverage per module
 
     Returns:
         dict: scores[module] = average_coverage
     """
-    class_scores = get_empp_class_coverage_scores(drillers, threshold)
-    cluster_scores = get_empp_cluster_coverage_scores(drillers, threshold)
+    drillers = kwargs['drillers']
+    threshold = kwargs.get('threshold', 0.9) # threshold for coverage
+    plot = kwargs.get('plot', False) # if True, plots the coverage
+    default_dir = next(iter(drillers.values()))._clas_path.parent
+    save_path = kwargs.get('save_path', default_dir) # if plot is True
+
+    # Compute coverage
+    class_scores,  cluster_scores= _get_empp_coverage_scores(drillers=drillers, threshold=threshold)
 
     scores = {}
     for module in class_scores:
@@ -123,43 +64,32 @@ def get_empp_coverage_scores(drillers, threshold=0.9):
             scores[module] = avg
             print(f"[{module}] Avg Coverage: {avg:.2f}% (Class: {class_scores[module]:.2f}%, Cluster: {cluster_scores[module]:.2f}%)")
 
+    # Optional plot
+    if plot:
+        modules = list(class_scores.keys())
+        class_values = [class_scores[m] for m in modules]
+        cluster_values = [cluster_scores.get(m, 0) for m in modules]
+
+        plt.figure(figsize=(12, 6))
+        plt.plot(modules, class_values, label='Class Coverage', marker='o')
+        plt.plot(modules, cluster_values, label='Cluster Coverage', marker='x')
+
+        plt.xticks(rotation=45, ha='right')
+        plt.ylabel('Coverage (%)')
+        plt.xlabel('Module')
+        plt.title(f'Empirical Posterior Coverage (Threshold ≥ {threshold})')
+        plt.ylim(0, 105)
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+
+        if save_path:
+            filename = f'coverage_plot_threshold_{threshold:.2f}.png'
+            save_path = Path(save_path)
+            path = save_path / filename
+            plt.savefig(path, dpi=300)
+            print(f"Saved plot to {path}")
+        else:
+            plt.show()
     return scores
-
-def plot_empp_coverage_scores(drillers, threshold=0.9, save_path=None):
-    """
-    Plots class and cluster coverage across modules.
-
-    Args:
-        drillers (dict): Dict of drillers per module.
-        threshold (float): Threshold for representation.
-        save_path (str or Path, optional): If set, saves the figure to this path.
-    """
-    # Get both scores
-    class_scores = get_empp_class_coverage_scores(drillers, threshold)
-    cluster_scores = get_empp_cluster_coverage_scores(drillers, threshold)
-
-    modules = list(class_scores.keys())
-    class_values = [class_scores[m] for m in modules]
-    cluster_values = [cluster_scores.get(m, 0) for m in modules]
-
-    # Plot
-    plt.figure(figsize=(12, 6))
-    plt.plot(modules, class_values, label='Class Coverage', marker='o')
-    plt.plot(modules, cluster_values, label='Cluster Coverage', marker='x')
-
-    plt.xticks(rotation=45, ha='right')
-    plt.ylabel('Coverage (%)')
-    plt.xlabel('Module')
-    plt.title(f'Empirical Posterior Coverage (Threshold ≥ {threshold})')
-    plt.ylim(0, 105)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300)
-        print(f"Saved plot to {save_path}")
-    else:
-        plt.show()
-
 
