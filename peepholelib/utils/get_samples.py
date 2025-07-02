@@ -1,58 +1,49 @@
-import pickle
 from torch.nn.functional import softmax
 from functools import partial
 
-from peepholelib.utils.mappings import coarse_to_fine_cifar100 as coarse_to_fine
+def get_class_names_list(**kwargs):
+    """
+    Returns a list of class/superclass names for the given dataset.
+    """
+    ds = kwargs['ds']
+    superclass = kwargs.get('superclass', False) #If True, returns superclass names; otherwise, returns class names.
 
-def get_class_names_list(ds, superclass = False):
     if ds._classes is None:
         raise RuntimeError("Dataset not loaded. Please run load_data() first.")
 
-    if not superclass:
-        return [ds._classes[i] for i in sorted(ds._classes)]
+    if superclass:
+        if ds.dataset != 'CIFAR100':
+            raise ValueError("Superclasses are only defined for CIFAR100.")
+        return list(ds.get_superclass_mapping().keys())
 
-    if ds.dataset != 'CIFAR100':
-        raise ValueError("Superclasses are only defined for CIFAR100.")
+    # Otherwise, return class names ordered by index
+    return [ds._classes[i] for i in sorted(ds._classes)]
 
-    meta_path = '/srv/newpenny/dataset/CIFAR100/cifar-100-python/meta'
-    with open(meta_path, 'rb') as f:
-        meta = pickle.load(f, encoding='latin1')
-
-    return meta['coarse_label_names']
-
-def get_samples(ds, split: str, class_name: str):
+def _get_samples_by_class(**kwargs):
     """
-    Args:
-        ds (DatasetBase): e.g., Cifar.
-        split (str): 'train', 'val', or 'test'.
-        class_name (str): Class name or superclass name.
-
-    Returns:
-        List[int]: List of samples' indices of class_name and split.
+    Returns a list of samples for the given class name and split in the dataset.
+    Supports class names and superclass names
     """
+    ds = kwargs['ds']
+    split = kwargs.get('split', 'test') # 'train', 'val', or 'test'
+    class_name = kwargs.get('class_name') # Class name or superclass name
+
     if ds._dss is None:
         raise RuntimeError("Dataset not loaded. Please run load_data() first.")
     if split not in ds._dss:
         raise ValueError(f"Invalid split '{split}'. Must be one of: {list(ds._dss.keys())}")
-
     split_data = ds._dss[split]
 
+    # Check if class_name is a superclass
     if ds.dataset == 'CIFAR100':
-        # Load CIFAR-100 meta
-        meta_path = '/srv/newpenny/dataset/CIFAR100/cifar-100-python/meta'
-        with open(meta_path, 'rb') as f:
-            meta = pickle.load(f, encoding='latin1')
+        superclass_mapping = ds.get_superclass_mapping()
+        if class_name in superclass_mapping:
+            fine_class_indices = set(superclass_mapping[class_name])
+            return [i for i, (_, y) in enumerate(split_data) if y in fine_class_indices]
 
-        fine_to_idx = {v: k for k, v in ds._classes.items()}
-
-        # if superclass
-        if class_name in coarse_to_fine: 
-            fine_classes = coarse_to_fine[class_name]
-            target_class_indices = {fine_to_idx[c] for c in fine_classes}
-            return [i for i, (_, y) in enumerate(split_data) if y in target_class_indices]
-    
-    # if not superclass
+    # Otherwise assume it's a fine class
     class_to_idx = {v: k for k, v in ds._classes.items()}
+
     if class_name not in class_to_idx:
         raise ValueError(f"Class name '{class_name}' not found in dataset classes.")
     
@@ -60,35 +51,31 @@ def get_samples(ds, split: str, class_name: str):
     return [i for i, (_, y) in enumerate(split_data) if y == target_class_idx]
 
 def get_filtered_samples(**kwargs):
+    
+    """ 
+    Returns a list of sample indices based on class name, split, prediction correctness, and confidence range.
+    
+    TODO: expand correct flag to being correct in the superclass or not
+    TODO: filter by score range
     """
-    Args:
-        ds: Dataset
-        cvs: Corevectors (only required when filtering by 'correct' or 'conf_range')
-        split (str): 'train', 'val' or 'test' (deault: 'test').
-        class_name (str): Name of the class or superclass.
-        correct (bool): correct or incorrect predicted samples.
-        conf_range (list): Confidence range [min, max] (in percent, 0–100 scale).
-        pred_fn (callable): Function to convert model output to probabilities (default: softmax).
-
-    Returns:
-        List[int]: List of sample indices based on class name, split, prediction, and confidence range
-    """
-    ds = kwargs['ds']
-    split = kwargs.get('split', 'test')
-    class_name = kwargs.get('class_name', None)
-    correct = kwargs.get('correct', None)
-    conf_range = kwargs.get('conf_range', [0, 100]) 
-    pred_fn = kwargs.get('pred_fn', partial(softmax, dim=0))
+    ds = kwargs['ds'] # dataset
+    split = kwargs.get('split', 'test') # 'train', 'val' or 'test'
+    class_name = kwargs.get('class_name', None) # Class/superclass name
+    correct = kwargs.get('correct', None) # correct or incorrect predicted samples
+    conf_range = kwargs.get('conf_range', [0, 100]) # Confidence range in % [min, max]
+    pred_fn = kwargs.get('pred_fn', partial(softmax, dim=0)) # convert model output to probabilities
 
     if class_name is None:
+        print("No class name provided, returning all samples from split.")
         class_indices = list(range(len(ds._dss[split]))) # all samples from split
     else:
-        class_indices = get_samples(ds, split, class_name) 
+        print(f"Filtering samples for class '{class_name}' in split '{split}'")
+        class_indices = _get_samples_by_class(ds=ds, split=split, class_name=class_name) 
     
     if correct is None and conf_range == [0, 100]:
         return class_indices
 
-    cvs = kwargs.get('corevectors')
+    cvs = kwargs.get('corevectors') #only needed when filtering by 'correct' or 'conf_range'
     if cvs is None:
         raise ValueError("Missing 'corevectors'. Required when filtering by 'correct' or 'conf_range'.")
 
