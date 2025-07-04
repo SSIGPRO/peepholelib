@@ -1,5 +1,6 @@
 # General pytho stuff
 from tqdm import tqdm
+from math import floor
 
 # plotting stuff
 from matplotlib import pyplot as plt
@@ -10,7 +11,7 @@ import pandas as pd
 import torch
 from torch.distributions import Categorical
 from torcheval.metrics import BinaryAUROC as AUC
-from torch.nn.functional import  softmax as sm
+from torch.nn.functional import softmax as sm
 
 def compute_top_k_accuracy(peepholes, targets, k):
     """
@@ -58,7 +59,7 @@ def conceptogram_entropy_score(**kwargs):
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
-        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
+        fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='row', figsize=(4*len(loaders), 4))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -121,7 +122,7 @@ def conceptogram_entropy_score(**kwargs):
             colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
 
             # effective plotting
-            ax = axs[loader_n] 
+            ax = axs[0][loader_n] 
             p = sb.kdeplot(
                     data = df,
                     ax = ax,
@@ -148,8 +149,38 @@ def conceptogram_entropy_score(**kwargs):
             ax.set_xlabel('Score')
             ax.set_ylabel('%')
             ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
-
-
+            # plot dropping-out accuracy plot
+            _, s_idx = scores.sort()
+            _, m_idx = confs.sort()
+            s_acc = torch.zeros(100)
+            m_acc = torch.zeros(100)
+            for drop_perc in range(100):
+                n_drop = floor((drop_perc/100)*ns)
+                s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
+                m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
+            
+            colors = ['xkcd:cobalt', 'xkcd:bluish green']
+            ax = axs[1][loader_n]
+            df = pd.DataFrame({
+                'Values': torch.hstack((s_acc, m_acc)),
+                'Score': \
+                        [score_name for i in range(100)] + \
+                        ['Model confidece' for i in range(100)]
+                })
+                                                                                   
+            sb.lineplot(
+                    data = df,
+                    ax = ax,
+                    x = torch.linspace(0, 99, 100).repeat(2),
+                    y = 'Values',
+                    hue = 'Score',
+                    palette = colors,
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+            ax.set_xlabel('% dropped')
+            ax.set_ylabel('Accuracy (%)')
+            
     if plot:
         plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
         plt.close()
@@ -188,7 +219,7 @@ def conceptogram_protoclass_score(**kwargs):
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
-        fig, axs = plt.subplots(1, len(loaders), sharex='all', sharey='all', figsize=(4*len(loaders), 4))
+        fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='row', figsize=(4*len(loaders), 4))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -266,7 +297,7 @@ def conceptogram_protoclass_score(**kwargs):
             colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
 
             # effective plotting
-            ax = axs[loader_n] 
+            ax = axs[0][loader_n] 
             p = sb.kdeplot(
                     data = df,
                     ax = ax,
@@ -293,6 +324,38 @@ def conceptogram_protoclass_score(**kwargs):
             ax.set_xlabel('Score')
             ax.set_ylabel('%')
             ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
+
+            # plot dropping-out accuracy plot
+            _, s_idx = scores.sort()
+            _, m_idx = confs.sort()
+            s_acc = torch.zeros(100)
+            m_acc = torch.zeros(100)
+            for drop_perc in range(100):
+                n_drop = floor((drop_perc/100)*ns)
+                s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
+                m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
+            
+            colors = ['xkcd:cobalt', 'xkcd:bluish green']
+            ax = axs[1][loader_n]
+            df = pd.DataFrame({
+                'Values': torch.hstack((s_acc, m_acc)),
+                'Score': \
+                        [score_name for i in range(100)] + \
+                        ['Model confidece' for i in range(100)]
+                })
+
+            sb.lineplot(
+                    data = df,
+                    ax = ax,
+                    x = torch.linspace(0, 99, 100).repeat(2),
+                    y = 'Values',
+                    hue = 'Score',
+                    palette = colors,
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+            ax.set_xlabel('% dropped')
+            ax.set_ylabel('Accuracy (%)')
 
     if plot:
         plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
