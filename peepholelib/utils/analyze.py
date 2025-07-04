@@ -30,7 +30,7 @@ def compute_top_k_accuracy(peepholes, targets, k):
 def conceptogram_entropy_score(**kwargs):
     '''
     Compute the Entropy score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed as the entropy (`torch.distributions.Categorical.entropy()`) of the histogram of the conceptograms into `bins` bins.
-    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`. 
+    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`; it also plots the accuracy of the model dropping percentages of the dataset. 
 
     Args:
     - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
@@ -39,6 +39,7 @@ def conceptogram_entropy_score(**kwargs):
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
     - bins (int): number of bins to construct the histogram of conceptoframs. Weakly affects the score.
     - plot (bool): save figure with distributions of correctly and miss-classified samples.
+    - max_drop (int): Max dataset drop for the accuracy plot.
     - verbose (bool): print progress messages.
 
     Returns:
@@ -51,6 +52,7 @@ def conceptogram_entropy_score(**kwargs):
     target_modules = kwargs.get('target_modules', None)
     bins = kwargs.get('bins', 50)
     plot = kwargs.get('plot', False)
+    drop_max = kwargs.get('max_drop', 20)
     verbose = kwargs.get('verbose', False)
 
     score_name = 'Entropy'
@@ -152,9 +154,9 @@ def conceptogram_entropy_score(**kwargs):
             # plot dropping-out accuracy plot
             _, s_idx = scores.sort()
             _, m_idx = confs.sort()
-            s_acc = torch.zeros(100)
-            m_acc = torch.zeros(100)
-            for drop_perc in range(100):
+            s_acc = torch.zeros(drop_max+1)
+            m_acc = torch.zeros(drop_max+1)
+            for drop_perc in range(drop_max+1):
                 n_drop = floor((drop_perc/100)*ns)
                 s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
                 m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
@@ -164,14 +166,14 @@ def conceptogram_entropy_score(**kwargs):
             df = pd.DataFrame({
                 'Values': torch.hstack((s_acc, m_acc)),
                 'Score': \
-                        [score_name for i in range(100)] + \
-                        ['Model confidece' for i in range(100)]
+                        [score_name for i in range(drop_max+1)] + \
+                        ['Model confidece' for i in range(drop_max+1)]
                 })
                                                                                    
             sb.lineplot(
                     data = df,
                     ax = ax,
-                    x = torch.linspace(0, 99, 100).repeat(2),
+                    x = torch.linspace(0, drop_max, drop_max+1).repeat(2),
                     y = 'Values',
                     hue = 'Score',
                     palette = colors,
@@ -190,7 +192,7 @@ def conceptogram_entropy_score(**kwargs):
 def conceptogram_protoclass_score(**kwargs):
     '''
     Compute the Proto-Class score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
-    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`. 
+    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`; it also plots the accuracy of the model dropping percentages of the dataset. 
 
     Args:
     - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
@@ -199,6 +201,7 @@ def conceptogram_protoclass_score(**kwargs):
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
     - proto_key (str): the key in `loaders` to get compute the protoclasses from.
     - plot (bool): save figure with distributions of correctly and miss-classified samples.
+    - max_drop (int): Max dataset drop for the accuracy plot.
     - verbose (bool): print progress messages.
 
     Returns:
@@ -211,6 +214,7 @@ def conceptogram_protoclass_score(**kwargs):
     target_modules = kwargs.get('target_modules', None)
     proto_key = kwargs.get('proto_key', 'train')
     plot = kwargs.get('plot', False)
+    drop_max = kwargs.get('max_drop', 20)
     verbose = kwargs.get('verbose', False)
     
     score_name = 'Proto-Class'
@@ -326,7 +330,6 @@ def conceptogram_protoclass_score(**kwargs):
             ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
 
             # plot dropping-out accuracy plot
-            drop_max = 20
             _, s_idx = scores.sort()
             _, m_idx = confs.sort()
             s_acc = torch.zeros(drop_max+1)
