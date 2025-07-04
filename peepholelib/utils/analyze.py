@@ -326,11 +326,12 @@ def conceptogram_protoclass_score(**kwargs):
             ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
 
             # plot dropping-out accuracy plot
+            drop_max = 20
             _, s_idx = scores.sort()
             _, m_idx = confs.sort()
-            s_acc = torch.zeros(100)
-            m_acc = torch.zeros(100)
-            for drop_perc in range(100):
+            s_acc = torch.zeros(drop_max+1)
+            m_acc = torch.zeros(drop_max+1)
+            for drop_perc in range(drop_max+1):
                 n_drop = floor((drop_perc/100)*ns)
                 s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
                 m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
@@ -340,14 +341,14 @@ def conceptogram_protoclass_score(**kwargs):
             df = pd.DataFrame({
                 'Values': torch.hstack((s_acc, m_acc)),
                 'Score': \
-                        [score_name for i in range(100)] + \
-                        ['Model confidece' for i in range(100)]
+                        [score_name for i in range(drop_max+1)] + \
+                        ['Model confidece' for i in range(drop_max+1)]
                 })
 
             sb.lineplot(
                     data = df,
                     ax = ax,
-                    x = torch.linspace(0, 99, 100).repeat(2),
+                    x = torch.linspace(0, drop_max, drop_max+1).repeat(2),
                     y = 'Values',
                     hue = 'Score',
                     palette = colors,
