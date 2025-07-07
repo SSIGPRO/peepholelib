@@ -15,7 +15,7 @@ def cls_token_ViT(act_data):
     Extract the class token from ViT activations.
     """
     # Assuming the class token is the first token in the sequence
-    print("Class token shape:", act_data[:, 0, :].shape)
+    
     return act_data[:, 0, :]
 
 def TokenWiseMean_ViT(act_data):

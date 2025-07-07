@@ -366,3 +366,131 @@ def conceptogram_protoclass_score(**kwargs):
         plt.close()
         
     return ret 
+
+def conceptogram_protoclass_score_attacks(**kwargs):
+    phs_ori = kwargs.get('peepholes_ori')
+    cvs_ori = kwargs.get('corevectors_ori')
+    phs_atk = kwargs.get('peepholes_atk')
+    cvs_atk = kwargs.get('corevectors_atk')
+    loaders = kwargs.get('loaders', ['test'])
+    target_modules = kwargs.get('target_modules', None)
+    proto_key = kwargs.get('proto_key', 'train')
+    bins = kwargs.get('bins', 20)
+    plot = kwargs.get('plot', False)
+    verbose = kwargs.get('verbose', False)
+    atk_name = kwargs.get('atk_name', None)
+
+    # compute conceptogram entropy
+    cpsso = phs_ori.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+    cpssa = phs_atk.get_conceptograms(loaders=['test'], target_modules=target_modules, verbose=verbose)
+    print(cpsso.keys(), cpssa.keys())
+
+    if plot:
+        fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+        _bins = torch.arange(0, 1+1/bins, 1/bins)
+
+    # sizes just to facilitate 
+    nd = cpsso[loaders[0]].shape[1] # number of layers (distributions)
+    nc = cpsso[loaders[0]].shape[2] # number of classes
+
+    # compute proto-classes
+    cps = cpsso[proto_key]
+    results = cvs_ori._dss[proto_key]['result']
+    labels = cvs_ori._dss[proto_key]['label']
+    confs = sm(cvs_ori._dss[proto_key]['output'], dim=-1).max(dim=-1).values
+    
+    proto = torch.zeros(nc, nd, nc)
+    for i in range(nc):
+        cl = torch.logical_and(labels == i, results == 1)
+        idx = torch.logical_and(cl, confs>0.9)
+        _p = cps[idx].sum(dim=0)
+        _p /= _p.sum(dim=1, keepdim=True)
+        proto[i][:] = _p[:]
+
+    # for normalization
+    _line = torch.zeros(nc)
+    _line[0] = 1
+    min_e = Categorical(probs=_line).entropy()
+    _unif = torch.ones(nc)/nc
+    max_e = Categorical(probs=_unif).entropy()
+
+    # prepare returns dict
+    ret = {
+        'score': {},
+        'auc': {},
+        'protoclasses': proto,
+        'so': {},
+        'sa': {}
+    }
+    
+    for loader_n, ds_key in enumerate(loaders):
+        cps = cpsso[ds_key]
+        ns = cps.shape[0] # number of samples
+        results = cvs_ori._dss[ds_key]['result']
+        labels = (cvs_ori._dss[ds_key]['label']).int()
+
+        # main computation
+        _wcps = (proto[labels]*cps).sum(dim=1)
+        # normalization does not matter for entropy
+        s = Categorical(probs=_wcps).entropy() 
+        so = 1-(s-min_e)/(max_e-min_e)
+
+    for loader_n, ds_key in enumerate(['test']):
+        cps = cpssa[ds_key]
+        ns = cps.shape[0] # number of samples
+        results = cvs_atk._dss[ds_key]['result']
+        labels = (cvs_atk._dss[ds_key]['label']).int()
+
+        # main computation
+        _wcps = (proto[labels]*cps).sum(dim=1)
+        # normalization does not matter for entropy
+        s = Categorical(probs=_wcps).entropy() 
+        sa = 1-(s-min_e)/(max_e-min_e)
+    
+    # idx = torch.argwhere((cvs_ori._dss[ds_key]['result'] == 1) & (cvs_atk._dss[ds_key]['attack_success'] == 1))
+
+    # so = so[idx].squeeze()
+    # sa = sa[idx].squeeze()
+
+    so = so.squeeze()
+    sa = sa.squeeze()
+    
+    lo = torch.ones(so.shape[0])
+    la = torch.zeros(sa.shape[0])
+    scores = torch.cat((so, sa))
+    results = torch.cat((lo, la)) 
+
+    try:
+        auc_metric = AUC()
+        auc_metric.update(scores, results.int())
+        auc = auc_metric.compute().item()
+    except Exception:
+        auc = float('nan')
+
+
+    ret['score'][ds_key] = scores 
+    ret['auc'][ds_key] = auc
+    ret['so'][ds_key] = so
+    ret['sa'][ds_key] = sa
+
+    #     if verbose: print(f'AUC for {ds_key} split: {auc:.4f}')
+        
+    # plotting
+    if plot:
+        ori = (so).detach().cpu().numpy()
+        atk = (sa).detach().cpu().numpy()
+        
+        sb.histplot(data=pd.DataFrame({'score': ori}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(ori), alpha=0.5)
+        sb.histplot(data=pd.DataFrame({'score': atk}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(atk), alpha=0.5)
+        ax.set_xlabel('score: Proto-Class')
+        ax.set_ylabel('%')
+        ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
+        ax.legend(title='dist')
+
+    if plot:
+        plt.savefig(f'{atk_name}_concepto_protoclass.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    return ret 
+
+
