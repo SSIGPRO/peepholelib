@@ -31,18 +31,18 @@ def get_svds(self, **kwargs):
         _modules_to_compute.append(mk)
     if verbose: print('modules to compute SVDs: ', _modules_to_compute)
    
+    # Turn on activation saving
+    self.set_activations(save_input=True, save_output=False)
+    # Dry run to get shapes
+    with torch.no_grad():
+        _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
+        self(_in)
+
     for mk in _modules_to_compute:
         if verbose: print(f'\n ---- Getting SVDs for {mk}\n')
         module = self._target_modules[mk]
         
-        # dry run to get shape
-        self.set_activations(save_input=True, save_output=False)
-        with torch.no_grad():
-            _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
-            self(_in)
-            in_shape = self._acts['in_activations'][mk].shape[1:]
-        self.set_activations(save_input=False, save_output=False)
-
+        in_shape = self._acts['in_activations'][mk].shape[1:]
         U, s, Vh = svd_fns[mk](layer=module, in_shape=in_shape) 
         U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
         _svds[mk] = TensorDict({
@@ -50,6 +50,9 @@ def get_svds(self, **kwargs):
                 's': MMT(s),
                 'Vh': MMT(Vh)
                 })
+
+    # Turn off activation saving
+    self.set_activations(save_input=False, save_output=False)
 
     if verbose: print(f'saving {file_path}')
     if len(_modules_to_compute) != 0:
