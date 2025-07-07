@@ -157,4 +157,3 @@ def conceptogram_protoclass_score_attacks(**kwargs):
         plt.close()
         
     return ret 
-
