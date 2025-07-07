@@ -55,12 +55,20 @@ def plot_conceptogram(**kwargs):
 
     path.mkdir(parents=True, exist_ok=True)
     for _d, _c, sample in zip(_dss, conceptos, samples):
+
+        print('data shape:', _d, _d.shape)
+        print('concepto shape:', _c, _c.shape)
+        print('index', sample, sample.shape)
+
         label = int(_d[label_key])
         pred = int(_d['pred'])
         output = pred_fn(_d['output'])
         conf = output.max() 
 
         _, idx_topk = torch.topk(_c.sum(dim=0), krows, sorted=True)
+        print(idx_topk)
+
+
         classes_topk = [classes[i] for i in idx_topk.tolist()]
         tick_positions = idx_topk.cpu().tolist()
         tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
@@ -100,6 +108,7 @@ def plot_conceptogram(**kwargs):
         if not protoclasses == None:
             # add ticks where the protoclasses are high
             _, idx_topk = torch.topk(protoclasses[label].sum(dim=0), krows, sorted=True)
+            print(idx_topk)
             classes_topk = [classes[i] for i in idx_topk.tolist()]
             proto_tick_positions = idx_topk.cpu().tolist()
             proto_tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
