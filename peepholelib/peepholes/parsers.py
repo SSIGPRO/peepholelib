@@ -3,14 +3,14 @@ def trim_corevectors(**kwargs):
     Trims corevectors obtained with `coreVectors.dimReduction.svds.conv2d_svd_projection(), linear_svd_projection_ViT(), conv2d_toeplitz_svd_projection(channel_wise=False)`.
     Input shape is `[ns, q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
     Output shape is `[ns, cv_dim]`, the concatenation of the trimmed corevectors of all output channels.
-                                                                                                                    
+
     Args:
         cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
         dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
         module (str): target module key.
         label_key (str): key to get labels from
         cv_dim (int): desired dimension of corevector
-                                                                                                                    
+
     Returns:
         tcvs (torch.tensor): Trimmed corevectors and correspective labels
         labels (torch.tensor): Labels from datasate for the samples. Only returned if `dss` is given
@@ -43,6 +43,7 @@ def trim_channelwise_corevectors(**kwargs):
         module (str): target module key.
         label_key (str): key to get labels from
         cv_dim (int): desired dimension of corevector
+        cols (???): ??
 
     Returns:
         tcvs (torch.tensor): Trimmed corevectors and correspective labels
@@ -72,7 +73,7 @@ def trim_channelwise_corevectors(**kwargs):
     if dss == None:
         return trcv 
     else:
-        labels =  dss[label_key]
+        labels = dss[label_key]
         return trcv, labels 
 
 def trim_kernel_corevectors(**kwargs):
@@ -111,7 +112,7 @@ def trim_kernel_corevectors(**kwargs):
     if dss == None:
         return trcv 
     else:
-        labels =  dss[label_key]
+        labels = dss[label_key]
         return trcv, labels 
 
 def get_images(**kwargs):

@@ -400,4 +400,3 @@ def conceptogram_protoclass_score_attacks(**kwargs):
         
     return ret 
 
-

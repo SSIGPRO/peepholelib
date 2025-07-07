@@ -25,7 +25,7 @@ class KMeans(ClassifierBase): # quella buona
                     num_nodes = 1,
                     accelerator = self.device.type,
                     devices = [self.device.index],
-                    max_epochs = 5000,
+                    max_epochs = 50000,
                     enable_progress_bar = False
                     )
                 )
@@ -38,13 +38,17 @@ class KMeans(ClassifierBase): # quella buona
         '''
         Fitss clusters.
         Args:
+        - corevectors (TensorDict): Corevectors.
+        - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+        - verbose (Bool): Print progress messages. 
         '''
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        cvs = kwargs['corevectors']
+        _cvs = kwargs.get('corevectors')
+        loader = kwargs.get('loader', 'train')
+        verbose = kwargs.get('verbose', False)
 
+        cvs = _cvs._corevds[loader]
         if verbose: 
             print('\n ---- KMeans classifier\n')
-            print('Parsing data')
 
         # temp dataloader for loading the whole dataset
         data = self.parser(cvs=cvs)
@@ -63,12 +67,12 @@ class KMeans(ClassifierBase): # quella buona
         Get prediction probabilities based on the fitted modelfor the provided inputs.
         
         Args:
-        - batch: data batch containing data to be parsed with the paser function set on __init__() 
+        - data (TensorDict): data containing data to be parsed with the paser function set on __init__() 
         '''
         
         data = kwargs['data']
 
-        distances = self._classifier.transform(data).clone().detach()
+        distances = self._classifier.transform(data)
         
         # changing strategy: back to softmin
         probs = torch.nn.functional.softmin(distances, dim=1)
