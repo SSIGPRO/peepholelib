@@ -16,16 +16,27 @@ from peepholelib.coreVectors.parsers import from_dataset
 from peepholelib.coreVectors.prediction_fns import multilabel_classification
     
 def parse_ds(self, **kwargs):
+    '''
+    Parse dataset, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
+    Data is saved into a 'tensordict.PersistentTensorDict' at 'self.path/dss.<loader>' (see 'coreVectors.__init__()'), with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
+    Args:
+    - datasets (peepholelib.dataset_base.DatasetBase): Dataset wrapped in DatasetBase
+    - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+    - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
+    - ds_parser (callable): Function taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels'].
+    - pred_fn (callable): Function taking batched model's outputs and selecting a class.
+    - verbose (bool): print progress messages.
+    '''
     self.check_uncontexted()
     
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-
     ds = kwargs['datasets']
-    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
-    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
+    bs = kwargs.get('batch_size', 64) 
+    n_threads = kwargs.get('n_threads', 1) 
 
-    ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
-    pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else multilabel_classification
+    ds_parser = kwargs.get('ds_parser', from_dataset) 
+    pred_fn = kwargs.get('pred_fn', multilabel_classification)
+
+    verbose = kwargs.get('verbose', False) 
 
     model = self._model
     device = self._model.device 
