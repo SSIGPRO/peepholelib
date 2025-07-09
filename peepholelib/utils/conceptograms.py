@@ -50,6 +50,7 @@ def plot_conceptogram(**kwargs):
     
     conceptos = phs.get_conceptograms(loaders=[portion], target_modules=target_modules)[portion][samples]
     
+    
     #parse alt_scores into a dict for easy access
     _alt_score = alt_score if alt_score == None else {_sample:_score for _sample, _score in zip(samples, alt_score)}
 
@@ -62,16 +63,16 @@ def plot_conceptogram(**kwargs):
 
         label = int(_d[label_key])
         pred = int(_d['pred'])
-        output = pred_fn(_d['output'])
+        output = pred_fn(_d['output'].squeeze(dim=0))
         conf = output.max() 
 
-        _, idx_topk = torch.topk(_c.sum(dim=0), krows, sorted=True)
-        print(idx_topk)
+        _, idx_topk = torch.topk(_c.sum(dim=1), krows, sorted=True)
+        idx_topk = idx_topk[0].tolist()
 
 
-        classes_topk = [classes[i] for i in idx_topk.tolist()]
-        tick_positions = idx_topk.cpu().tolist()
-        tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, tick_positions))]
+        classes_topk = [classes[i] for i in idx_topk]
+        #tick_positions = idx_topk.cpu().tolist()
+        tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, idx_topk))]
 
         if protoclasses == None:
             fig = plt.figure(figsize=(5 ,20))
@@ -96,7 +97,7 @@ def plot_conceptogram(**kwargs):
                     ]
 
         # Plot the image
-        axs[0].imshow(_d['image'].permute(1,2,0))
+        axs[0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
         axs[0].axis('off')
         
         if alt_score == None:
@@ -122,7 +123,7 @@ def plot_conceptogram(**kwargs):
         # Plot the conceptogram
         axs[-2].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
         axs[-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
-        axs[-2].set_yticks(tick_positions, tick_labels)
+        axs[-2].set_yticks(idx_topk, tick_labels)
         axs[-2].yaxis.tick_right()
         axs[-2].set_title('Conceptogram')
         axs[-2].set_xlabel('Layers')
