@@ -243,13 +243,6 @@ def conceptogram_protoclass_score(**kwargs):
         _p /= _p.sum(dim=1, keepdim=True)
         proto[i][:] = _p[:]
 
-    # for normalization
-    _line = torch.zeros(nc)
-    _line[0] = 1
-    min_e = Categorical(probs=_line).entropy()
-    _unif = torch.ones(nc)/nc
-    max_e = Categorical(probs=_unif).entropy()
-
     # prepare returns dict
     ret = {
         'score': {},
@@ -268,8 +261,8 @@ def conceptogram_protoclass_score(**kwargs):
         _wcps = (proto[labels]*cps).sum(dim=1)
 
         # normalization does not matter for entropy
-        s = Categorical(probs=_wcps).entropy() 
-        scores = 1-(s-min_e)/(max_e-min_e)
+        s = (proto[labels]*cps).sum(dim=(1,2))
+        scores = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
         # compute AUC for score
         s_auc = AUC().update(scores, results.int()).compute().item()
