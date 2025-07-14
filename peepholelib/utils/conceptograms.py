@@ -95,13 +95,13 @@ def plot_conceptogram(**kwargs):
         # Plot the protoclasses 
         if not protoclasses == None:
             # add ticks where the protoclasses are high
-            _, idx_topk = torch.topk(protoclasses[label].sum(dim=0), krows, sorted=True)
+            _, idx_topk = torch.topk(protoclasses[pred].sum(dim=0), krows, sorted=True)
 
             classes_topk = [classes[i] for i in idx_topk.tolist()]
             proto_tick_positions = idx_topk.cpu().tolist()
             proto_tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, proto_tick_positions))]
 
-            axs[1].imshow(protoclasses[label].T, aspect='auto', vmin=0.0, vmax=1.0)
+            axs[1].imshow(protoclasses[pred].T, aspect='auto', vmin=0.0, vmax=1.0)
             axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
             axs[1].set_yticks(proto_tick_positions, proto_tick_labels)
             axs[1].set_xlabel('Layers')

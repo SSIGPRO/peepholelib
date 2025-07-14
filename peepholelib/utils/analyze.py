@@ -54,29 +54,26 @@ def conceptogram_protoclass_score(**kwargs):
     loaders = kwargs.get('loaders', ['test'])
     target_modules = kwargs.get('target_modules', None)
     proto_key = kwargs.get('proto_key', 'train')
+    proto_th = kwargs.get('proto_threshold', 0.9)
     plot = kwargs.get('plot', False)
     drop_max = kwargs.get('max_drop', 20)
     verbose = kwargs.get('verbose', False)
     path = kwargs.get('path',None)
-    percentage_list = kwargs.get('percentage_list', [2, 5, 20, 20, 50, 80])
 
     score_name = 'Proto-Class'
 
     # get conceptogram 
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
-    cpss_sl = phs.get_conceptograms(loaders=loaders, target_modules=[target_modules[-1]], verbose=verbose)
 
     if plot:
         fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='row', figsize=(4*len(loaders), 4))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
-    nd_sl = cpss_sl[loaders[0]].shape[1]
     nc = cpss[loaders[0]].shape[2] # number of classes
 
     # compute proto-classes
     cps = cpss[proto_key]
-    cps_sl = cpss_sl[proto_key]
     results = cvs._dss[proto_key]['result']
     labels = cvs._dss[proto_key]['label']
     confs = sm(cvs._dss[proto_key]['output'], dim=-1).max(dim=-1).values
@@ -84,47 +81,47 @@ def conceptogram_protoclass_score(**kwargs):
     proto = torch.zeros(nc, nd, nc)
     for i in range(nc):
         cl = torch.logical_and(labels == i, results == 1)
-        idx = torch.logical_and(cl, confs>0.9)
+        idx = torch.logical_and(cl, confs>proto_th)
         
         _p = cps[idx].sum(dim=0)  ## P'_j
         _p /= _p.sum(dim=1, keepdim=True)
         proto[i][:] = _p[:]
-
-    proto_sl = torch.zeros(nc, nd_sl, nc)
-    for i in range(nc):
-        cl = torch.logical_and(labels == i, results == 1)
-        idx = torch.logical_and(cl, confs>0.9)
-        
-        _p = cps_sl[idx].sum(dim=0)  ## P'_j
-        _p /= _p.sum(dim=1, keepdim=True)
-        proto_sl[i][:] = _p[:]
 
     # prepare returns dict
     ret = {
         'score': {},
         'auc': {},
         'protoclasses': proto,
-        'SinglePercentage_score': {},
-        'SinglePercentage_conf': {}
     }
+
+    # for normalization
+    _line = torch.zeros(nc)
+    _line[0] = 1
+    min_e = Categorical(probs=_line).entropy()
+    _unif = torch.ones(nc)/nc
+    max_e = Categorical(probs=_unif).entropy()
     
     for loader_n, ds_key in enumerate(loaders):
         if path is None: path = (Path.cwd()/phs.name).as_posix()+f'.{score_name}.png'
 
         cps = cpss[ds_key]
-        cps_sl = cpss_sl[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs._dss[ds_key]['result']
-        labels = (cvs._dss[ds_key]['label']).int()
+        #labels = (cvs._dss[ds_key]['label']).int()
         pred = (cvs._dss[ds_key]['pred']).int()
         confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
 
         # main computation
+        #_wcps = (proto[pred]*cps).sum(dim=1)
+        #s = Categorical(probs=_wcps).entropy() 
+        #scores = 1-(s-min_e)/(max_e-min_e)
         scores = (proto[pred]*cps).sum(dim=(1,2))
         scores = scores/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
-
-        scores_sl = (proto_sl[pred]*cps_sl).sum(dim=(1,2))
-        scores_sl = scores_sl/(torch.norm(proto_sl[pred], dim=(1,2))*torch.norm(cps_sl, dim=(1,2)))
+        
+        #s = Categorical(proto[pred][:,-1,:]*cps[:,-1,:]).entropy()
+        #scores_sl = 1-(s-min_e)/(max_e-min_e)
+        scores_sl = (proto[pred][:,-1,:]*cps[:,-1,:]).sum(dim=1)
+        scores_sl = scores_sl/(proto[pred][:,-1,:].norm(dim=1)*cps[:,-1,:].norm(dim=1))
 
         # compute AUC for score
         s_auc = AUC().update(scores, results.int()).compute().item()
@@ -222,9 +219,6 @@ def conceptogram_protoclass_score(**kwargs):
                         [score_name+'(sl)' for i in range(drop_max+1)] + \
                         ['Model confidece' for i in range(drop_max+1)]
                 })
-            
-            # ret['SinglePercentage_score'][ds_key] = s_acc[percentage_list]
-            # ret['SinglePercentage_conf'][ds_key] = m_acc[percentage_list]
             
             sb.lineplot(
                     data = df,
