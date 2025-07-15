@@ -30,6 +30,40 @@ def compute_top_k_accuracy(peepholes, targets, k):
     correct = (topk == targets).any(dim=1).float()
     return correct.mean().item()
 
+            m_acc = torch.zeros(drop_max+1)
+            for drop_perc in range(drop_max+1):
+                n_drop = floor((drop_perc/100)*ns)
+                s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
+                m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
+            
+            colors = ['xkcd:cobalt', 'xkcd:bluish green']
+            ax = axs[1][loader_n]
+            df = pd.DataFrame({
+                'Values': torch.hstack((s_acc, m_acc)),
+                'Score': \
+                        [score_name for i in range(drop_max+1)] + \
+                        ['Model confidece' for i in range(drop_max+1)]
+                })
+                                                                                   
+            sb.lineplot(
+                    data = df,
+                    ax = ax,
+                    x = torch.linspace(0, drop_max, drop_max+1).repeat(2),
+                    y = 'Values',
+                    hue = 'Score',
+                    palette = colors,
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+            ax.set_xlabel('% dropped')
+            ax.set_ylabel('Accuracy (%)')
+            
+    if plot:
+        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    return ret 
+
 def conceptogram_protoclass_score(**kwargs):
     '''
     Compute the Proto-Class score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
@@ -66,7 +100,7 @@ def conceptogram_protoclass_score(**kwargs):
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
-        fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='row', figsize=(4*len(loaders), 4))
+        fig, axs = plt.subplots(2, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -112,14 +146,30 @@ def conceptogram_protoclass_score(**kwargs):
         confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
 
         # main computation
+        # sum entropy
         #_wcps = (proto[pred]*cps).sum(dim=1)
         #s = Categorical(probs=_wcps).entropy() 
         #scores = 1-(s-min_e)/(max_e-min_e)
+        
+        # circle cosine sim
+        #_p = (proto[pred]/nd).sqrt()
+        #_c = (cps/nd).sqrt()
+        #scores = (_p*cps).sum(dim=(1,2))
+
+        # vanilla cosine sim
         scores = (proto[pred]*cps).sum(dim=(1,2))
         scores = scores/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
         
+        ## single layer
+
+        # sum entropy
         #s = Categorical(proto[pred][:,-1,:]*cps[:,-1,:]).entropy()
         #scores_sl = 1-(s-min_e)/(max_e-min_e)
+
+        # circle cosine sim
+        #scores_sl = (proto[pred][:,-1,:].sqrt()*cps[:,-1,:].sqrt()).sum(dim=1)
+
+        # vanilla cosine sim
         scores_sl = (proto[pred][:,-1,:]*cps[:,-1,:]).sum(dim=1)
         scores_sl = scores_sl/(proto[pred][:,-1,:].norm(dim=1)*cps[:,-1,:].norm(dim=1))
 
