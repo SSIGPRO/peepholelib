@@ -66,7 +66,7 @@ def conceptogram_protoclass_score(**kwargs):
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
-        fig, axs = plt.subplots(3, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
+        fig, axs = plt.subplots(3, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 5))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -112,10 +112,29 @@ def conceptogram_protoclass_score(**kwargs):
         confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
 
         # main computation
+        # sum entropy
+        #_wcps = (proto[pred]*cps).sum(dim=1)
+        #s = Categorical(probs=_wcps).entropy() 
+        #scores = 1-(s-min_e)/(max_e-min_e)
+        
+        # circle cosine sim
+        #_p = (proto[pred]/nd).sqrt()
+        #_c = (cps/nd).sqrt()
+        #scores = (_p*cps).sum(dim=(1,2))
+
+        # vanilla cosine sim
         scores = (proto[pred]*cps).sum(dim=(1,2))
         scores = scores/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
         
         ## single layer
+        # sum entropy
+        #s = Categorical(proto[pred][:,-1,:]*cps[:,-1,:]).entropy()
+        #scores_sl = 1-(s-min_e)/(max_e-min_e)
+
+        # circle cosine sim
+        #scores_sl = (proto[pred][:,-1,:].sqrt()*cps[:,-1,:].sqrt()).sum(dim=1)
+
+        # vanilla cosine sim
         scores_sl = (proto[pred][:,-1,:]*cps[:,-1,:]).sum(dim=1)
         scores_sl = scores_sl/(proto[pred][:,-1,:].norm(dim=1)*cps[:,-1,:].norm(dim=1))
 
@@ -164,17 +183,8 @@ def conceptogram_protoclass_score(**kwargs):
                     palette = colors,
                     clip = [0., 1.],
                     alpha = 0.8,
-                    legend = False, #loader_n == 0
+                    legend = loader_n == 0
                     )
-
-            if loader_n == 0:
-                handles, labels = ax.get_legend_handles_labels()
-                ax.legend(
-                    handles, labels,
-                    loc='upper left',
-                    bbox_to_anchor=(-0.3, 1.0),
-                    borderaxespad=0
-                )
 
             lines = ['--', '-', '--', '-', '--', '-']
             # set up linestyles
@@ -232,28 +242,58 @@ def conceptogram_protoclass_score(**kwargs):
 
             # plot callibration 
             s_acc = torch.zeros(100)
+            s_acc_sl = torch.zeros(100)
             m_acc = torch.zeros(100)
+            s_conf = torch.zeros(100)
+            s_conf_sl = torch.zeros(100)
+            m_conf = torch.zeros(100)
+            s_ns  = torch.zeros(100)
+            s_ns_sl  = torch.zeros(100)
+            m_ns  = torch.zeros(100)
+
             for acc_low in range(100):
                 s_idx = torch.logical_and(scores > acc_low/100, scores <= (acc_low+1)/100)
+                s_idx_sl = torch.logical_and(scores_sl > acc_low/100, scores_sl <= (acc_low+1)/100)
                 m_idx = torch.logical_and(confs > acc_low/100, confs <= (acc_low+1)/100)
+
+                s_ns[acc_low] = s_idx.sum()
+                s_ns_sl[acc_low] = s_idx_sl.sum()
+                m_ns[acc_low] = m_idx.sum()
+                
                 s_acc[acc_low] = 100*(results[s_idx]).sum()/s_idx.sum()
+                s_acc_sl[acc_low] = 100*(results[s_idx_sl]).sum()/s_idx_sl.sum()
                 m_acc[acc_low] = 100*(results[m_idx]).sum()/m_idx.sum()
+
+                s_conf[acc_low] = scores[s_idx].sum()/s_idx.sum()
+                s_conf_sl[acc_low] = scores_sl[s_idx].sum()/s_idx_sl.sum()
+                m_conf[acc_low] = confs[s_idx].sum()/m_idx.sum()
+
             s_acc = torch.nan_to_num(s_acc) 
+            s_acc_sl = torch.nan_to_num(s_acc_sl) 
             m_acc = torch.nan_to_num(m_acc) 
 
-            colors = ['xkcd:cobalt', 'xkcd:bluish green']
+            s_conf = torch.nan_to_num(s_conf) 
+            s_conf_sl = torch.nan_to_num(s_conf_sl) 
+            m_conf = torch.nan_to_num(m_conf) 
+
+            s_ece = (s_ns*(s_acc-s_conf).abs()).sum()/ns/100
+            s_ece_sl = (s_ns_sl*(s_acc_sl-s_conf_sl).abs()).sum()/ns/100
+            m_ece = (m_ns*(m_acc-m_conf).abs()).sum()/ns/100
+
+            colors = ['xkcd:cobalt', 'xkcd:orange', 'xkcd:bluish green', 'xkcd:brick red']
             ax = axs[2][loader_n]
             df = pd.DataFrame({
-                'Values': torch.hstack((s_acc, m_acc)),
+                'Values': torch.hstack((s_acc, s_acc_sl, m_acc, torch.tensor([0, 100]))),
                 'Score': \
-                        [score_name+'(ml)' for i in range(100)] + \
-                        ['Model confidece' for i in range(100)]
+                        [score_name+f'(ml): ece = {s_ece:.2f}' for i in range(100)] + \
+                        [score_name+f'(sl): ece = {s_ece_sl:.2f}' for i in range(100)] + \
+                        [f'Model confidece: ece = {m_ece:.2f}' for i in range(100)] + ['Perfect Calibration', 'Perfect Calibration']
                 })
             
             sb.lineplot(
                     data = df,
                     ax = ax,
-                    x = torch.linspace(0, 99, 100).repeat(2),
+                    x = torch.hstack((torch.linspace(0, 99, 100).repeat(3)/100, torch.tensor([0, 1]))),
                     y = 'Values',
                     hue = 'Score',
                     palette = colors,
