@@ -30,168 +30,6 @@ def compute_top_k_accuracy(peepholes, targets, k):
     correct = (topk == targets).any(dim=1).float()
     return correct.mean().item()
 
-def conceptogram_entropy_score(**kwargs):
-    '''
-    Compute the Entropy score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed as the entropy (`torch.distributions.Categorical.entropy()`) of the histogram of the conceptograms into `bins` bins.
-    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`; it also plots the accuracy of the model dropping percentages of the dataset. 
-
-    Args:
-    - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
-    - cvs (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'].
-    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
-    - bins (int): number of bins to construct the histogram of conceptoframs. Weakly affects the score.
-    - plot (bool): save figure with distributions of correctly and miss-classified samples.
-    - max_drop (int): Max dataset drop for the accuracy plot.
-    - verbose (bool): print progress messages.
-
-    Returns:
-    - ret (dict('score': dict(), 'auc':dict())): entropy scores and AUC for each values in `loaders`.  
-    '''
-
-    phs = kwargs.get('peepholes')
-    cvs = kwargs.get('corevectors')
-    loaders = kwargs.get('loaders', ['test'])
-    target_modules = kwargs.get('target_modules', None)
-    bins = kwargs.get('bins', 50)
-    plot = kwargs.get('plot', False)
-    drop_max = kwargs.get('max_drop', 20)
-    verbose = kwargs.get('verbose', False)
-
-    score_name = 'Entropy'
-
-    # get conceptogram 
-    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
-
-    if plot:
-        fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='row', figsize=(4*len(loaders), 4))
-
-    # sizes just to facilitate 
-    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
-    nc = cpss[loaders[0]].shape[2] # number of classes
-
-    # for normalization
-    _line = torch.zeros(bins)
-    _line[0] = 1
-    min_e = Categorical(probs=_line).entropy()
-    _unif = torch.ones(bins)/bins
-    max_e = Categorical(probs=_unif).entropy()
-
-    # prepare returns dict
-    ret = {
-        'score': {}, 
-        'auc': {},
-    }
-
-    for loader_n, ds_key in enumerate(loaders):
-        cps = cpss[ds_key]
-        ns = cps.shape[0] # number of samples
-        results = cvs._dss[ds_key]['result']
-        confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
-        
-        # main computation
-        scores = torch.zeros(ns)
-        for i in range(ns):
-            v = torch.histogram(cps[i], bins).hist
-            s = Categorical(probs=v).entropy()
-            scores[i] = 1-(s-min_e)/(max_e-min_e)
-
-        # compute AUC for score
-        s_auc = AUC().update(scores, results.int()).compute().item()
-
-        # Save returns
-        ret['score'][ds_key] = scores 
-        ret['auc'][ds_key] = s_auc
-
-        if verbose: print(f'AUC for {ds_key} split: {s_auc:.4f}')
-        
-        # plotting
-        if plot:
-            s_oks = scores[results == True]
-            s_kos = scores[results == False]
-            m_oks = confs[results == True]
-            m_kos = confs[results == False]
-
-            # compute AUC for model 
-            m_auc = AUC().update(confs, results.int()).compute().item()
-
-            df = pd.DataFrame({
-                'Value': torch.hstack((s_oks, s_kos, m_oks, m_kos)),
-                'Score': \
-                        [score_name+': OK' for i in range(len(s_oks))] + \
-                        [score_name+': KO' for i in range(len(s_kos))] + \
-                        ['Model: OK' for i in range(len(m_oks))] + \
-                        ['Model: KO' for i in range(len(m_kos))]
-                                                                                              
-                })
-            colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
-
-            # effective plotting
-            ax = axs[0][loader_n] 
-            p = sb.kdeplot(
-                    data = df,
-                    ax = ax,
-                    x = 'Value',
-                    hue = 'Score',
-                    common_norm = False,
-                    palette = colors,
-                    clip = [0., 1.],
-                    alpha = 0.8,
-                    legend = loader_n == 0,
-                    )
-
-            lines = ['--', '-', '--', '-']
-            # set up linestyles
-            for ls, line in zip(lines, p.lines):
-                line.set_linestyle(ls)
-            
-            # set legend linestyle
-            if loader_n == 0:
-                handles = p.legend_.legend_handles[::-1]
-                for ls, h in zip(lines, handles):
-                    h.set_ls(ls)
-
-            ax.set_xlabel('Score')
-            ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key}\n{score_name} AUC={s_auc:.4f}\nModel AUC={m_auc:.4f}')
-            # plot dropping-out accuracy plot
-            _, s_idx = scores.sort()
-            _, m_idx = confs.sort()
-            s_acc = torch.zeros(drop_max+1)
-            m_acc = torch.zeros(drop_max+1)
-            for drop_perc in range(drop_max+1):
-                n_drop = floor((drop_perc/100)*ns)
-                s_acc[drop_perc] = 100*(results[s_idx[n_drop:]]).sum()/(ns-n_drop)
-                m_acc[drop_perc] = 100*(results[m_idx[n_drop:]]).sum()/(ns-n_drop)
-            
-            colors = ['xkcd:cobalt', 'xkcd:bluish green']
-            ax = axs[1][loader_n]
-            df = pd.DataFrame({
-                'Values': torch.hstack((s_acc, m_acc)),
-                'Score': \
-                        [score_name for i in range(drop_max+1)] + \
-                        ['Model confidece' for i in range(drop_max+1)]
-                })
-                                                                                   
-            sb.lineplot(
-                    data = df,
-                    ax = ax,
-                    x = torch.linspace(0, drop_max, drop_max+1).repeat(2),
-                    y = 'Values',
-                    hue = 'Score',
-                    palette = colors,
-                    alpha = 0.8,
-                    legend = loader_n == 0,
-                    )
-            ax.set_xlabel('% dropped')
-            ax.set_ylabel('Accuracy (%)')
-            
-    if plot:
-        plt.savefig((phs.path/phs.name).as_posix()+f'.{ds_key}.{score_name}.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-    return ret 
-
 def conceptogram_protoclass_score(**kwargs):
     '''
     Compute the Proto-Class score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
@@ -228,7 +66,7 @@ def conceptogram_protoclass_score(**kwargs):
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
 
     if plot:
-        fig, axs = plt.subplots(2, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
+        fig, axs = plt.subplots(3, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
 
     # sizes just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
@@ -274,30 +112,10 @@ def conceptogram_protoclass_score(**kwargs):
         confs = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
 
         # main computation
-        # sum entropy
-        #_wcps = (proto[pred]*cps).sum(dim=1)
-        #s = Categorical(probs=_wcps).entropy() 
-        #scores = 1-(s-min_e)/(max_e-min_e)
-        
-        # circle cosine sim
-        #_p = (proto[pred]/nd).sqrt()
-        #_c = (cps/nd).sqrt()
-        #scores = (_p*cps).sum(dim=(1,2))
-
-        # vanilla cosine sim
         scores = (proto[pred]*cps).sum(dim=(1,2))
         scores = scores/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
         
         ## single layer
-
-        # sum entropy
-        #s = Categorical(proto[pred][:,-1,:]*cps[:,-1,:]).entropy()
-        #scores_sl = 1-(s-min_e)/(max_e-min_e)
-
-        # circle cosine sim
-        #scores_sl = (proto[pred][:,-1,:].sqrt()*cps[:,-1,:].sqrt()).sum(dim=1)
-
-        # vanilla cosine sim
         scores_sl = (proto[pred][:,-1,:]*cps[:,-1,:]).sum(dim=1)
         scores_sl = scores_sl/(proto[pred][:,-1,:].norm(dim=1)*cps[:,-1,:].norm(dim=1))
 
@@ -375,7 +193,7 @@ def conceptogram_protoclass_score(**kwargs):
             ax.title.set_text(f'{ds_key}\n{score_name}(ml) AUC={s_auc:.4f}\n{score_name}(sl) AUC={s_auc_sl:.4f}\nModel AUC={m_auc:.4f}')
             ax.grid(True)
 
-            # plot dropping-out accuracy plot
+            # plot dropping-out accuracy
             _, s_idx = scores.sort() # scores is the protoscore
             _, s_idx_sl = scores_sl.sort()
             _, m_idx = confs.sort() # confs is the max of the softmax
@@ -411,6 +229,41 @@ def conceptogram_protoclass_score(**kwargs):
             ax.set_xlabel('% dropped')
             ax.set_ylabel('Accuracy (%)')
             ax.grid(True)
+
+            # plot callibration 
+            s_acc = torch.zeros(100)
+            m_acc = torch.zeros(100)
+            for acc_low in range(100):
+                s_idx = torch.logical_and(scores > acc_low/100, scores <= (acc_low+1)/100)
+                m_idx = torch.logical_and(confs > acc_low/100, confs <= (acc_low+1)/100)
+                s_acc[acc_low] = 100*(results[s_idx]).sum()/s_idx.sum()
+                m_acc[acc_low] = 100*(results[m_idx]).sum()/m_idx.sum()
+            s_acc = torch.nan_to_num(s_acc) 
+            m_acc = torch.nan_to_num(m_acc) 
+
+            colors = ['xkcd:cobalt', 'xkcd:bluish green']
+            ax = axs[2][loader_n]
+            df = pd.DataFrame({
+                'Values': torch.hstack((s_acc, m_acc)),
+                'Score': \
+                        [score_name+'(ml)' for i in range(100)] + \
+                        ['Model confidece' for i in range(100)]
+                })
+            
+            sb.lineplot(
+                    data = df,
+                    ax = ax,
+                    x = torch.linspace(0, 99, 100).repeat(2),
+                    y = 'Values',
+                    hue = 'Score',
+                    palette = colors,
+                    alpha = 0.8,
+                    legend = loader_n == 0,
+                    )
+            ax.set_xlabel('Confidence')
+            ax.set_ylabel('Accuracy (%)')
+            ax.grid(True)
+
 
     if plot:
         plt.savefig((path/phs.name).as_posix()+f'.{score_name}.png', dpi=300, bbox_inches='tight')
