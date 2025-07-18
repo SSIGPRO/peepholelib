@@ -20,7 +20,7 @@ def get_out_activations(x):
 
 def get_coreVectors(self, **kwargs):
     '''
-    Compute and save corevectos. Corevectors are saved directly on disk using a 'tensordict.PersistentTensorDict'.
+    Compute and save corevectos. Corevectors are saved directly on disk using a 'tensordict.PersistentTensorDict' at 'self.path/self.name.<loader>', with 'loader' being the loader keys (see peepholelib.datasets).
     Pre-allocation is done with shapes obtained via a dry-run. Checks are performed for existing loaders and existing modules, which are skipped.
     If activations are present in 'self._dss', use the saved values, but saving activations is memory heavy. Otherwise, pass the input images through the model in batches and get the activations directly from the model (see 'peepholelib.model_wrap').
 
