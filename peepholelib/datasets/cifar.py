@@ -4,14 +4,36 @@ from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 
 # General python stuff
 from pathlib import Path as Path
+import numpy as np
+from math import floor
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
+from torch.utils.data import Dataset
 
 # CIFAR from torchvision
 from torchvision import datasets
+from torchvision.transforms.functional import to_pil_image as toPIL
 
+class CustomDS(Dataset):
+    def __init__(self, data, labels, transform):
+        Dataset.__init__(self) 
+        self.data = data
+        self.labels = labels
+        self.transform = transform
+        self.len = labels.shape[0]
+        return
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        # TODO: check if this swap it correct
+        return (
+                self.transform(toPIL(self.data[idx].swapaxes(0,2))),
+                self.labels[idx]
+                )
 
 class Cifar(DatasetBase):
     def __init__(self, **kwargs):
@@ -27,12 +49,11 @@ class Cifar(DatasetBase):
         DatasetBase.__init__(self, **kwargs)
         
         # use CIFAR10 by default
-        self.dataset = kwargs['dataset'] if 'dataset' in kwargs else 'CIFAR10'
-        print('dataset: %s' % self.dataset)
+        self.dataset = kwargs.get('dataset', 'CIFAR10')
 
         # raise error if the dataset is not CIFAR
         if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be CIFAR")
+            raise ValueError("Dataset must be CIFAR<10|100>")
 
         return
     
@@ -48,9 +69,12 @@ class Cifar(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs['transform'] if 'transform' in kwargs else eval('vgg16_'+self.dataset.lower())
+        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        corrupted_path = kwargs.get('corrupted_path', None)
+        if not corrupted_path == None: corrupted_path = Path(corrupted_path)
+
+        seed = kwargs.get('seed', 42)
             
-        seed = kwargs['seed']
         # set torch seed
         torch.manual_seed(seed)
 
@@ -62,7 +86,7 @@ class Cifar(DatasetBase):
             download = True
         )
         
-        # train data will be splitted for training and validation
+        # train data will be splitted into training and validation
         _train_data = datasets.__dict__[self.dataset]( 
             root = self.data_path,
             train = True,
@@ -75,18 +99,50 @@ class Cifar(DatasetBase):
             [0.8, 0.2],
             generator=torch.Generator().manual_seed(seed)
         )
-        
+
         # Apply the transform 
         if transform != None:
             val_dataset.dataset.transform = transform
             train_dataset.dataset.transform = transform
-     
+        
+        # Load corrupted
+        if not corrupted_path == None:
+            label_file = list(corrupted_path.glob('labels.npy'))[0]
+            _labels = np.load(label_file).astype(int)
+            n_samples = _labels.shape[0]
+
+            # we get random samples for each corruption
+            idxs = torch.randperm(n_samples)
+            
+            files = list(corrupted_path.glob('[!label]*.npy'))
+            img_shape = np.load(files[0])[0].shape
+            # get spc (samples per corruption) from each corruption
+            n_corruptions = len(files)
+            spc = floor(n_samples/n_corruptions)
+
+            # pre-allocate images and labels
+            c_labels = np.zeros(n_corruptions*spc, dtype=int) 
+            c_images = torch.zeros((n_corruptions*spc,)+img_shape)
+
+            for ci, f in enumerate(files):
+                _data = torch.tensor(np.load(f))
+                c_labels[ci*spc:(ci+1)*spc] = _labels[idxs[ci*spc:(ci+1)*spc]]
+                c_images[ci*spc:(ci+1)*spc] = _data[idxs[ci*spc:(ci+1)*spc]]
+            corrupted_dataset = CustomDS(
+                    data = c_images,
+                    labels = c_labels,
+                    transform = transform,
+                    )
+
         # Save datasets as objects in the class
         self._dss = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
                 }
+        if not corrupted_path == None:
+            self._dss['ood'] = corrupted_dataset
+
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
         return 
