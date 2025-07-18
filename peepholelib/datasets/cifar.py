@@ -6,6 +6,7 @@ from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 from pathlib import Path as Path
 import numpy as np
 from math import floor
+from tqdm import tqdm
 
 # torch stuff
 import torch
@@ -14,12 +15,14 @@ from torch.utils.data import Dataset
 
 # CIFAR from torchvision
 from torchvision import datasets
-from torchvision.transforms.functional import to_pil_image as toPIL
+from PIL import Image
 
 class CustomDS(Dataset):
     def __init__(self, data, labels, transform):
         Dataset.__init__(self) 
-        self.data = data
+        self.data = []
+        for d in tqdm(data, disable=True):
+            self.data.append(Image.fromarray(d))
         self.labels = labels
         self.transform = transform
         self.len = labels.shape[0]
@@ -29,11 +32,12 @@ class CustomDS(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        # TODO: check if this swap it correct
-        return (
-                self.transform(toPIL(self.data[idx].swapaxes(0,2))),
-                self.labels[idx]
-                )
+        d = self.transform(self.data[idx])
+        l = self.labels[idx]
+        return d, l
+
+    def __getitems__(self, idxs):
+        return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
 
 class Cifar(DatasetBase):
     def __init__(self, **kwargs):
@@ -122,12 +126,16 @@ class Cifar(DatasetBase):
 
             # pre-allocate images and labels
             c_labels = np.zeros(n_corruptions*spc, dtype=int) 
-            c_images = torch.zeros((n_corruptions*spc,)+img_shape)
+            c_images = np.zeros((n_corruptions*spc,)+img_shape, dtype=np.uint8)
 
             for ci, f in enumerate(files):
-                _data = torch.tensor(np.load(f))
+                _data = np.load(f)
                 c_labels[ci*spc:(ci+1)*spc] = _labels[idxs[ci*spc:(ci+1)*spc]]
                 c_images[ci*spc:(ci+1)*spc] = _data[idxs[ci*spc:(ci+1)*spc]]
+
+            # reshape image 
+            # TODO: check this reshape
+            c_images = c_images.reshape(-1, 3, 32, 32).transpose((0, 2, 3, 1))
             corrupted_dataset = CustomDS(
                     data = c_images,
                     labels = c_labels,
