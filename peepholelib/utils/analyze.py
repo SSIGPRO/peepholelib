@@ -271,6 +271,143 @@ def conceptogram_protoclass_score(**kwargs):
         
     return ret 
 
+def conceptogram_entropy_score_attacks(**kwargs):
+    '''
+    Compute the Entropy score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed as the entropy (`torch.distributions.Categorical.entropy()`) of the histogram of the conceptograms into `bins` bins.
+    If `plot=True` is passed, saves a KDE plot of the score and model confidence (`torch.nn.softmax(<model output>)`) for the correct and misclassified samples. `<model output>` is taken from `cvs`; it also plots the accuracy of the model dropping percentages of the dataset. 
+
+    Args:
+    - phs (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
+    - cvs (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'].
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
+    - bins (int): number of bins to construct the histogram of conceptoframs. Weakly affects the score.
+    - plot (bool): save figure with distributions of correctly and miss-classified samples.
+    - max_drop (int): Max dataset drop for the accuracy plot.
+    - verbose (bool): print progress messages.
+
+    Returns:
+    - ret (dict('score': dict(), 'auc':dict())): entropy scores and AUC for each values in `loaders`.  
+    '''
+
+    phs_ori = kwargs.get('peepholes_ori')
+    cvs_ori = kwargs.get('corevectors_ori')
+    phs_atk = kwargs.get('peepholes_atk')
+    cvs_atk = kwargs.get('corevectors_atk')
+    loaders = kwargs.get('loaders', ['test'])
+    target_modules = kwargs.get('target_modules', None)
+    proto_key = kwargs.get('proto_key', 'train')
+    bins = kwargs.get('bins', 20)
+    plot = kwargs.get('plot', False)
+    verbose = kwargs.get('verbose', False)
+    atk_name = kwargs.get('atk_name', None)
+    path = kwargs.get('path')
+
+    score_name = 'Entropy'
+
+    # compute conceptogram entropy
+    cpsso = phs_ori.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+    cpssa = phs_atk.get_conceptograms(loaders=['test'], target_modules=target_modules, verbose=verbose)
+
+    # for normalization
+    _line = torch.zeros(bins)
+    _line[0] = 1
+    min_e = Categorical(probs=_line).entropy()
+    _unif = torch.ones(bins)/bins
+    max_e = Categorical(probs=_unif).entropy()
+
+    # prepare returns dict
+    # prepare returns dict
+    ret = {
+        'score': {},
+        'auc': {},
+        'so': {},
+        'sa': {}
+    }
+
+    
+    cps = cpsso['test']
+    ns = cps.shape[0] # number of samples
+    results = cvs_ori._dss['test']['result']
+
+    # main computation
+    so = torch.zeros(ns)
+    for i in range(ns):
+        v = torch.histogram(cps[i], bins).hist
+        s = Categorical(probs=v).entropy()
+        so[i] = 1-(s-min_e)/(max_e-min_e)
+
+    cps = cpssa['test']
+    ns = cps.shape[0] # number of samples
+    results = cvs_atk._dss['test']['result']
+
+    # main computation
+    sa = torch.zeros(ns)
+    for i in range(ns):
+        v = torch.histogram(cps[i], bins).hist
+        s = Categorical(probs=v).entropy()
+        sa[i] = 1-(s-min_e)/(max_e-min_e)
+
+    idx = torch.argwhere((cvs_ori._dss['test']['result'] == 1) & (cvs_atk._dss['test']['attack_success'] == 1))
+
+    so = so[idx].squeeze()
+    sa = sa[idx].squeeze()
+
+    # so = so.squeeze()
+    # sa = sa.squeeze()
+    
+    lo = torch.ones(so.shape[0])
+    la = torch.zeros(sa.shape[0])
+    scores = torch.cat((so, sa))
+    results = torch.cat((lo, la)) 
+
+    try:
+        auc_metric = AUC()
+        auc_metric.update(scores, results.int())
+        auc = auc_metric.compute().item()
+    except Exception:
+        auc = float('nan')
+
+    ret['score']['test'] = scores 
+    ret['auc']['test'] = auc
+    ret['so']['test'] = so
+    ret['sa']['test'] = sa
+
+    if verbose: print(f'AUC for {atk_name} split: {auc:.4f}')
+        
+    # plotting
+    if plot:
+        ori = (so).detach().cpu().numpy()
+        atk = (sa).detach().cpu().numpy()
+        fpr, tpr, thresholds = roc_curve(results.detach().cpu().numpy(), scores.detach().cpu().numpy())
+        plt.figure()
+        fig, axs = plt.subplots(2,1, figsize=(7,10))
+        axs[0].plot(fpr, tpr, label=f'ROC curve (AUC = {auc:.2f})')
+        axs[0].plot([0, 1], [0, 1], 'k--', label='Chance')
+        axs[0].set_xlabel('False Positive Rate')
+        axs[0].set_ylabel('True Positive Rate')
+        axs[0].set_title('Receiver Operating Characteristic')
+        axs[0].legend()
+        axs[1].hist(ori, bins=50, label='ori')
+        axs[1].hist(atk, bins=50, label=f'{atk_name}', alpha=0.7)
+        axs[1].legend()
+        # fig.savefig(f'../data/{name_model}/img/AUC/Feature_squeezing_attack={atk.replace("my", "")}_combined.png')
+        
+        
+        # sb.histplot(data=pd.DataFrame({'score': ori}), ax=ax, bins=_bins, x='score', stat='density', label='ok n=%d'%len(ori), alpha=0.5)
+        # sb.histplot(data=pd.DataFrame({'score': atk}), ax=ax, bins=_bins, x='score', stat='density', label='ko n=%d'%len(atk), alpha=0.5)
+        # ax.set_xlabel('score: Proto-Class')
+        # ax.set_ylabel('%')
+        # ax.title.set_text(f'{ds_key} (AUC={auc:.4f})')
+        # ax.legend(title='dist')
+
+    if plot:
+        plt.savefig(path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+    return ret 
+
+
 def conceptogram_protoclass_score_attacks(**kwargs):
     phs_ori = kwargs.get('peepholes_ori')
     cvs_ori = kwargs.get('corevectors_ori')
@@ -325,18 +462,20 @@ def conceptogram_protoclass_score_attacks(**kwargs):
         ns = cps.shape[0] # number of samples
         results = cvs_ori._dss[ds_key]['result']
         labels = (cvs_ori._dss[ds_key]['label']).int()
+        pred = (cvs_ori._dss[ds_key]['pred']).int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        so = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[pred]*cps).sum(dim=(1,2))
+        so = s/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     for loader_n, ds_key in enumerate(['test']):
         cps = cpssa[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs_atk._dss[ds_key]['result']
         labels = (cvs_atk._dss[ds_key]['label']).int()
+        pred = (cvs_ori._dss[ds_key]['pred']).int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        sa = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[pred]*cps).sum(dim=(1,2))
+        sa = s/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     idx = torch.argwhere((cvs_ori._dss[ds_key]['result'] == 1) & (cvs_atk._dss[ds_key]['attack_success'] == 1))
 
