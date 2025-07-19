@@ -264,7 +264,7 @@ def conceptogram_protoclass_score(**kwargs):
     max_e = Categorical(probs=_unif).entropy()
     
     for loader_n, ds_key in enumerate(loaders):
-        if path is None: path = (Path.cwd()/phs.name).as_posix()+f'.{score_name}.png'
+        if path is None: path = Path.cwd()
 
         cps = cpss[ds_key]
         ns = cps.shape[0] # number of samples
