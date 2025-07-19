@@ -68,6 +68,7 @@ class Cifar(DatasetBase):
         Args:
         - seed (int): Random seed for reproducibility.
         - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 for vgg16 transform)
+        - corrupted_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
         
         Returns:
         - a thumbs up
@@ -133,9 +134,6 @@ class Cifar(DatasetBase):
                 c_labels[ci*spc:(ci+1)*spc] = _labels[idxs[ci*spc:(ci+1)*spc]]
                 c_images[ci*spc:(ci+1)*spc] = _data[idxs[ci*spc:(ci+1)*spc]]
 
-            # reshape image 
-            # TODO: check this reshape
-            c_images = c_images.reshape(-1, 3, 32, 32).transpose((0, 2, 3, 1))
             corrupted_dataset = CustomDS(
                     data = c_images,
                     labels = c_labels,
