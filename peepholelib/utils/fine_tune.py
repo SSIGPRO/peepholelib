@@ -32,11 +32,13 @@ def fine_tune(**kwargs):
     ds = kwargs['dataset']
     train_key = kwargs['train_key'] if 'train_key' in kwargs else 'train' 
     val_key = kwargs['val_key'] if 'val_key' in kwargs else 'val' 
-    ds_parser = kwargs['ds_parser'] if 'ds_parser' in kwargs else from_dataset 
+    train_dl_kwargs = kwargs['train_dl_kwargs'] if 'train_dl_kwargs' in kwargs else dict(batch_size=256, collate_fn= partial(from_dataset), shuffle=True, num_workers=n_threads)
+    val_dl_kwargs = kwargs['val_dl_kwargs'] if 'val_dl_kwargs' in kwargs else train_dl_kwargs
 
     # training artifacts
     _l = kwargs['loss_fn'] if 'loss_fn' in kwargs else torch.nn.CrossEntropyLoss
-    loss_kwargs = kwargs['loss_kwargs'] if 'loss_kwargs' in kwargs else {'reduction': 'mean'}
+    loss_kwargs = kwargs['loss_kwargs'] if 'loss_kwargs' in kwargs else dict()
+    
     _opt = kwargs['optimizer'] if 'optimizer' in kwargs else torch.optim.SGD
     optim_kwargs = kwargs['optim_kwargs'] if 'optim_kwargs' in kwargs else dict()
     pred_fn = kwargs['pred_fn'] if 'pred_fn' in kwargs else partial(torch.argmax, axis=1)  
@@ -45,12 +47,14 @@ def fine_tune(**kwargs):
     
     # training progress
     lr = kwargs['lr']
+
+    patience = kwargs['patience'] if 'patience' in kwargs else 10
     iterations = kwargs['iterations'] if 'iterations' in kwargs else 'full' 
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 256 
     max_epochs = kwargs['max_epochs'] if 'max_epochs' in kwargs else 1e3
     
     # create training artifacts
-    loss_fn = _l()
+    loss_fn = _l(**loss_kwargs)
     optim = _opt(model._model.parameters(), lr=lr, **optim_kwargs)
     scheduler = _sched(optimizer=optim, **scheduler_kwargs) if not _sched == None else None
 
@@ -59,10 +63,6 @@ def fine_tune(**kwargs):
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
     
     # TODO add lr scheduling
-
-    assert(isinstance(model, ModelWrap))
-    assert(isinstance(ds, DatasetBase))
-    assert(isinstance(iterations, int) or iterations == 'full')
 
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
@@ -73,8 +73,8 @@ def fine_tune(**kwargs):
         iter_val = iterations 
 
     # dataloader for the dataset
-    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads)
-    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs, collate_fn=partial(ds_parser), shuffle=True, num_workers=n_threads) 
+    train_dl = DataLoader(dataset=ds._dss[train_key], **train_dl_kwargs)
+    val_dl = DataLoader(dataset=ds._dss[val_key], **val_dl_kwargs) 
     
     # to save losses
     file = path/name
@@ -121,9 +121,15 @@ def fine_tune(**kwargs):
         initial_epoch = 0
 
     path.mkdir(parents=True, exist_ok=True)
+    best_model_path = path/'best_model'
+    best_model_path.mkdir(parents=True, exist_ok=True)
 
     # training loop
     if verbose: print('training------')
+    best_val_loss = float('inf')
+    patience_counter = 0
+    old_lr = lr
+
     for epoch in range(initial_epoch, max_epochs):
         t0 = time()
         # peform train iterations
@@ -163,8 +169,28 @@ def fine_tune(**kwargs):
         if not scheduler == None: 
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(loss)
+                if old_lr != optim.param_groups[0]['lr']:
+                    old_lr = optim.param_groups[0]['lr']
+                    if verbose: 
+                        print(f'Current LR: {optim.param_groups[0]["lr"]:.6f}')
             else:
                 scheduler.step()
+        
+        if loss < best_val_loss:
+            best_val_loss = loss
+            patience_counter = 0
+            # Save best model
+            _d = {
+                  'train_losses': train_losses[:epoch+1],
+                  'train_accuracy': train_acc[:epoch+1],
+                  'val_losses': val_losses[:epoch+1],
+                  'val_accuracy': val_acc[:epoch+1],
+                  'state_dict': model._model.state_dict(),
+                  'optimizer': optim.state_dict(),
+                  'scheduler': scheduler.state_dict() if not scheduler == None else None
+                  }
+            torch.save(_d, best_model_path/'best_model_config.pt')
+            torch.save(model._model.state_dict(), best_model_path/'best_model.pth')
 
         if verbose: print(f'epoch `{epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]} - train acc: {train_acc[epoch]} - val acc: {val_acc[epoch]} - time: {time()-t0}')
         
@@ -182,10 +208,10 @@ def fine_tune(**kwargs):
             torch.save(_d, file.as_posix()+'.'+str(epoch)+'.pt')
 
             plt.figure()
-            plt.plot(train_losses.detach().cpu().numpy(), label='loss_'+train_key)
-            plt.plot(val_losses.detach().cpu().numpy(), label='loss_'+val_key)
-            plt.plot(train_acc.detach().cpu().numpy(), label='acc_'+train_key)
-            plt.plot(val_acc.detach().cpu().numpy(), label='acc_'+val_key)
+            plt.plot(train_losses[:epoch-1].detach().cpu().numpy(), label='loss_'+train_key)
+            plt.plot(val_losses[:epoch-1].detach().cpu().numpy(), label='loss_'+val_key)
+            plt.plot(train_acc[:epoch-1].detach().cpu().numpy(), label='acc_'+train_key)
+            plt.plot(val_acc[:epoch-1].detach().cpu().numpy(), label='acc_'+val_key)
             plt.semilogy()
             plt.xlabel('epoch')
             plt.ylabel('loss')

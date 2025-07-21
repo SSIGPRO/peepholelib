@@ -10,7 +10,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         self.data_path = Path(kwargs['data_path']) if 'data_path' in kwargs else Path.cwd().parent/'data/datasets'
 
         # computed in load_data()
-        self._dss = None
+        self._dss = None 
         self._classes = None
     
     @abc.abstractmethod
