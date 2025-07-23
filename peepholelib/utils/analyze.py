@@ -279,6 +279,7 @@ def conceptogram_protoclass_score_attacks(**kwargs):
     loaders = kwargs.get('loaders', ['test'])
     target_modules = kwargs.get('target_modules', None)
     proto_key = kwargs.get('proto_key', 'train')
+    proto_th = kwargs.get('proto_threshold', 0.9)
     bins = kwargs.get('bins', 20)
     plot = kwargs.get('plot', False)
     verbose = kwargs.get('verbose', False)
@@ -306,7 +307,7 @@ def conceptogram_protoclass_score_attacks(**kwargs):
     proto = torch.zeros(nc, nd, nc)
     for i in range(nc):
         cl = torch.logical_and(labels == i, results == 1)
-        idx = torch.logical_and(cl, confs>0.9)
+        idx = torch.logical_and(cl, confs>proto_th)
         _p = cps[idx].sum(dim=0)
         _p /= _p.sum(dim=1, keepdim=True)
         proto[i][:] = _p[:]
@@ -324,19 +325,21 @@ def conceptogram_protoclass_score_attacks(**kwargs):
         cps = cpsso[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs_ori._dss[ds_key]['result']
-        labels = (cvs_ori._dss[ds_key]['label']).int()
+        #labels = (cvs_ori._dss[ds_key]['label']).int()
+        pred = (cvs._dss[ds_key]['pred']).int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        so = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[pred]*cps).sum(dim=(1,2))
+        so = s/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     for loader_n, ds_key in enumerate(['test']):
         cps = cpssa[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs_atk._dss[ds_key]['result']
-        labels = (cvs_atk._dss[ds_key]['label']).int()
+        #labels = (cvs_atk._dss[ds_key]['label']).int()
+        pred = (cvs._dss[ds_key]['pred']).int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        sa = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[pred]*cps).sum(dim=(1,2))
+        sa = s/(torch.norm(proto[pred], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     idx = torch.argwhere((cvs_ori._dss[ds_key]['result'] == 1) & (cvs_atk._dss[ds_key]['attack_success'] == 1))
 
