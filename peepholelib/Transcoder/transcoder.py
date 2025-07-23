@@ -12,20 +12,39 @@ class FullyConnectedAutoencoder(nn.Module):
     def __init__(self, 
                  input_size,
                  embedding_size,
+                 encoder_layer_dims=None,
+                 decoder_layer_dims=None,
                  output_size=None,
-                 encoder_layers=3,
-                 decoder_layers=None,
                  activation='relu'):
         """
-        Fully Connected Autoencoder
+        Flexible Fully Connected Autoencoder
         
         Args:
             input_size (int): Size of the input vector
             embedding_size (int): Size of the embedding (bottleneck) layer
+            encoder_layer_dims (list, optional): List of dimensions for encoder layers (excluding input and embedding).
+                                                If None, creates a single layer encoder
+            decoder_layer_dims (list, optional): List of dimensions for decoder layers (excluding embedding and output).
+                                                If None, uses reversed encoder structure
             output_size (int, optional): Size of the output vector. If None, uses input_size
-            encoder_layers (int): Number of layers in the encoder (default: 3)
-            decoder_layers (int, optional): Number of layers in the decoder. If None, uses encoder_layers
             activation (str): Activation function ('relu', 'tanh', 'sigmoid', 'leaky_relu')
+        
+        Example:
+            # Simple autoencoder: 784 -> 128 -> 64 (embedding) -> 128 -> 784
+            model = FlexibleFullyConnectedAutoencoder(
+                input_size=784, 
+                embedding_size=64, 
+                encoder_layer_dims=[128]
+            )
+            
+            # Complex autoencoder: 1000 -> 512 -> 256 -> 128 -> 32 (embedding) -> 64 -> 128 -> 256 -> 500
+            model = FlexibleFullyConnectedAutoencoder(
+                input_size=1000,
+                embedding_size=32,
+                encoder_layer_dims=[512, 256, 128],
+                decoder_layer_dims=[64, 128, 256],
+                output_size=500
+            )
         """
         super(FullyConnectedAutoencoder, self).__init__()
         
@@ -33,9 +52,14 @@ class FullyConnectedAutoencoder(nn.Module):
         self.input_size = input_size
         self.embedding_size = embedding_size
         self.output_size = output_size if output_size is not None else input_size
-        self.encoder_layers = encoder_layers
-        self.decoder_layers = decoder_layers if decoder_layers is not None else encoder_layers
+        self.encoder_layer_dims = encoder_layer_dims if encoder_layer_dims is not None else []
         
+        # If decoder_layer_dims not provided, use reversed encoder structure
+        if decoder_layer_dims is None:
+            self.decoder_layer_dims = list(reversed(self.encoder_layer_dims))
+        else:
+            self.decoder_layer_dims = decoder_layer_dims
+            
         # Set activation function
         self.activation = self._get_activation(activation)
         
@@ -53,31 +77,33 @@ class FullyConnectedAutoencoder(nn.Module):
         }
         return activations.get(activation.lower(), F.relu)
     
+    def _get_activation_layer(self):
+        """Get activation layer for nn.Sequential"""
+        if self.activation == F.relu:
+            return nn.ReLU()
+        elif self.activation == torch.tanh:
+            return nn.Tanh()
+        elif self.activation == torch.sigmoid:
+            return nn.Sigmoid()
+        elif self.activation == F.leaky_relu:
+            return nn.LeakyReLU()
+        else:
+            return nn.ReLU()
+    
     def _build_encoder(self):
         """Build encoder layers"""
         layers = []
         
-        if self.encoder_layers == 1:
-            # Direct connection to embedding
-            layers.append(nn.Linear(self.input_size, self.embedding_size))
-        else:
-            # Calculate layer sizes - gradually reduce from input to embedding
-            layer_sizes = self._calculate_layer_sizes(
-                self.input_size, 
-                self.embedding_size, 
-                self.encoder_layers
-            )
+        # Create the complete layer size sequence: input -> hidden layers -> embedding
+        layer_sizes = [self.input_size] + self.encoder_layer_dims + [self.embedding_size]
+        
+        # Build layers
+        for i in range(len(layer_sizes) - 1):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
             
-            # Build layers
-            for i in range(len(layer_sizes) - 1):
-                layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
-                
-                # Add activation except for the last layer (embedding layer)
-                if i < len(layer_sizes) - 2:
-                    layers.append(nn.ReLU() if self.activation == F.relu else 
-                                nn.Tanh() if self.activation == torch.tanh else
-                                nn.Sigmoid() if self.activation == torch.sigmoid else
-                                nn.LeakyReLU())
+            # Add activation except for the last layer (embedding layer)
+            if i < len(layer_sizes) - 2:
+                layers.append(self._get_activation_layer())
         
         return nn.Sequential(*layers)
     
@@ -85,50 +111,18 @@ class FullyConnectedAutoencoder(nn.Module):
         """Build decoder layers"""
         layers = []
         
-        if self.decoder_layers == 1:
-            # Direct connection from embedding to output
-            layers.append(nn.Linear(self.embedding_size, self.output_size))
-        else:
-            # Calculate layer sizes - gradually increase from embedding to output
-            layer_sizes = self._calculate_layer_sizes(
-                self.embedding_size, 
-                self.output_size, 
-                self.decoder_layers
-            )
+        # Create the complete layer size sequence: embedding -> hidden layers -> output
+        layer_sizes = [self.embedding_size] + self.decoder_layer_dims + [self.output_size]
+        
+        # Build layers
+        for i in range(len(layer_sizes) - 1):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
             
-            # Build layers
-            for i in range(len(layer_sizes) - 1):
-                layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
-                
-                # Add activation except for the last layer (output layer)
-                if i < len(layer_sizes) - 2:
-                    layers.append(nn.ReLU() if self.activation == F.relu else 
-                                nn.Tanh() if self.activation == torch.tanh else
-                                nn.Sigmoid() if self.activation == torch.sigmoid else
-                                nn.LeakyReLU())
+            # Add activation except for the last layer (output layer)
+            if i < len(layer_sizes) - 2:
+                layers.append(self._get_activation_layer())
         
         return nn.Sequential(*layers)
-    
-    def _calculate_layer_sizes(self, start_size, end_size, num_layers):
-        """Calculate intermediate layer sizes"""
-        if num_layers == 1:
-            return [start_size, end_size]
-        
-        # Use geometric progression for smooth size transitions
-        ratio = (end_size / start_size) ** (1 / (num_layers - 1))
-        sizes = [start_size]
-        
-        for i in range(1, num_layers):
-            size = int(start_size * (ratio ** i))
-            # Ensure we don't go below end_size for encoder or above end_size for decoder
-            if start_size > end_size:  # Encoder case
-                size = max(size, end_size)
-            else:  # Decoder case
-                size = min(size, end_size)
-            sizes.append(size)
-        
-        sizes[-1] = end_size  # Ensure exact end size
-        return sizes
     
     def encode(self, x):
         """Encode input to embedding"""
@@ -151,19 +145,26 @@ class FullyConnectedAutoencoder(nn.Module):
     
     def print_architecture(self):
         """Print the architecture details"""
-        print(f"Autoencoder Architecture:")
+        encoder_sizes = [self.input_size] + self.encoder_layer_dims + [self.embedding_size]
+        decoder_sizes = [self.embedding_size] + self.decoder_layer_dims + [self.output_size]
+        
+        print(f"Flexible Autoencoder Architecture:")
         print(f"Input size: {self.input_size}")
         print(f"Output size: {self.output_size}")
         print(f"Embedding size: {self.embedding_size}")
-        print(f"Encoder layers: {self.encoder_layers}")
-        print(f"Decoder layers: {self.decoder_layers}")
-        print(f"\nEncoder:")
+        print(f"Encoder layer dimensions: {self.encoder_layer_dims}")
+        print(f"Decoder layer dimensions: {self.decoder_layer_dims}")
+        
+        print(f"\nEncoder architecture: {' -> '.join(map(str, encoder_sizes))}")
+        print(f"Decoder architecture: {' -> '.join(map(str, decoder_sizes))}")
+        
+        print(f"\nEncoder layers:")
         for i, layer in enumerate(self.encoder):
             print(f"  {i}: {layer}")
-        print(f"\nDecoder:")
+        print(f"\nDecoder layers:")
         for i, layer in enumerate(self.decoder):
             print(f"  {i}: {layer}")
-
+    
 class AutoencoderTrainer:
     def __init__(self, model, path, train_dataset, val_dataset, test_dataset, 
                  batch_size=32, learning_rate=0.001, device=None):
@@ -191,7 +192,12 @@ class AutoencoderTrainer:
         self.test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
         
         # Training setup
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        self.optimizer = torch.optim.AdamW(model.parameters(),
+                                    lr=learning_rate,
+                                    betas=(0.5, 0.999),
+                                    eps=1e-7,
+                                    weight_decay=1e-5,
+                                    amsgrad=True)
         self.criterion = nn.MSELoss()
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer, mode='min', factor=0.5, patience=5, verbose=True
@@ -223,8 +229,11 @@ class AutoencoderTrainer:
             batch_targets = batch_targets.to(self.device)
             
             self.optimizer.zero_grad()
-            reconstruction, _ = self.model(batch_data)
-            loss = self.criterion(reconstruction, batch_targets)
+            reconstruction, embedding = self.model(batch_data)
+            recon_loss = self.criterion(reconstruction, batch_targets)
+            reg_loss = torch.mean(torch.sum(torch.abs(embedding), dim=1))
+            #reg_loss  = torch.mean(torch.sum(embedding**2, dim=1))
+            loss = recon_loss + 1e-1 * reg_loss
             loss.backward()
             self.optimizer.step()
             
@@ -244,8 +253,11 @@ class AutoencoderTrainer:
                 batch_data = batch_data.to(self.device)
                 batch_targets = batch_targets.to(self.device)
                 
-                reconstruction, _ = self.model(batch_data)
-                loss = self.criterion(reconstruction, batch_targets)
+                reconstruction, embedding = self.model(batch_data)
+                recon_loss = self.criterion(reconstruction, batch_targets)
+                reg_loss = torch.mean(torch.sum(torch.abs(embedding), dim=1))
+                #reg_loss  = torch.mean(torch.sum(embedding**2, dim=1))
+                loss = recon_loss + 1e-1 * reg_loss
                 
                 total_loss += loss.item()
                 num_batches += 1
@@ -270,8 +282,8 @@ class AutoencoderTrainer:
                     'input_size': self.model.input_size,
                     'embedding_size': self.model.embedding_size,
                     'output_size': self.model.output_size,
-                    'encoder_layers': self.model.encoder_layers,
-                    'decoder_layers': self.model.decoder_layers
+                    'encoder_layers': self.model.encoder_layer_dims,
+                    'decoder_layers': self.model.decoder_layer_dims
                 }
             }, model_path)
             
@@ -328,6 +340,7 @@ class AutoencoderTrainer:
             
             # Update learning rate scheduler
             self.scheduler.step(val_loss)
+            print(self.optimizer.param_groups[0]['lr'])
             if self.optimizer.param_groups[0]['lr'] != old_lr:
                 print(f"Learning rate changed from {old_lr:.6f} to {self.optimizer.param_groups[0]['lr']:.6f}")
                 old_lr = self.optimizer.param_groups[0]['lr']
