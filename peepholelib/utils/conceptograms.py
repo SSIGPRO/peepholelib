@@ -49,8 +49,12 @@ def plot_conceptogram(**kwargs):
     ticks = kwargs.get('ticks', target_modules)
     krows = kwargs.get('krows', 3)
 
+    if target_modules == None:
+        target_modules = list(phs._phs[loaders[0]].keys())
+
     if len(target_modules) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
+
     for ds_key in loaders:
         # getting data from corevectors
         _dss = cvs._dss[ds_key][samples] 
