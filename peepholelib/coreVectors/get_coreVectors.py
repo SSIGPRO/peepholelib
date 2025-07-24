@@ -19,14 +19,27 @@ def get_out_activations(x):
     return x['out_activations']
 
 def get_coreVectors(self, **kwargs):
+    '''
+    Compute and save corevectos. Corevectors are saved directly on disk using a 'tensordict.PersistentTensorDict' at 'self.path/self.name.<loader>', with 'loader' being the loader keys (see peepholelib.datasets).
+    Pre-allocation is done with shapes obtained via a dry-run. Checks are performed for existing loaders and existing modules, which are skipped.
+    If activations are present in 'self._dss', use the saved values, but saving activations is memory heavy. Otherwise, pass the input images through the model in batches and get the activations directly from the model (see 'peepholelib.model_wrap').
+
+    Args:
+    - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+    - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
+    - reduction_fns (dict): A dictionary with keys being the module names as per the model's state_dict, and values being a callable foo(acts) which takes as input the model's batched activations and returns a dimentionality reduced version of its outputs. 
+    - activations_parser (callable): A function for parsing activations. Defaults to 'get_in_activations()' (see peepholelib.models.model_wrap.py for details on how we get the activations).
+    - verbose (bool): print progress messages.
+    '''
     self.check_uncontexted()
     
-    bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
-    n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    bs = kwargs.get('batch_size', 64) 
+    n_threads = kwargs.get('n_threads', 1) 
 
-    reduction_fns = kwargs['reduction_fns'] if 'reduction_fns' in kwargs else lambda x, y:x[y]
-    activations_parser = kwargs['activations_parser'] if 'activations_parser' in kwargs else get_in_activations
+    reduction_fns = kwargs.get('reduction_fns')
+    activations_parser = kwargs.get('activations_parser', get_in_activations)
+
+    verbose = kwargs.get('verbose', False) 
 
     # check for activations in all cv._dss
     has_acts = True

@@ -4,14 +4,40 @@ from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 
 # General python stuff
 from pathlib import Path as Path
+import numpy as np
+from math import floor
+from tqdm import tqdm
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
+from torch.utils.data import Dataset
 
 # CIFAR from torchvision
 from torchvision import datasets
+from PIL import Image
 
+class CustomDS(Dataset):
+    def __init__(self, data, labels, transform):
+        Dataset.__init__(self) 
+        self.data = []
+        for d in tqdm(data, disable=True):
+            self.data.append(Image.fromarray(d))
+        self.labels = labels
+        self.transform = transform
+        self.len = labels.shape[0]
+        return
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        d = self.transform(self.data[idx])
+        l = self.labels[idx]
+        return d, l
+
+    def __getitems__(self, idxs):
+        return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
 
 class Cifar(DatasetBase):
     def __init__(self, **kwargs):
@@ -27,12 +53,11 @@ class Cifar(DatasetBase):
         DatasetBase.__init__(self, **kwargs)
         
         # use CIFAR10 by default
-        self.dataset = kwargs['dataset'] if 'dataset' in kwargs else 'CIFAR10'
-        print('dataset: %s' % self.dataset)
+        self.dataset = kwargs.get('dataset', 'CIFAR10')
 
         # raise error if the dataset is not CIFAR
         if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be CIFAR")
+            raise ValueError("Dataset must be CIFAR<10|100>")
 
         return
     
@@ -43,14 +68,18 @@ class Cifar(DatasetBase):
         Args:
         - seed (int): Random seed for reproducibility.
         - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 for vgg16 transform)
+        - corrupted_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
         
         Returns:
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs['transform'] if 'transform' in kwargs else eval('vgg16_'+self.dataset.lower())
+        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        corrupted_path = kwargs.get('corrupted_path', None)
+        if not corrupted_path == None: corrupted_path = Path(corrupted_path)
+
+        seed = kwargs.get('seed', 42)
             
-        seed = kwargs['seed']
         # set torch seed
         torch.manual_seed(seed)
 
@@ -62,7 +91,7 @@ class Cifar(DatasetBase):
             download = True
         )
         
-        # train data will be splitted for training and validation
+        # train data will be splitted into training and validation
         _train_data = datasets.__dict__[self.dataset]( 
             root = self.data_path,
             train = True,
@@ -75,18 +104,58 @@ class Cifar(DatasetBase):
             [0.8, 0.2],
             generator=torch.Generator().manual_seed(seed)
         )
-        
+
         # Apply the transform 
         if transform != None:
             val_dataset.dataset.transform = transform
             train_dataset.dataset.transform = transform
-     
+        
+        # Load corrupted
+        if not corrupted_path == None:
+            c_levels = 5
+            label_file = list(corrupted_path.glob('labels.npy'))[0]
+            _labels = np.load(label_file).astype(int)
+            _labels = _labels.reshape(c_levels, int(_labels.shape[0]/c_levels))
+            n_samples = _labels.shape[1]
+
+            # we get random samples for each corruption
+            idxs = torch.randperm(n_samples)
+            
+            files = list(corrupted_path.glob('[!label]*.npy'))
+            img_shape = np.load(files[0])[0].shape
+            # get spc (samples per corruption) from each corruption
+            n_corruptions = len(files)
+            spc = floor(n_samples/n_corruptions)
+
+            # pre-allocate images and labels
+            c_labels = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
+            c_images = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
+
+            for ci, f in enumerate(files):
+                for cl in range(c_levels):
+                    _data = np.load(f).reshape((c_levels, n_samples)+img_shape)
+                    c_labels[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
+                    c_images[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
+
+            corrupted_datasets = {}
+            for cl in range(c_levels):
+                corrupted_datasets[cl] = CustomDS(
+                        data = c_images[cl],
+                        labels = c_labels[cl],
+                        transform = transform,
+                        )
+
         # Save datasets as objects in the class
         self._dss = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
                 }
+
+        if not corrupted_path == None:
+            for cl in range(c_levels):
+                self._dss[f'ood-c{cl}'] = corrupted_datasets[cl]
+
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
         return 

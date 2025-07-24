@@ -13,6 +13,13 @@ class CoreVectors():
     from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
+        '''
+        Create instance of 'corevectors'.
+
+        Args:
+        - path (str|pathlib.Path): Path to save corevectors.
+        - name (str): Name for corevectors. See 'corevector.get_corevectors()' for details.
+        '''
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
         
@@ -39,17 +46,35 @@ class CoreVectors():
         return
      
     def normalize_corevectors(self, **kwargs):
+        '''
+        Normalize corevectors.
+
+        Args:
+        - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+        - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
+        - wrt (str): selects which loader to compute the means and stds, the other loaders are normalized using this loader's means and stds. Defaults to None. 
+        - from_file (str|pathlib.Path): If 'wrt'=None, use the means and stds from this file. Defaults to None.
+        - to_file (str|pathlib.Path): Save means and stds to this file. Defaults to None.
+        - target_layers (list[str]): Normalize only the specified layers.
+        - loaders (list[str]): Normalize only the specified loaders. If None, normalize all loaders in the corevectors.
+        - verbose (bool): print progress messages.
+        '''
         self.check_uncontexted()
 
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
-        bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
-        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
+        bs = kwargs.get('batch_size', 64) 
+        n_threads = kwargs.get('n_threads', 1) 
 
-        from_file = Path(kwargs['from_file']) if 'from_file' in kwargs else None
-        wrt = kwargs['wrt'] if 'wrt' in kwargs else None
-        to_file = Path(kwargs['to_file']) if 'to_file' in kwargs  else None
-        target_layers = kwargs['target_layers'] if 'target_layers' in kwargs else None
-        
+        wrt = kwargs.get('wrt', None)
+        from_file = kwargs.get('from_file', None)
+        if from_file != None: Path(from_file)
+        to_file = kwargs.get('to_file', None)
+        if to_file != None: Path(to_file)
+
+        target_layers = kwargs.get('target_layers', None)
+        loaders = kwargs.get('loaders', None)
+
+        verbose = kwargs.get('verbose', False) 
+
         if self._corevds == None:
             raise RuntimeError('No corevectors to normalize. Run get_corevectors() first.')
 
@@ -70,8 +95,10 @@ class CoreVectors():
             for k in keys_to_pop:
                 means.pop(k, default=None)
                 stds.pop(k, default=None)
-
-        for ds_key in self._corevds:
+        
+        if loaders == None: loaders = self._corevds
+        
+        for ds_key in loaders:
             if verbose: print(f'\n ---- Normalizing core vectors for {ds_key}\n')
             dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             
@@ -89,12 +116,22 @@ class CoreVectors():
         return
 
     def load_only(self, **kwargs):
+        '''
+        Load already computed corevectors.
+
+        Args:
+        - loadrs (list[str]): load the specified loaders
+        - mode (str): Opens the file with the specified mode. See 'tensordict.PersistentTensorDict.from_h5()' for details. Defaults to 'r'.
+        - norm_file (str): load the normalization information. Defaults to None. 
+        - verbose (bool): print progress messages.
+        '''
         self.check_uncontexted()
 
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        loaders = kwargs['loaders']
-        mode = kwargs['mode'] if 'mode' in kwargs else 'r'
-        norm_file = Path(kwargs['norm_file']) if 'norm_file' in kwargs else None 
+        loaders = kwargs.get('loaders')
+        mode = kwargs.get('mode', 'r')
+        norm_file = kwargs.get('norm_file', None)
+        if norm_file != None: norm_file = Path(norm_file)
+        verbose = kwargs.get('verbose', False)
 
         self._corevds = {}
         self._dss = {}
