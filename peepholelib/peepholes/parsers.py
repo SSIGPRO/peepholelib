@@ -43,7 +43,7 @@ def trim_channelwise_corevectors(**kwargs):
         module (str): target module key.
         label_key (str): key to get labels from
         cv_dim (int): desired dimension of corevector
-        cols (???): ??
+        cols (torch.tensor[int]): Indexes of channels to take.
 
     Returns:
         tcvs (torch.tensor): Trimmed corevectors and correspective labels
