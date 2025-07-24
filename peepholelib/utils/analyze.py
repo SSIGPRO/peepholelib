@@ -53,6 +53,7 @@ def conceptogram_protoclass_score_attacks(**kwargs):
     cps = cpsso[proto_key]
     results = cvs_ori._dss[proto_key]['result']
     labels = cvs_ori._dss[proto_key]['label']
+
     confs = sm(cvs_ori._dss[proto_key]['output'], dim=-1).max(dim=-1).values
     
     proto = torch.zeros(nc, nd, nc)
@@ -82,19 +83,21 @@ def conceptogram_protoclass_score_attacks(**kwargs):
         cps = cpsso[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs_ori._dss[ds_key]['result']
-        labels = (cvs_ori._dss[ds_key]['label']).int()
+        #labels = (cvs_ori._dss[ds_key]['label']).int()
+        preds = cvs_ori._dss[proto_key]['pred'].int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        so = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[preds]*cps).sum(dim=(1,2))
+        so = s/(torch.norm(proto[preds], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     for loader_n, ds_key in enumerate(['test']):
         cps = cpssa[ds_key]
         ns = cps.shape[0] # number of samples
         results = cvs_atk._dss[ds_key]['result']
-        labels = (cvs_atk._dss[ds_key]['label']).int()
+        #labels = (cvs_atk._dss[ds_key]['label']).int()
+        preds = cvs_ori._dss[proto_key]['pred'].int()
 
-        s = (proto[labels]*cps).sum(dim=(1,2))
-        sa = s/(torch.norm(proto[labels], dim=(1,2))*torch.norm(cps, dim=(1,2)))
+        s = (proto[preds]*cps).sum(dim=(1,2))
+        sa = s/(torch.norm(proto[preds], dim=(1,2))*torch.norm(cps, dim=(1,2)))
 
     idx = torch.argwhere((cvs_ori._dss[ds_key]['result'] == 1) & (cvs_atk._dss[ds_key]['attack_success'] == 1))
 
