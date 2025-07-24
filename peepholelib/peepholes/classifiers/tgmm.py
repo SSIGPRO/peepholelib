@@ -35,11 +35,17 @@ class GMM(ClassifierBase): # quella buona
     def fit(self, **kwargs):
         '''
         Fit GMM. 
+
         Args:
+        - corevectors (TensorDict): Corevectors.
+        - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+        - verbose (Bool): Print progress messages. 
         '''
+        _cvs = kwargs.get('corevectors')
+        loader = kwargs.get('loader', 'train')
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        cvs = kwargs['corevectors']
         
+        cvs = _cvs._corevds[loader]
         if verbose: print('\n ---- GMM classifier\n')
 
         # temp dataloader for loading the whole dataset
@@ -56,15 +62,15 @@ class GMM(ClassifierBase): # quella buona
     
     def classifier_probabilities(self, **kwargs):
         '''
-        Get prediction probabilities based on the fitted modelfor the provided inputs.
+        Get prediction probabilities based on the fitted model for the provided inputs.
         
         Args:
-        - cvs: data containing data to be parsed with the paser function set on __init__() 
+        - data (TensorDict): data containing data to be parsed with the paser function set on __init__() 
         '''
         
         data = kwargs['data']
 
-        probs = self._classifier.predict_proba(data).clone().detach()
+        probs = self._classifier.predict_proba(data)
 
         return probs   
     
