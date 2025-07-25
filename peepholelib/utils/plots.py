@@ -247,6 +247,7 @@ def plot_calibration(**kwargs):
     Args:
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - path ('str'): Path to save plots.
     - calib_bin (int): Bin size for calibration plot.
     - verbose (bool): print progress messages.
@@ -254,6 +255,7 @@ def plot_calibration(**kwargs):
 
     cvs = kwargs.get('corevectors')
     scores = kwargs.get('scores')
+    loaders = kwargs.get('loaders', None)
     calib_bin = kwargs.get('calib_bin', 0.1)
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
@@ -265,12 +267,12 @@ def plot_calibration(**kwargs):
         path = Path(path)
     print(path)
 
-    loaders = list(scores.keys())
+    if loaders == None: loaders = list(scores.keys())
 
     fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
 
     n_bins = ceil(1/calib_bin)
-    for loader_n, ds_key in enumerate(scores.keys()):
+    for loader_n, ds_key in enumerate(loaders):
         df_calib = pd.DataFrame()
 
         eces = {}
