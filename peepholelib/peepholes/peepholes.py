@@ -35,24 +35,35 @@ class Peepholes:
 
     def get_peepholes(self, **kwargs):
         '''
-        Compute model probabilities from classifier probabilities and empirical posteriors.
+        Compute peepholes given `corevectors` and `drillers`.
         
         Args:
+        - corevectors (peepholelib.coreVectors.coreVectors): corevectors object containing corevectors and datasets.
+        - loaders (list[str]): list of loaders, usually `['train', 'val', 'test']`. If `None` uses all loaders in `corevectors._corevds.keys()`. Defaults to dss `None`.
+        - target_modules (list[str]): list of modules to consider as in `model.state_dict`.
+        - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
+        - batchsize (int): batchsize to process `corevectors` into `peepholes`. Defaults to 64.
+        - n_threads (int): Number of threads to pass as `num_workers` to `torch.utils.data.DataLoader`. Defaults to 1.
         - verbose (bool): print progress messages
-        - corevectors (peepholelib.CoreVectors): corevectors object containing corevectors and datasets 
-        - batchsize (int): batchsize to process corevectors into peepholes
         '''
         self.check_uncontexted()
 
-        self._drillers = kwargs['drillers'] 
-        self.target_modules = kwargs['target_modules'] # list of peep modules
+        cvs = kwargs.get('corevectors')
+        loaders  = kwargs.get('loaders', None)
+        self.target_modules = kwargs.get('target_modules') # list of peep modules
+        self._drillers = kwargs.get('drillers')
 
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        cvs = kwargs['corevectors'] 
-        bs = kwargs['batch_size']
-        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
+        bs = kwargs.get('batch_size', 64)
+        n_threads = kwargs.get('n_threads', 1)
+        verbose = kwargs.get('verbose', False)
 
-        for (ds_key, cvds), ( _, dssds) in zip(cvs._corevds.items(), cvs._dss.items()):
+        if loaders == None: loaders = list(cvs._corevds.keys())
+
+        for ds_key in loaders:
+            print(cvs)
+            cvds = cvs._corevds[ds_key]
+            dssds = cvs._dss[ds_key]
+
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
             
@@ -99,9 +110,9 @@ class Peepholes:
                 continue
 
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
-            for cvs, dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
+            for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
-                    phs[module]['peepholes'] = self._drillers[module](cvs=cvs, dss=dss)
+                    phs[module]['peepholes'] = self._drillers[module](cvs=_cvs, dss=_dss)
 
         return 
 
