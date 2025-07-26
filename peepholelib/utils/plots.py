@@ -4,6 +4,7 @@ from math import ceil
 
 # plotting stuff
 from matplotlib import pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 import seaborn as sb
 import pandas as pd
 
@@ -35,13 +36,14 @@ def plot_ood(**kwargs):
     else:
         path = Path(path)
 
-    fig, axs = plt.subplots(1, len(ood_loaders), sharex='row', sharey='none', figsize=(4*len(ood_loaders), 4))
-    
-    for loader_n, ds_key in enumerate(ood_loaders):
-        df_idood = pd.DataFrame()
+    fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
-        # save AUCs for each score type
-        aucs = {}
+    # save aucs for plotting 
+    aucs_df = pd.DataFrame()
+    for loader_n, ds_key in enumerate(ood_loaders):
+
+        # save in-distribution and out-of-distribution scores for plotting
+        df_idood = pd.DataFrame()
         for score_name in scores[ds_key].keys():
             s_id = scores[id_loader][score_name] # TODO: rearragen iteration order
             s_ood = scores[ds_key][score_name]
@@ -49,9 +51,17 @@ def plot_ood(**kwargs):
             # computing AUC for each score type
             _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
             _scores = torch.hstack((s_id, s_ood))
-            print('shapes: ', _labels.shape, s_id.shape, s_ood.shape)
-            aucs[score_name] = AUC().update(_scores, _labels).compute().item()
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {aucs[score_name]:.4f}')
+
+            auc = AUC().update(_scores, _labels).compute().item()
+            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
+            aucs_df = aucs_df._append(
+                    pd.DataFrame({
+                        'AUC': [auc],
+                        'score name': [score_name],
+                        'loader': [ds_key]
+                        }),
+                    ignore_index = True,
+                    )
 
             df_idood = df_idood._append(
                     pd.DataFrame({
@@ -95,11 +105,27 @@ def plot_ood(**kwargs):
                                                                                           
         ax.set_xlabel('Score')
         ax.set_ylabel('%')
-        title = f'{ds_key}'
-        for score_name in aucs:
-            title += f'\n{score_name} AUC={aucs[score_name]:.4f}'
-        ax.title.set_text(title)
+        ax.title.set_text(f'{ds_key}')
         ax.grid(True)
+
+    # Plot AUCs
+    # TODO: paremeterize
+    colors = ['xkcd:cobalt', 'xkcd:bluish green']
+
+    ax = axs[-1]
+    sb.pointplot(
+            data = aucs_df,
+            ax = ax,
+            x = 'loader',
+            y = 'AUC',
+            hue = 'score name',
+            markersize = 8,
+            palette = colors,
+            alpha = 0.75,
+            legend = True
+            )
+    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
     plt.savefig((path/f'in_out_distribution.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
@@ -134,14 +160,16 @@ def plot_confidence(**kwargs):
 
     if loaders == None: loaders = list(scores.keys())
 
-    fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='none', figsize=(4*len(loaders), 4*2))
+    fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
 
+    # save AUCs for plotting 
+    aucs_df = pd.DataFrame()
+    drop_df = pd.DataFrame()
     for loader_n, ds_key in enumerate(loaders):
+        
+        # save OKs and KOs and confidences for plotting
         df_okko = pd.DataFrame()
         df_conf = pd.DataFrame()
-        
-        # save AUCs for each score type
-        aucs = {}
         for score_name in scores[ds_key].keys():
             _scores = scores[ds_key][score_name]
             results = cvs._dss[ds_key]['result'] 
@@ -151,9 +179,17 @@ def plot_confidence(**kwargs):
             s_kos = _scores[results == False]
         
             # compute AUC for score and model
-            aucs[score_name] = AUC().update(_scores, results.int()).compute().item()
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {aucs[score_name]:.4f}')
-        
+            auc = AUC().update(_scores, results.int()).compute().item()
+            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
+            aucs_df = aucs_df._append(
+                    pd.DataFrame({
+                        'AUC': [auc],
+                        'score name': [score_name],
+                        'loader': [ds_key]
+                        }),
+                    ignore_index = True,
+                    )
+
             df_okko = df_okko._append(
                     pd.DataFrame({
                         'score value': torch.hstack((s_oks, s_kos)),
@@ -166,14 +202,31 @@ def plot_confidence(**kwargs):
             
             # Compute accuracies
             s_acc = torch.zeros(int(100*max_score)+1)
+            s_drop = torch.zeros(int(100*max_score)+1)
+            ths = torch.zeros(int(100*max_score)+1)
             for i, th in enumerate(torch.linspace(0., max_score, int(100*max_score)+1)):
+                ths[i] = th
                 s_idx = _scores >= th 
                 s_acc[i] = (results[s_idx].sum() + results[s_idx.logical_not()].logical_not().sum())/ns
+                s_drop[i] = (_scores < th).sum()/ns
 
             df_conf = df_conf._append(
                     pd.DataFrame({
-                        'conf value': s_acc,
-                        'score type':[score_name for i in range(len(s_acc))],
+                        'value': torch.hstack((s_acc, s_drop)),
+                        'ths': ths.repeat(2),
+                        'score type': \
+                                [score_name+': Acc' for i in range(len(s_acc))] + \
+                                [score_name+': Dropped' for i in range(len(s_drop))]
+                        }),
+                    ignore_index = True,
+                    )
+
+            # how many samples are dropped (smalled than th) at max acc
+            drop_df = drop_df._append(
+                    pd.DataFrame({
+                        'Drop': [100*s_drop[s_acc.argmax()].item()],
+                        'score name': [score_name],
+                        'loader': [ds_key]
                         }),
                     ignore_index = True,
                     )
@@ -212,29 +265,72 @@ def plot_confidence(**kwargs):
 
         ax.set_xlabel('Score')
         ax.set_ylabel('%')
-        title = f'{ds_key}'
-        for score_name in aucs:
-            title += f'\n{score_name} AUC={aucs[score_name]:.4f}'
-        ax.title.set_text(title)
+        ax.title.set_text(f'{ds_key}')
         ax.grid(True)
 
         # plotting Confidences
-        # TODO: paremeterize
-        colors = ['xkcd:cobalt', 'xkcd:bluish green']
         ax = axs[1][loader_n]
-        sb.lineplot(
+        p = sb.lineplot(
                 data = df_conf,
                 ax = ax,
-                x = torch.linspace(0., max_score, int(100*max_score)+1).repeat(len(scores[ds_key].keys())),
-                y = 'conf value',
+                x = 'ths', 
+                y = 'value',
                 hue = 'score type',
                 palette = colors,
                 alpha = 0.75,
                 legend = loader_n == 0,
                 )
-        ax.set_xlabel('% dropped')
-        ax.set_ylabel('Accuracy (%)')
+
+        # set up linestyles
+        for ls, line in zip(lines, p.lines):
+            line.set_linestyle(ls)
+        
+        # set legend linestyle
+        if loader_n == 0:
+            handles = p.legend_.legend_handles[::-1]
+            for ls, h in zip(lines, handles):
+                print(ls)
+                h.set_ls(ls)
+
+        ax.set_xlabel('Score Threshold')
+        ax.set_ylabel('Accuracy')
         ax.grid(True)
+
+    # Plot AUCs
+    # TODO: paremeterize
+    colors = ['xkcd:cobalt', 'xkcd:bluish green']                   
+                                                              
+    ax = axs[0][-1]
+    sb.pointplot(
+            data = aucs_df,
+            ax = ax,
+            x = 'loader',
+            y = 'AUC',
+            hue = 'score name',
+            markersize = 8,
+            palette = colors,
+            alpha = 0.75,
+            legend = True
+            )
+    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+
+    # plot samples droppedn (<th) at max acc
+    ax = axs[1][-1]
+    sb.pointplot(
+            data = drop_df,
+            ax = ax,
+            x = 'loader',
+            y = 'Drop',
+            hue = 'score name',
+            markersize = 8,
+            palette = colors,
+            alpha = 0.75,
+            legend = True
+            )
+    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    ax.set_ylabel('# score < th (%)')
 
     plt.savefig((path/f'confidence.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
