@@ -50,7 +50,7 @@ class myPGD(AttackBase):
         self.random_start = kwargs['random_start'] if 'random_start' in kwargs else True
         self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
         self.device = kwargs['device']
-        self.atk_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}/random_start_{self.random_start}')
+        self.data_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}/random_start_{self.random_start}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
         
         self.atk = torchattacks.PGD(model=self.model, 
@@ -66,7 +66,7 @@ class myPGD(AttackBase):
             
     def get_ds_attack(self):
         
-        self.atk_path.mkdir(parents=True, exist_ok=True)
+        self.data_path.mkdir(parents=True, exist_ok=True)
     
         attack_TensorDict = {}
         
@@ -97,7 +97,7 @@ class myPGD(AttackBase):
                 attack_TensorDict[loader_name][bn*bs:bn*bs+n_in] = {'image': attack_images, 
                                                                     'label':labels,
                                                                     'attack_success': results}
-            file_path = self.atk_path/(loader_name)
+            file_path = self.data_path/(loader_name)
             n_threads = 32
             if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)

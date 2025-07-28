@@ -49,7 +49,7 @@ class myBIM(AttackBase):
         self.steps = kwargs['steps'] if 'steps' in kwargs else 10
         self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
         self.device = kwargs['device'] 
-        self.atk_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
+        self.data_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
 
         self.atk = torchattacks.BIM(model=self.model, 
@@ -64,7 +64,7 @@ class myBIM(AttackBase):
             self.atk.get_least_likely_label
 
     def get_ds_attack(self):
-        self.atk_path.mkdir(parents=True, exist_ok=True)
+        self.data_path.mkdir(parents=True, exist_ok=True)
 
         attack_TensorDict = {}
         
@@ -77,7 +77,7 @@ class myBIM(AttackBase):
             #TODO: check device
             attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples) 
 
-            file_path = self.atk_path/(loader_name)
+            file_path = self.data_path/(loader_name)
             n_threads = 32
             
             bs = self._loaders[loader_name].batch_size
