@@ -32,12 +32,12 @@ def conceptogram_protoclass_score(**kwargs):
     proto_th = kwargs.get('proto_threshold', 0.9)
     append_scores = kwargs.get('append_scores', None)
     verbose = kwargs.get('verbose', False)
-    score_name = kwargs.get('score_name', 'Proto-Class')
     
     # parse arguments
     
     if loaders == None: loaders = list(phs._phs.keys())
     if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
+    score_name = 'Proto-Class'
 
     # create the return dictionary. 
     if append_scores != None:
@@ -97,7 +97,7 @@ def DMD_score_aware(**kwargs):
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
     - verbose (bool): print progress messages.
-    - score_name (string): score name if specification in needed (adv attacks case)
+    - atk_name (string): score name if specification in needed (adv attacks case)
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
@@ -108,6 +108,89 @@ def DMD_score_aware(**kwargs):
     cvs = kwargs.get('coreavg')
     phs_atk = kwargs.get('peepavg_atk')
     cvs_atk = kwargs.get('coreavg_atk')
+    loaders = kwargs.get('loaders', None)
+    target_modules = kwargs.get('target_modules', None)
+    append_scores = kwargs.get('append_scores', None)
+    verbose = kwargs.get('verbose', False)
+    atk_name = kwargs.get('atk_name')
+
+    # parse arguments
+    score_name = 'DMD-Aware'
+    if loaders == None: loaders = list(phs._phs.keys())
+    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
+
+    # create the return dictionary. 
+    if append_scores != None:
+        ret = dict(append_scores)
+    else:
+        ret = {}
+    for ds_key in loaders:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
+    #-----------
+    # computations
+    #-----------
+
+    idx = torch.argwhere((cvs._dss['val']['result']==1) & (cvs_atk._dss['val']['attack_success']==1)).squeeze()
+
+    train_ori = torch.stack([phs._phs['val'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    train_atk = torch.stack([phs_atk._phs['val'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+
+    train_data = np.concatenate((train_ori, train_atk), axis=0)
+    
+    label_ori = np.zeros(len(train_ori))
+    label_atk = np.ones(len(train_atk))
+    train_label = np.concatenate((label_ori, label_atk), axis=0)
+
+    idx = torch.argwhere((cvs._dss['test']['result']==1) & (cvs_atk._dss['test']['attack_success']==1)).squeeze()
+
+    test_ori = torch.stack([phs._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    test_atk = torch.stack([phs_atk._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    
+    test_data = np.concatenate((test_ori, test_atk), axis=0)
+    label_ori = np.zeros(len(test_ori))
+    label_atk = np.ones(len(test_atk))
+    test_label = np.concatenate((label_ori, label_atk), axis=0)
+
+    lr = LogisticRegressionCV(n_jobs=-1,max_iter=5000).fit(train_data, train_label)
+
+    y_val = lr.predict_proba(train_data)[:, 1]
+    y_test = lr.predict_proba(test_data)[:, 1]
+
+    ret[atk_name]['val'][score_name] = y_val
+    ret[atk_name]['test'][score_name] = y_test
+
+    ret[atk_name]['val']['label'] = train_label
+    ret[atk_name]['test']['label'] = test_label
+
+    return ret
+
+def DMD_score_unaware(**kwargs):
+    '''
+    Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted from different attack algorithm 
+
+    Args:
+    - peepavg (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
+    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - dataset_atk_dict (dict): The dictionary defines the training and the test set
+                               of the Linear regressor. It is composed of a training and a test key
+                               within train we have the attacks used for training the regressor and each value
+                               corresponds to (peepholelib.coreVectors.CoreVectors, peepholelib.peepholes.Peepholes) while test is the single 
+                               test attack on which we evaluate the performances of the regressor
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+    - score_name (string): score name if specification in needed (adv attacks case)
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    '''
+
+    phs = kwargs.get('peepavg')
+    cvs = kwargs.get('coreavg')
+    dataset_atk_dict = kwargs.get('dataset_atk_dict')
     loaders = kwargs.get('loaders', None)
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
@@ -131,6 +214,137 @@ def DMD_score_aware(**kwargs):
     #-----------
     # computations
     #-----------
+
+    for config in dataset_atk_dict:
+        atk_train = dataset_atk_dict[config]['train'][]
+        atk_test = dataset_atk_dict[config]['test']
+        print(f'training: {atk_train} test: {atk_test}')
+
+        corevectors = CoreVectors(
+            path = cvs_path,
+            name = cvs_name,
+            )
+        peepholes = Peepholes(
+                path = phs_path,
+                name = phs_name,
+                driller = drillers,
+                target_modules = peep_layers,
+                device = device
+                )
+        
+        corevectors_atks_train = {}
+        peepholes_atks_train = {} 
+
+        for atk_name in atk_train:
+                cvs_path_ = cvs_path/f'{atk_name}'
+                phs_path_ = phs_path/f'{atk_name}'
+
+                corevectors_atks_train[atk_name] = CoreVectors(
+                                                path = cvs_path_,
+                                                name = cvs_name,
+                                                )
+
+                peepholes_atks_train[atk_name] = Peepholes(
+                                                path = phs_path_,
+                                                name = phs_name,
+                                                driller = drillers,
+                                                target_modules = peep_layers,
+                                                device = device
+                                                )
+        
+        cvs_path_ = cvs_path/f'{atk_test}'
+        phs_path_ = phs_path/f'{atk_test}'
+
+        corevectors_atks_test = CoreVectors(
+                                        path = cvs_path_,
+                                        name = cvs_name,
+                                        )
+        
+        peepholes_atks_test = Peepholes(
+                        path = phs_path_,
+                        name = phs_name,
+                        driller = drillers,
+                        target_modules = peep_layers,
+                        device = device
+                        )
+                
+        with ExitStack() as stack:
+                # get dataloader for corevectors from the original dataset 
+        
+                stack.enter_context(corevectors)
+                corevectors.load_only(
+                                loaders = ['val', 'test'],
+                                verbose = True
+                                )
+                
+                stack.enter_context(peepholes)
+                peepholes.load_only(
+                                loaders = ['val', 'test'],
+                                verbose = True
+                                )
+                
+                f_ori = torch.stack([peepholes._phs['val'][layer]['score_max'] for layer in peep_layers],dim=1).detach().cpu().numpy()
+                f_atk = {}
+                
+                for i, atk_name in enumerate(atk_train):
+                        if verbose: print(f'\n---------\nLoading dataset for attack: {atk_name}')
+
+                        stack.enter_context(corevectors_atks_train[atk_name]) # enter context manager
+                        corevectors_atks_train[atk_name].load_only(
+                                                                loaders = ['val'],
+                                                                verbose = verbose 
+                                                                )
+                        
+                        stack.enter_context(peepholes_atks_train[atk_name]) # enter context manager
+                        peepholes_atks_train[atk_name].load_only(
+                                                                loaders = ['val'],
+                                                                verbose = verbose 
+                                                                )
+                        
+                        f_atk[atk_name] = torch.stack([peepholes_atks_train[atk_name]._phs['val'][layer]['score_max'] for layer in peep_layers],dim=1)
+                        idx = torch.argwhere((corevectors._dss['val']['result']==1) & (corevectors_atks_train[atk_name]._dss['val']['attack_success']==1)).squeeze()
+                        
+                        assert len(idx) >= n_samples, f'Not enough samples for attack {atk_name} in training set. Found {len(idx)} samples, expected at least {n_samples}.'
+
+                        rand = torch.randperm(len(idx))[:n_samples]
+                        f_atk[atk_name] = f_atk[atk_name][idx[rand]]
+                               
+                f_atk = torch.concat([f_atk[atk_name] for atk_name in atk_train], dim=0).detach().cpu().numpy()
+
+                label_ori = np.zeros(len(f_ori))
+                label_atk = np.ones(len(f_atk))
+                train_data = np.concatenate((f_ori, f_atk), axis=0)
+                train_label = np.concatenate((label_ori, label_atk), axis=0)
+
+                stack.enter_context(corevectors_atks_test) # enter context manager
+                corevectors_atks_test.load_only(
+                                                loaders = ['test'],
+                                                verbose = verbose 
+                                                )
+
+                stack.enter_context(peepholes_atks_test) # enter context manager
+                peepholes_atks_test.load_only(
+                        loaders = ['test'],
+                        verbose = verbose 
+                        )
+                
+                idx = torch.argwhere((corevectors._dss['test']['result']==1) & (corevectors_atks_test._dss['test']['attack_success']==1)).squeeze()
+                f_ori = torch.stack([peepholes._phs['test'][layer]['score_max'] for layer in peep_layers],dim=1)[idx].detach().cpu().numpy()
+                f_atk = torch.stack([peepholes_atks_test._phs['test'][layer]['score_max'] for layer in peep_layers],dim=1)[idx].detach().cpu().numpy()
+
+                label_ori = np.zeros(len(f_ori))
+                label_atk = np.ones(len(f_atk))
+
+                test_data = np.concatenate((f_ori, f_atk), axis=0)
+                test_label = np.concatenate((label_ori, label_atk), axis=0)
+
+                lr = LogisticRegressionCV(n_jobs=-1, max_iter=10000).fit(train_data, train_label) #
+                #y_pred = lr.predict_proba(train_data)[:, 1]
+                
+                y_pred = lr.predict_proba(test_data)[:, 1]
+
+                y_ori = lr.predict_proba(f_ori)[:, 1]
+                y_atk = lr.predict_proba(f_atk)[:, 1]
 
     idx = torch.argwhere((cvs._dss['val']['result']==1) & (cvs_atk._dss['val']['attack_success']==1)).squeeze()
 
