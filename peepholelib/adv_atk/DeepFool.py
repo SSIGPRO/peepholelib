@@ -41,7 +41,7 @@ class myDeepFool(AttackBase):
         self.overshoot = kwargs['overshoot'] if 'steps' in kwargs else 0.02
         self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
         self.device = kwargs['device'] 
-        self.atk_path = self.path/Path(f'model_{self.name_model}/steps_{self.steps}/overshoot_{self.overshoot}')
+        self.data_path = self.path/Path(f'model_{self.name_model}/steps_{self.steps}/overshoot_{self.overshoot}')
 
             
         self.atk = torchattacks.DeepFool(model=self.model,
@@ -49,7 +49,7 @@ class myDeepFool(AttackBase):
                                             overshoot=self.overshoot)
 
     def get_ds_attack(self):
-        self.atk_path.mkdir(parents=True, exist_ok=True)
+        self.data_path.mkdir(parents=True, exist_ok=True)
 
         attack_TensorDict = {}
         
@@ -63,7 +63,7 @@ class myDeepFool(AttackBase):
             #TODO: check device
             attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples) 
 
-            file_path = self.atk_path/(loader_name)
+            file_path = self.data_path/(loader_name)
             n_threads = 32
             
             bs = self._loaders[loader_name].batch_size
