@@ -1,16 +1,19 @@
 # General pytho stuff
 from pathlib import Path as Path
 from math import ceil
+import numpy as np
 
 # plotting stuff
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import seaborn as sb
 import pandas as pd
+from sklearn.metrics import roc_curve, roc_auc_score
 
 # torch stuff
 import torch
 from torcheval.metrics import BinaryAUROC as AUC
+
 
 def plot_ood(**kwargs):
     '''
@@ -18,14 +21,14 @@ def plot_ood(**kwargs):
 
     Args:
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
-    - id_loader (str): loaders of in-distribution data,  usually 'test'. Defaults to 'test'.
+    - id_loaders (dict(str:str|list(str))): Dictionary of loaders of in-distribution data, with the key being the score type and values a str or list of strings for respective loaders.
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
     - path ('str'): Path to save plots.
     - verbose (bool): print progress messages.
     '''
     scores = kwargs.get('scores')
-    id_loader = kwargs.get('id_loader', 'test')
+    id_loaders = kwargs.get('id_loaders')
     ood_loaders = kwargs.get('ood_loaders')
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
@@ -43,13 +46,20 @@ def plot_ood(**kwargs):
 
     # save aucs for plotting 
     aucs_df = pd.DataFrame()
+
     for loader_n, ds_key in enumerate(ood_loaders):
 
         # save in-distribution and out-of-distribution scores for plotting
         df_idood = pd.DataFrame()
         cs_idood, ls_idood = {}, {} 
         for score_n, score_name in enumerate(scores[ds_key].keys()):
-            s_id = scores[id_loader][score_name] # TODO: rearragen iteration order
+            _id_loader = id_loaders[score_name]
+
+            if type(_id_loader) is list:
+                s_id = scores[_id_loader[loader_n]][score_name] # TODO: rearragen iteration order
+            else:
+                s_id = scores[_id_loader][score_name] # TODO: rearragen iteration order
+
             s_ood = scores[ds_key][score_name]
 
             # computing AUC for each score type
@@ -87,7 +97,7 @@ def plot_ood(**kwargs):
         # Plotting
         #--------------------
         # plotting IDs and OODs distribution
-                                                                                          
+                                                                                        
         ax = axs[loader_n] 
         p = sb.kdeplot(
                 data = df_idood,
@@ -101,7 +111,7 @@ def plot_ood(**kwargs):
                 alpha = 0.75,
                 legend = loader_n == 0
                 )
-                                                                                          
+                                                                                        
         # set up linestyles
         for ls, line in zip(list(ls_idood.values()), p.lines):
             line.set_linestyle(ls)
@@ -111,7 +121,7 @@ def plot_ood(**kwargs):
             handles = p.legend_.legend_handles[::-1]
             for ls, h in zip(list(ls_idood.values()), handles):
                 h.set_ls(ls)
-                                                                                          
+                                                                                        
         ax.set_xlabel('Score')
         ax.set_ylabel('%')
         ax.title.set_text(f'{ds_key}')
@@ -136,7 +146,111 @@ def plot_ood(**kwargs):
     plt.savefig((path/f'in_out_distribution.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
+    
+def plot_attacks(**kwargs):
+    '''
+    Plot attacks and samples of the original distribution. The samples are selected only if the original image has been classified correctly by the reference model and the attack was succesful in fooling the model.
 
+    Args:
+    - attacks (list[str]): list of attacks that are analysed
+    - score type (list[str]): list of scores deployed
+    - scores (dict(str:dict(str: torch.tensor))): Three-level dictionary with first keys being the attacks, second-level the loader name, third-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
+    - path ('str'): Path to save plots.
+    - verbose (bool): print progress messages.
+    '''
+
+    scores = kwargs.get('scores')
+    score_type = kwargs.get('score_type')
+    attacks = kwargs.get('attacks')
+    loaders = kwargs.get('loaders', None)
+    path = kwargs.get('path', None)
+    
+
+    # parse arguments
+    if path == None: 
+        path = Path.cwd()
+    else:
+        path = Path(path)
+    
+    fig_type, axs_type = plt.subplots(1,len(score_type), figsize=(16,8))
+    fig_type.suptitle(f'AUC based on type')
+    fig_atk, axs_atk = plt.subplots(1, len(attacks), figsize=(16,8))
+    fig_atk.suptitle(f'AUC based on attack')
+    for j ,type in enumerate(score_type):
+
+        for k, attack in enumerate(attacks):
+            
+            fig, axs = plt.subplots(1,3, figsize=(16,8))
+            fig.suptitle(f'Attack {attack}')
+
+            for i, ds_key in enumerate(loaders):
+                s = scores[attack][ds_key][type]
+                if isinstance(s, torch.Tensor):
+                    s = scores[attack][ds_key][type].detach().cpu().numpy()
+                
+                n_samples = len(s)//2
+                axs[i].hist(s[:n_samples], bins=50, color='red', label=f'{attack}', alpha=0.5)
+                axs[i].hist(s[n_samples:], bins=50, color='green',label='Original', alpha=0.5)
+                y_true = np.zeros_like(s, dtype=int)
+                y_true[:n_samples] = 1
+
+                fpr, tpr, thresholds = roc_curve(y_true, s)
+
+                if ds_key == 'val':
+                    fpr_target = 0.05
+                    keep = np.where(fpr <= fpr_target)[0]
+                    idx = keep[-1]
+                    threshold_fpr = thresholds[idx]
+                    axs[i].axvline(threshold_fpr, color='black', linestyle='--', label=f"th={threshold_fpr:.2f}")
+                    axs[i].set_title(f'Val - FPR @ 5%')
+                    axs[i].legend()
+                elif ds_key == 'test':
+                    idx_test = np.argmin(np.abs(thresholds - threshold_fpr))
+
+                    fpr_at_threshold = fpr[idx_test]
+                    axs[i].axvline(threshold_fpr, color='black', linestyle='--', label=f"th={threshold_fpr:.2f}")
+                    axs[i].set_title(f'Test - FPR @ {fpr_at_threshold*100:.2f}%')
+                else:
+                    raise RuntimeError('Do not mess with other portion of the dataset just val and test')
+                
+                auc_value = roc_auc_score(y_true, s)
+
+                axs[2].plot(fpr, tpr, lw=2, label=f"{ds_key} = {auc_value:.3f})")
+                if ds_key == 'val':
+                    axs[2].plot([0, 1], [0, 1], color='gray', linestyle='--', label="Chance (AUC = 0.5)")
+
+                axs[2].set_xlim([0.0, 1.0])
+                axs[2].set_ylim([0.0, 1.05])
+                axs[2].set_xlabel("False Positive Rate")
+                axs[2].set_ylabel("True Positive Rate")
+                axs[2].set_title("Receiver Operating Characteristic")
+                axs[2].legend(loc="lower right")
+                axs[2].grid(True)
+                if ds_key == 'test':
+                    axs_type[j].plot(fpr, tpr, lw=2, label=f"{attack} = {auc_value:.3f}")
+                    axs_type[j].set_xlim([0.0, 1.0])
+                    axs_type[j].set_ylim([0.0, 1.05])
+                    axs_type[j].set_xlabel("False Positive Rate")
+                    axs_type[j].set_ylabel("True Positive Rate")
+                    axs_type[j].set_title(f"{type}")
+                    axs_type[j].legend(loc="lower right")
+                    axs_type[j].grid(True)
+
+                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
+                    axs_atk[k].set_xlim([0.0, 1.0])
+                    axs_atk[k].set_ylim([0.0, 1.05])
+                    axs_atk[k].set_xlabel("False Positive Rate")
+                    axs_atk[k].set_ylabel("True Positive Rate")
+                    axs_atk[k].set_title(f"{attack}")
+                    axs_atk[k].legend(loc="lower right")
+                    axs_atk[k].grid(True)
+                
+            fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
+    fig_type.savefig((path/f'AUC_based_type.png').as_posix(), dpi=300, bbox_inches='tight')     
+    fig_atk.savefig((path/f'AUC_based_atk.png').as_posix(), dpi=300, bbox_inches='tight')      
+
+    
 def plot_confidence(**kwargs):
     '''
     Plot OKs and KOs distributions and confidences. Confidences are computed for a score threshold 'th', assuming values bellow 'th' are wrongly classified and above are correctly classified true positive and negative ('TP(th)' and 'TN(th)') are computed, so 'conf(th) = (TP(th)+TN(th))/ns'. 'th' is plotted from 0 to 'max_score'. 

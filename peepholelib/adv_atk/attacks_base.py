@@ -30,12 +30,12 @@ class AttackBase(DatasetBase):
 
     
     def load_data(self, **kwargs):
-        if not self.atk_path.exists(): raise RuntimeError(f'Attack path {self.atk_path} does not exist. Please run get_ds_attack() first.')
-        print(self.atk_path)
+        if not self.data_path.exists(): raise RuntimeError(f'Attack path {self.data_path} does not exist. Please run get_ds_attack() first.')
+        print(self.data_path)
         self._dss = {}
-        if self.verbose: print(f'File {self.atk_path} exists.')
+        if self.verbose: print(f'File {self.data_path} exists.')
         for ds_key in self._loaders:
-            self._dss[ds_key] = TensorDict.load_memmap(self.atk_path/ds_key)
+            self._dss[ds_key] = TensorDict.load_memmap(self.data_path/ds_key)
 
     @abc.abstractmethod
     def get_ds_attack(self):
