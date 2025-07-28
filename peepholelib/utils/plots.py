@@ -38,13 +38,17 @@ def plot_ood(**kwargs):
 
     fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
+    lines = ['--', '-']
+
     # save aucs for plotting 
     aucs_df = pd.DataFrame()
     for loader_n, ds_key in enumerate(ood_loaders):
 
         # save in-distribution and out-of-distribution scores for plotting
         df_idood = pd.DataFrame()
-        for score_name in scores[ds_key].keys():
+        cs_idood, ls_idood = {}, {} 
+        for score_n, score_name in enumerate(scores[ds_key].keys()):
             s_id = scores[id_loader][score_name] # TODO: rearragen iteration order
             s_ood = scores[ds_key][score_name]
 
@@ -72,35 +76,40 @@ def plot_ood(**kwargs):
                         }),
                     ignore_index = True,
                     )
+
+            # saves colors and linestyles
+            cs_idood[score_name+' ID'] = colors[score_n]
+            cs_idood[score_name+' OOD'] = colors[score_n]
+            ls_idood[score_name+' ID'] = '--' 
+            ls_idood[score_name+' OOd'] = '-'
+
         #--------------------
         # Plotting
         #--------------------
         # plotting IDs and OODs distribution
-        # TODO: paremeterize
-        colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
-        lines = ['--', '-', '--', '-']
                                                                                           
         ax = axs[loader_n] 
         p = sb.kdeplot(
                 data = df_idood,
                 ax = ax,
-                hue = 'score type',
                 x = 'score value',
                 common_norm = False,
-                palette = colors,
+                hue = 'score type',
+                palette = cs_idood,
+                hue_order = list(cs_idood.keys()),
                 clip = [0., 1.],
                 alpha = 0.75,
                 legend = loader_n == 0
                 )
                                                                                           
         # set up linestyles
-        for ls, line in zip(lines, p.lines):
+        for ls, line in zip(list(ls_idood.values()), p.lines):
             line.set_linestyle(ls)
         
         # set legend linestyle
         if loader_n == 0:
             handles = p.legend_.legend_handles[::-1]
-            for ls, h in zip(lines, handles):
+            for ls, h in zip(list(ls_idood.values()), handles):
                 h.set_ls(ls)
                                                                                           
         ax.set_xlabel('Score')
@@ -109,9 +118,6 @@ def plot_ood(**kwargs):
         ax.grid(True)
 
     # Plot AUCs
-    # TODO: paremeterize
-    colors = ['xkcd:cobalt', 'xkcd:bluish green']
-
     ax = axs[-1]
     sb.pointplot(
             data = aucs_df,
@@ -120,7 +126,7 @@ def plot_ood(**kwargs):
             y = 'AUC',
             hue = 'score name',
             markersize = 8,
-            palette = colors,
+            palette = colors[0:len(scores[ood_loaders[0]])],
             alpha = 0.75,
             legend = True
             )
@@ -162,6 +168,10 @@ def plot_confidence(**kwargs):
 
     fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
 
+    
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
+    lines = ['--', '-']
+
     # save AUCs for plotting 
     aucs_df = pd.DataFrame()
     drop_df = pd.DataFrame()
@@ -169,8 +179,10 @@ def plot_confidence(**kwargs):
         
         # save OKs and KOs and confidences for plotting
         df_okko = pd.DataFrame()
+        cs_okko, ls_okko = {}, {} 
         df_conf = pd.DataFrame()
-        for score_name in scores[ds_key].keys():
+        cs_conf, ls_conf = {}, {} 
+        for score_n, score_name in enumerate(scores[ds_key].keys()):
             _scores = scores[ds_key][score_name]
             results = cvs._dss[ds_key]['result'] 
             ns = _scores.shape[0] # number of samples
@@ -189,7 +201,7 @@ def plot_confidence(**kwargs):
                         }),
                     ignore_index = True,
                     )
-
+            
             df_okko = df_okko._append(
                     pd.DataFrame({
                         'score value': torch.hstack((s_oks, s_kos)),
@@ -199,6 +211,12 @@ def plot_confidence(**kwargs):
                                 }),
                     ignore_index = True,
                     )
+
+            # saves colors and linestyles
+            cs_okko[score_name+': OK'] = colors[score_n]
+            cs_okko[score_name+': KO'] = colors[score_n]
+            ls_okko[score_name+': OK'] = '--' 
+            ls_okko[score_name+': KO'] = '-'
             
             # Compute accuracies
             s_acc = torch.zeros(int(100*max_score)+1)
@@ -206,13 +224,13 @@ def plot_confidence(**kwargs):
             ths = torch.zeros(int(100*max_score)+1)
             for i, th in enumerate(torch.linspace(0., max_score, int(100*max_score)+1)):
                 ths[i] = th
-                s_idx = _scores >= th 
+                s_idx = _scores > th 
                 s_acc[i] = (results[s_idx].sum() + results[s_idx.logical_not()].logical_not().sum())/ns
-                s_drop[i] = (_scores < th).sum()/ns
+                s_drop[i] = (_scores <= th).sum()/ns
 
             df_conf = df_conf._append(
                     pd.DataFrame({
-                        'value': torch.hstack((s_acc, s_drop)),
+                        'value': 100*torch.hstack((s_acc, s_drop)),
                         'ths': ths.repeat(2),
                         'score type': \
                                 [score_name+': Acc' for i in range(len(s_acc))] + \
@@ -220,6 +238,12 @@ def plot_confidence(**kwargs):
                         }),
                     ignore_index = True,
                     )
+
+            # saves colors and linestyles
+            cs_conf[score_name+': Acc'] = colors[score_n]
+            cs_conf[score_name+': Dropped'] = colors[score_n]
+            ls_conf[score_name+': Acc'] = '-' 
+            ls_conf[score_name+': Dropped'] = '--' 
 
             # how many samples are dropped (smalled than th) at max acc
             drop_df = drop_df._append(
@@ -236,31 +260,28 @@ def plot_confidence(**kwargs):
         #--------------------
 
         # plotting OKs and KOs distribution
-        # TODO: paremeterize
-        colors = ['xkcd:cobalt', 'xkcd:cobalt', 'xkcd:bluish green', 'xkcd:bluish green']
-        lines = ['--', '-', '--', '-']
-
         ax = axs[0][loader_n] 
         p = sb.kdeplot(
                 data = df_okko,
                 ax = ax,
-                hue = 'score type',
                 x = 'score value',
                 common_norm = False,
-                palette = colors,
+                hue = 'score type',
+                hue_order = list(cs_okko.keys()), 
+                palette = cs_okko,
                 clip = [0., 1.],
                 alpha = 0.75,
                 legend = loader_n == 0
                 )
 
         # set up linestyles
-        for ls, line in zip(lines, p.lines):
+        for ls, line in zip(list(ls_okko.values()), p.lines):
             line.set_linestyle(ls)
         
         # set legend linestyle
         if loader_n == 0:
             handles = p.legend_.legend_handles[::-1]
-            for ls, h in zip(lines, handles):
+            for ls, h in zip(list(ls_okko.values()), handles):
                 h.set_ls(ls)
 
         ax.set_xlabel('Score')
@@ -276,29 +297,27 @@ def plot_confidence(**kwargs):
                 x = 'ths', 
                 y = 'value',
                 hue = 'score type',
-                palette = colors,
+                hue_order = list(cs_conf.keys()), 
+                palette = cs_conf,
                 alpha = 0.75,
                 legend = loader_n == 0,
                 )
 
         # set up linestyles
-        for ls, line in zip(lines, p.lines):
+        for ls, line in zip(list(ls_conf.values()), p.lines):
             line.set_linestyle(ls)
         
         # set legend linestyle
         if loader_n == 0:
             handles = p.legend_.legend_handles[::-1]
-            for ls, h in zip(lines, handles):
-                print(ls)
-                h.set_ls(ls)
+            for h in handles:
+                h.set_ls(ls_conf[h._label])
 
         ax.set_xlabel('Score Threshold')
-        ax.set_ylabel('Accuracy')
+        ax.set_ylabel('%')
         ax.grid(True)
 
     # Plot AUCs
-    # TODO: paremeterize
-    colors = ['xkcd:cobalt', 'xkcd:bluish green']                   
                                                               
     ax = axs[0][-1]
     sb.pointplot(
@@ -308,7 +327,7 @@ def plot_confidence(**kwargs):
             y = 'AUC',
             hue = 'score name',
             markersize = 8,
-            palette = colors,
+            palette = colors[0:len(scores[loaders[0]])],
             alpha = 0.75,
             legend = True
             )
@@ -324,7 +343,7 @@ def plot_confidence(**kwargs):
             y = 'Drop',
             hue = 'score name',
             markersize = 8,
-            palette = colors,
+            palette = colors[0:len(scores[loaders[0]])],
             alpha = 0.75,
             legend = True
             )
@@ -365,13 +384,15 @@ def plot_calibration(**kwargs):
 
     if loaders == None: loaders = list(scores.keys())
 
-    fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(4*len(loaders), 4))
+    fig, axs = plt.subplots(1, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5))
+
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
 
     n_bins = ceil(1/calib_bin)
+    eces_df = pd.DataFrame()
     for loader_n, ds_key in enumerate(loaders):
-        df_calib = pd.DataFrame()
 
-        eces = {}
+        df_calib = pd.DataFrame()
         for score_name in scores[ds_key].keys():
             _scores = scores[ds_key][score_name]
             results = cvs._dss[ds_key]['result'] 
@@ -393,7 +414,16 @@ def plot_calibration(**kwargs):
             s_conf = torch.nan_to_num(s_conf) 
 
             # Compute ECE score
-            eces[score_name] = (s_ns*(s_acc-s_conf).abs()).sum()/ns
+            ece = ((s_ns*(s_acc-s_conf).abs()).sum()/ns).item()
+            if verbose: print(f'ECE for {ds_key} {score_name} split: {ece:.4f}')
+            eces_df = eces_df._append(
+                    pd.DataFrame({
+                        'ECE': [ece],
+                        'score name': [score_name],
+                        'loader': [ds_key]
+                        }),
+                    ignore_index = True,
+                    )
 
             df_calib = df_calib._append(
                     pd.DataFrame({
@@ -414,17 +444,15 @@ def plot_calibration(**kwargs):
         #--------------------
         # Plotting
         #--------------------
-        # TODO: paremeterize
-        colors = ['xkcd:cobalt', 'xkcd:bluish green']
         ax = axs[loader_n]
-        _ax = sb.barplot(
+        sb.barplot(
                 data = df_calib,
                 ax = ax,
                 x = x.repeat(len(scores[ds_key].keys())),
                 y = 'accuracy',
                 hue = 'score type',
                 dodge = False,
-                palette = colors,
+                palette = colors[0:len(scores[loaders[0]])],
                 alpha = 0.75,
                 width = 1.,
                 legend = loader_n == 0,
@@ -444,12 +472,24 @@ def plot_calibration(**kwargs):
 
         ax.set_xlabel('Confidence')
         ax.set_ylabel('Accuracy (%)')
-        title = f'{ds_key}'
-        for score_name in eces:
-            title += f'\n{score_name} ECE={eces[score_name]:.2f}' 
-        ax.title.set_text(title)
+        ax.title.set_text(f'{ds_key}')
         ax.grid(True)
-
+    
+    # Plot ECEs 
+    ax = axs[-1]
+    sb.pointplot(
+            data = eces_df,
+            ax = ax,
+            x = 'loader',
+            y = 'ECE',
+            hue = 'score name',
+            markersize = 8,
+            palette = colors[0:len(scores[loaders[0]])],
+            alpha = 0.75,
+            legend = True
+            )
+    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
     plt.savefig((path/f'calibration.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
