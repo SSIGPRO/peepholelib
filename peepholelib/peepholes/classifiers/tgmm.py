@@ -3,6 +3,7 @@ from .classifier_base import ClassifierBase
 
 # torch stuff
 import torch
+from torch.nn.functional import softmax as sm
 
 # https://github.com/CSOgroup/torchgmm/tree/main
 from torchgmm.bayes import GaussianMixture as tGMM
@@ -45,7 +46,13 @@ class GMM(ClassifierBase): # quella buona
         loader = kwargs.get('loader', 'train')
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
-        cvs = _cvs._corevds[loader]
+        results = _cvs._dss[loader]['result']
+        confs = sm(cvs._dss[proto_key]['output'], dim=-1).max(dim=-1).values
+        idx = torch.logical_and(results == 1, confs > 0.9)
+
+        print('n: ', idx.sum())
+        cvs = _cvs._corevds[loader][idx]
+        print(cvs.shape)
         if verbose: print('\n ---- GMM classifier\n')
 
         # temp dataloader for loading the whole dataset
