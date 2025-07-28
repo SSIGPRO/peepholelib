@@ -79,7 +79,7 @@ def get_coreVectors(self, **kwargs):
             self._corevds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             if verbose: print('created corevectors with n_samples: ', n_samples) 
 
-        if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
+            if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
         
         # check if module in and out activations exist
         _modules_to_save = []
