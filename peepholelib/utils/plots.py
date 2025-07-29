@@ -1,16 +1,19 @@
 # General pytho stuff
 from pathlib import Path as Path
 from math import ceil
+import numpy as np
 
 # plotting stuff
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import seaborn as sb
 import pandas as pd
+from sklearn.metrics import roc_curve, roc_auc_score
 
 # torch stuff
 import torch
 from torcheval.metrics import BinaryAUROC as AUC
+
 
 def plot_ood(**kwargs):
     '''
@@ -137,7 +140,7 @@ def plot_ood(**kwargs):
     plt.close()
     return 
     
-def plot_attacks(**kwargs)
+def plot_attacks(**kwargs):
     '''
     Plot attacks and samples of the original distribution. The samples are selected only if the original image has been classified correctly by the reference model and the attack was succesful in fooling the model.
 
@@ -155,7 +158,7 @@ def plot_attacks(**kwargs)
     attacks = kwargs.get('attacks')
     loaders = kwargs.get('loaders', None)
     path = kwargs.get('path', None)
-    verbose = kwargs.get('verbose', False)
+    
 
     # parse arguments
     if path == None: 
@@ -164,14 +167,67 @@ def plot_attacks(**kwargs)
         path = Path(path)
 
     for type in score_type:
+        fig_type, axs_type = plt.subplots(1,1, figsize=(16,8))
+
         for attack in attacks:
-            #s = {ds_key: scores[attack][ds_key][type] for ds_key in loaders}
-            fig, axs = plt.subplots(3,1, figsize=(10,10))
+            
+            fig, axs = plt.subplots(1,3, figsize=(16,8))
+            fig.suptitle(f'Attack {attack}')
 
             for i, ds_key in enumerate(loaders):
-                n_samples = len(scores[attack][ds_key][type])/2
-            
-            
+                s = scores[attack][ds_key][type].detach().cpu().numpy()
+                n_samples = len(s)//2
+                axs[i].hist(s[:n_samples], bins=50, color='red', label=f'{attack}', alpha=0.5)
+                axs[i].hist(s[n_samples:], bins=50, color='green',label='Original', alpha=0.5)
+                y_true = np.zeros_like(s, dtype=int)
+                y_true[:n_samples] = 1
+
+                fpr, tpr, thresholds = roc_curve(y_true, s)
+
+                if ds_key == 'val':
+                    fpr_target = 0.05
+                    keep = np.where(fpr <= fpr_target)[0]
+                    idx = keep[-1]
+                    threshold_fpr = thresholds[idx]
+                    axs[i].axvline(threshold_fpr, color='black', linestyle='--', label=f"th={threshold_fpr:.2f}")
+                    axs[i].set_title(f'Val - FPR @ 5%')
+                    axs[i].legend()
+                elif ds_key == 'test':
+                    idx_test = np.argmin(np.abs(thresholds - threshold_fpr))
+
+                    fpr_at_threshold = fpr[idx_test]
+                    axs[i].axvline(threshold_fpr, color='black', linestyle='--', label=f"th={threshold_fpr:.2f}")
+                    axs[i].set_title(f'Test - FPR @ {fpr_at_threshold*100:.2f}%')
+                else:
+                    raise RuntimeError('Do not mess with other portion of the dataset just val and test')
+                
+                auc_value = roc_auc_score(y_true, s)
+
+                axs[2].plot(fpr, tpr, lw=2, label=f"AUC {ds_key} = {auc_value:.3f})")
+                if ds_key == 'val':
+                    axs[2].plot([0, 1], [0, 1], color='gray', linestyle='--', label="Chance (AUC = 0.5)")
+
+                axs[2].set_xlim([0.0, 1.0])
+                axs[2].set_ylim([0.0, 1.05])
+                axs[2].set_xlabel("False Positive Rate")
+                axs[2].set_ylabel("True Positive Rate")
+                axs[2].set_title("Receiver Operating Characteristic")
+                axs[2].legend(loc="lower right")
+                axs[2].grid(True)
+                if ds_key == 'test':
+                    axs_type.plot(fpr, tpr, lw=2, label=f"AUC {attack} = {auc_value:.3f})")
+                    
+
+                    axs_type.set_xlim([0.0, 1.0])
+                    axs_type.set_ylim([0.0, 1.05])
+                    axs_type.set_xlabel("False Positive Rate")
+                    axs_type.set_ylabel("True Positive Rate")
+                    axs_type.set_title(f"AUC {type}")
+                    axs_type.legend(loc="lower right")
+                    axs_type.grid(True)
+                
+            fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
+        fig_type.savefig((path/f'AUC_{type}.png').as_posix(), dpi=300, bbox_inches='tight')           
 
     
 def plot_confidence(**kwargs):

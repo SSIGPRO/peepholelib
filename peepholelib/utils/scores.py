@@ -130,7 +130,6 @@ def DMD_aware(**kwargs):
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
     - verbose (bool): print progress messages.
-    - atk_name (string): score name if specification in needed (adv attacks case)
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
@@ -145,7 +144,6 @@ def DMD_aware(**kwargs):
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
     verbose = kwargs.get('verbose', False)
-    atk_name = kwargs.get('atk_name')
 
     # parse arguments
     score_name = 'DMD-Aware'
@@ -167,9 +165,9 @@ def DMD_aware(**kwargs):
 
     idx = torch.argwhere((cvs._dss['val']['result']==1) & (cvs_atk._dss['val']['attack_success']==1)).squeeze()
 
-    train_ori = torch.stack([phs._phs['val'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    train_atk = torch.stack([phs_atk._phs['val'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-
+    train_ori = torch.stack([phs._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    train_atk = torch.stack([phs_atk._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    
     train_data = np.concatenate((train_ori, train_atk), axis=0)
     
     label_ori = np.zeros(len(train_ori))
@@ -178,22 +176,19 @@ def DMD_aware(**kwargs):
 
     idx = torch.argwhere((cvs._dss['test']['result']==1) & (cvs_atk._dss['test']['attack_success']==1)).squeeze()
 
-    test_ori = torch.stack([phs._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    test_atk = torch.stack([phs_atk._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    test_ori = torch.stack([phs._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    test_atk = torch.stack([phs_atk._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
     
     test_data = np.concatenate((test_ori, test_atk), axis=0)
     label_ori = np.zeros(len(test_ori))
     label_atk = np.ones(len(test_atk))
     test_label = np.concatenate((label_ori, label_atk), axis=0)
 
-    ret_ = DMD_score(train_data, train_label,
-                     test_data, test_label)
+    ret_ = DMD_score(train_data=train_data, train_label=train_label,
+                     test_data=test_data, test_label=test_label)
 
-    ret[atk_name]['val'][score_name] = ret_['val']
-    ret[atk_name]['test'][score_name] = ret_['test']
-
-    ret[atk_name]['val']['label'] = train_label
-    ret[atk_name]['test']['label'] = test_label
+    ret['val'][score_name] = ret_['val']
+    ret['test'][score_name] = ret_['test']
 
     return ret
 
