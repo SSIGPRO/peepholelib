@@ -136,24 +136,23 @@ def plot_ood(**kwargs):
     plt.savefig((path/f'in_out_distribution.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
-
+    
 def plot_attacks(**kwargs)
     '''
     Plot attacks and samples of the original distribution. The samples are selected only if the original image has been classified correctly by the reference model and the attack was succesful in fooling the model.
 
     Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - corevectors attack (peepholelib.coreVectors.CoreVectors): corevectors of the attacked dataset with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - attacks (list[str]): list of attacks that are analysed
+    - score type (list[str]): list of scores deployed
+    - scores (dict(str:dict(str: torch.tensor))): Three-level dictionary with first keys being the attacks, second-level the loader name, third-level key the score names and values the scores (see peepholelib.utils.scores.py). 
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - path ('str'): Path to save plots.
     - verbose (bool): print progress messages.
     '''
 
-    cvs = kwargs.get('corevectors')
-    cvs_atk = kwargs.get('corevectors_attack')
     scores = kwargs.get('scores')
-    scores_atk = kwargs.get('scores_atk')
+    score_type = kwargs.get('score_type')
+    attacks = kwargs.get('attacks')
     loaders = kwargs.get('loaders', None)
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
@@ -164,58 +163,17 @@ def plot_attacks(**kwargs)
     else:
         path = Path(path)
 
-    if loaders == None: loaders = list(scores.keys())
+    for type in score_type:
+        for attack in attacks:
+            #s = {ds_key: scores[attack][ds_key][type] for ds_key in loaders}
+            fig, axs = plt.subplots(3,1, figsize=(10,10))
 
-    fig, axs = plt.subplots(2, len(loaders), sharex='row', sharey='none', figsize=(4*len(loaders), 4*2))
-
-    for loader_n, ds_key in enumerate(loaders):
-        
-        idx = torch.argwhere((cvs._dss[ds_key]['result']==1)&(cvs_atk._dss[ds_key]['attack_success']==1))
-        scores = scores[idx]
-        scores_atk = scores[idx]
-
-        
-        df_okko = pd.DataFrame()
-        df_conf = pd.DataFrame()
-        
-        # save AUCs for each score type
-        aucs = {}
-        for score_name in scores[ds_key].keys():
-            _scores = scores[ds_key][score_name]
-            results = cvs._dss[ds_key]['result'] 
-            ns = _scores.shape[0] # number of samples
-
-            s_oks = _scores[results == True]
-            s_kos = _scores[results == False]
-        
-            # compute AUC for score and model
-            aucs[score_name] = AUC().update(_scores, results.int()).compute().item()
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {aucs[score_name]:.4f}')
-        
-            df_okko = df_okko._append(
-                    pd.DataFrame({
-                        'score value': torch.hstack((s_oks, s_kos)),
-                        'score type': \
-                                [score_name+': OK' for i in range(len(s_oks))] + \
-                                [score_name+': KO' for i in range(len(s_kos))]
-                                }),
-                    ignore_index = True,
-                    )
+            for i, ds_key in enumerate(loaders):
+                n_samples = len(scores[attack][ds_key][type])/2
             
-            # Compute accuracies
-            s_acc = torch.zeros(int(100*max_score)+1)
-            for i, th in enumerate(torch.linspace(0., max_score, int(100*max_score)+1)):
-                s_idx = _scores >= th 
-                s_acc[i] = (results[s_idx].sum() + results[s_idx.logical_not()].logical_not().sum())/ns
+            
 
-            df_conf = df_conf._append(
-                    pd.DataFrame({
-                        'conf value': s_acc,
-                        'score type':[score_name for i in range(len(s_acc))],
-                        }),
-                    ignore_index = True,
-                    )
-
+    
 def plot_confidence(**kwargs):
     '''
     Plot OKs and KOs distributions and confidences. Confidences are computed for a score threshold 'th', assuming values bellow 'th' are wrongly classified and above are correctly classified true positive and negative ('TP(th)' and 'TN(th)') are computed, so 'conf(th) = (TP(th)+TN(th))/ns'. 'th' is plotted from 0 to 'max_score'. 
