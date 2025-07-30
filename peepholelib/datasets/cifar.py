@@ -127,7 +127,7 @@ class Cifar(DatasetBase):
             n_corruptions = len(files)
             spc = floor(n_samples/n_corruptions)
 
-            # pre-allocate images and labels
+            # pre-allocate images and labels for test
             c_labels = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
             c_images = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
 
@@ -137,9 +137,29 @@ class Cifar(DatasetBase):
                     c_labels[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
                     c_images[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
 
-            corrupted_datasets = {}
+            corrupted_datasets_test = {}
             for cl in range(c_levels):
-                corrupted_datasets[cl] = CustomDS(
+                corrupted_datasets_test[cl] = CustomDS(
+                        data = c_images[cl],
+                        labels = c_labels[cl],
+                        transform = transform,
+                        )
+            
+            # pre-allocate images and labels for val
+            c_labels = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
+            c_images = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
+
+            files_val = files.copy()
+
+            for ci, f in enumerate(files_val.reverse()):
+                for cl in range(c_levels):
+                    _data = np.load(f).reshape((c_levels, n_samples)+img_shape)
+                    c_labels[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
+                    c_images[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
+
+            corrupted_datasets_val = {}
+            for cl in range(c_levels):
+                corrupted_datasets_val[cl] = CustomDS(
                         data = c_images[cl],
                         labels = c_labels[cl],
                         transform = transform,
@@ -154,7 +174,8 @@ class Cifar(DatasetBase):
 
         if not corrupted_path == None:
             for cl in range(c_levels):
-                self._dss[f'ood-c{cl}'] = corrupted_datasets[cl]
+                self._dss[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
+                self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl]
 
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
