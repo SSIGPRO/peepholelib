@@ -5,33 +5,27 @@ from .classifier_base import ClassifierBase
 import torch
 from torch.nn.functional import softmax as sm
 
-# https://github.com/CSOgroup/torchgmm/tree/main
-from torchgmm.bayes import GaussianMixture as tGMM
+# BIRCH 
+import numpy as np
+from sklearn.cluster import BisectingKMeans as skBirch
 
-import logging
-logging.getLogger('pytorch_lightning.utilities.rank_zero').setLevel(logging.CRITICAL)
-logging.getLogger("pytorch_lightning.accelerators.cuda").setLevel(logging.CRITICAL)
-
-class GMM(ClassifierBase): # quella buona
+class Birch(ClassifierBase): # quella buona
     def __init__(self, **kwargs):
         cls_kwargs = kwargs.pop('cls_kwargs') if 'cls_kwargs' in kwargs else {}
         ClassifierBase.__init__(self, **kwargs)
-        
-        self._classifier = tGMM(
-                num_components=self.nl_class,
+
+        self._classifier = skBirch(
+                n_clusters = self.nl_class,
                 **cls_kwargs,
-                trainer_params = dict(
-                    num_nodes = 1,
-                    accelerator = self.device.type,
-                    devices = [self.device.index],
-                    max_epochs = 50000,
-                    enable_progress_bar = False 
-                    )
                 )
 
-        self._clas_path = self.path/(self.name+'.GMM'+self._suffix)
+        self._clas_path = self.path/(self.name+'.Birch'+self._suffix)
         self._empp_file = self._clas_path/'empp.pt'
+
         return
+
+    def predict(self, data):
+        return self._classifier.predict(data.detach().cpu().double())
 
     def fit(self, **kwargs):
         '''
@@ -48,7 +42,7 @@ class GMM(ClassifierBase): # quella buona
         
         cvs = _cvs._corevds[loader]
 
-        if verbose: print('\n ---- GMM classifier\n')
+        if verbose: print('\n ---- Birch classifier\n')
 
         # temp dataloader for loading the whole dataset
         data = self.parser(cvs=cvs)
@@ -56,9 +50,9 @@ class GMM(ClassifierBase): # quella buona
         if data.shape[1] != self.n_features:
             raise RuntimeError(f'Something is weird...\n Data has shape {data.shape} after parsing corevectors with the parser {self.parser}\nWhile n_features={self.n_features} was passed during construction.')
 
-        if verbose: print('Fitting GMM')
+        if verbose: print('Fitting Birch')
         #self._classifier.fit(data)
-        self._classifier.fit(data.clone().detach())
+        self._classifier.fit(data.detach().cpu().double())
         
         return
     
@@ -72,20 +66,24 @@ class GMM(ClassifierBase): # quella buona
         
         data = kwargs['data']
 
-        probs = self._classifier.predict_proba(data)
+        dists = self._classifier.transform(data.detach().cpu().double())
+        dists /= torch.tensor(dists).sum(dim=-1, keepdims=True)
+        probs = 1 - dists 
 
-        return probs   
+        return probs.float()   
     
     def save(self, **kwargs):
         self._clas_path.mkdir(parents=True, exist_ok=True)
-        self._classifier.save(self._clas_path)
+        np.save(self._clas_path.as_posix()+'/params.npy', self._classifier.get_params())
         
         super().save()
         
         return
 
     def load(self, **kwargs):
-        self._classifier = tGMM.load(self._clas_path)
+        params = np.load(self._clas_path.as_posix()+'/params.npy', allow_pickle=True)
+        print(params)
+        self._classifier.set_params(params)
         super().load()
         
         return
