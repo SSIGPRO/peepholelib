@@ -170,8 +170,8 @@ def DMD_aware(**kwargs):
     
     train_data = np.concatenate((train_ori, train_atk), axis=0)
     
-    label_ori = np.zeros(len(train_ori))
-    label_atk = np.ones(len(train_atk))
+    label_ori = np.ones(len(train_ori))
+    label_atk = np.zeros(len(train_atk))
     train_label = np.concatenate((label_ori, label_atk), axis=0)
 
     idx = torch.argwhere((cvs._dss['test']['result']==1) & (cvs_atk._dss['test']['attack_success']==1)).squeeze()
@@ -180,8 +180,8 @@ def DMD_aware(**kwargs):
     test_atk = torch.stack([phs_atk._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
     
     test_data = np.concatenate((test_ori, test_atk), axis=0)
-    label_ori = np.zeros(len(test_ori))
-    label_atk = np.ones(len(test_atk))
+    label_ori = np.ones(len(test_ori))
+    label_atk = np.zeros(len(test_atk))
     test_label = np.concatenate((label_ori, label_atk), axis=0)
 
     ret_ = DMD_score(train_data=train_data, train_label=train_label,
@@ -209,7 +209,7 @@ def DMD_unaware(**kwargs):
                                within train we have the attacks used for training the regressor and each value
                                corresponds to peepholelib.coreVectors.CoreVectors while test is the single 
                                test attack on which we evaluate the performances of the regressor
-    
+    - config (dict): Two-level dictionary, the first keys are the configuration names and the second level key are training and testing attacks
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
     - verbose (bool): print progress messages.
@@ -222,7 +222,7 @@ def DMD_unaware(**kwargs):
     coreavg_atk_dict = kwargs.get('coreavg_atk_dict')
     ph = kwargs.get('peepavg')
     cv = kwargs.get('coreavg')
-    
+    config = kwargs.get('config')    
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
     verbose = kwargs.get('verbose', False)
@@ -248,7 +248,10 @@ def DMD_unaware(**kwargs):
     # computations
     #-----------
 
-    for config in peepavg_atk_dict:
+    for c in config.values():
+        train_attacks = c['train']
+        test_attacks = c['test']
+        
         ph_atk = peepavg_atk_dict[config]['train']
         ph_atk_test = peepavg_atk_dict[config]['test']
 

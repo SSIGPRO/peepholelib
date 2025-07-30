@@ -165,17 +165,23 @@ def plot_attacks(**kwargs):
         path = Path.cwd()
     else:
         path = Path(path)
+    
+    fig_type, axs_type = plt.subplots(1,len(score_type), figsize=(16,8))
+    fig_type.suptitle(f'AUC based on type')
+    fig_atk, axs_atk = plt.subplots(1, len(attacks), figsize=(16,8))
+    fig_atk.suptitle(f'AUC based on attack')
+    for j ,type in enumerate(score_type):
 
-    for type in score_type:
-        fig_type, axs_type = plt.subplots(1,1, figsize=(16,8))
-
-        for attack in attacks:
+        for k, attack in enumerate(attacks):
             
             fig, axs = plt.subplots(1,3, figsize=(16,8))
             fig.suptitle(f'Attack {attack}')
 
             for i, ds_key in enumerate(loaders):
-                s = scores[attack][ds_key][type].detach().cpu().numpy()
+                s = scores[attack][ds_key][type]
+                if isinstance(s, torch.Tensor):
+                    s = scores[attack][ds_key][type].detach().cpu().numpy()
+                
                 n_samples = len(s)//2
                 axs[i].hist(s[:n_samples], bins=50, color='red', label=f'{attack}', alpha=0.5)
                 axs[i].hist(s[n_samples:], bins=50, color='green',label='Original', alpha=0.5)
@@ -215,19 +221,27 @@ def plot_attacks(**kwargs):
                 axs[2].legend(loc="lower right")
                 axs[2].grid(True)
                 if ds_key == 'test':
-                    axs_type.plot(fpr, tpr, lw=2, label=f"AUC {attack} = {auc_value:.3f})")
-                    
+                    axs_type[j].plot(fpr, tpr, lw=2, label=f"AUC {attack} = {auc_value:.3f}")
+                    axs_type[j].set_xlim([0.0, 1.0])
+                    axs_type[j].set_ylim([0.0, 1.05])
+                    axs_type[j].set_xlabel("False Positive Rate")
+                    axs_type[j].set_ylabel("True Positive Rate")
+                    axs_type[j].set_title(f"{type}")
+                    axs_type[j].legend(loc="lower right")
+                    axs_type[j].grid(True)
 
-                    axs_type.set_xlim([0.0, 1.0])
-                    axs_type.set_ylim([0.0, 1.05])
-                    axs_type.set_xlabel("False Positive Rate")
-                    axs_type.set_ylabel("True Positive Rate")
-                    axs_type.set_title(f"AUC {type}")
-                    axs_type.legend(loc="lower right")
-                    axs_type.grid(True)
+                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"AUC {type} = {auc_value:.3f}")
+                    axs_atk[k].set_xlim([0.0, 1.0])
+                    axs_atk[k].set_ylim([0.0, 1.05])
+                    axs_atk[k].set_xlabel("False Positive Rate")
+                    axs_atk[k].set_ylabel("True Positive Rate")
+                    axs_atk[k].set_title(f"{attack}")
+                    axs_atk[k].legend(loc="lower right")
+                    axs_atk[k].grid(True)
                 
             fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
-        fig_type.savefig((path/f'AUC_{type}.png').as_posix(), dpi=300, bbox_inches='tight')           
+    fig_type.savefig((path/f'AUC_based_type.png').as_posix(), dpi=300, bbox_inches='tight')     
+    fig_atk.savefig((path/f'AUC_based_atk.png').as_posix(), dpi=300, bbox_inches='tight')      
 
     
 def plot_confidence(**kwargs):
