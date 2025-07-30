@@ -122,46 +122,42 @@ class Cifar(DatasetBase):
             idxs = torch.randperm(n_samples)
             
             files = list(corrupted_path.glob('[!label]*.npy'))
+
+            files_val = files.copy().reverse()
+
             img_shape = np.load(files[0])[0].shape
             # get spc (samples per corruption) from each corruption
             n_corruptions = len(files)
             spc = floor(n_samples/n_corruptions)
 
             # pre-allocate images and labels for test
-            c_labels = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
-            c_images = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
+            c_labels_test = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
+            c_images_test = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
+            c_labels_val = c_labels_test.copy() 
+            c_images_val = c_images_test.copy()
 
-            for ci, f in enumerate(files):
+            for ci, (ft, fv) in enumerate(zip(files, files_val)):
                 for cl in range(c_levels):
-                    _data = np.load(f).reshape((c_levels, n_samples)+img_shape)
-                    c_labels[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
-                    c_images[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
+                    _data = np.load(ft).reshape((c_levels, n_samples)+img_shape)
+                    c_labels_test[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
+                    c_images_test[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
+
+                    _data = np.load(fv).reshape((c_levels, n_samples)+img_shape)
+                    c_labels_val[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
+                    c_images_val[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
 
             corrupted_datasets_test = {}
-            for cl in range(c_levels):
-                corrupted_datasets_test[cl] = CustomDS(
-                        data = c_images[cl],
-                        labels = c_labels[cl],
-                        transform = transform,
-                        )
-            
-            # pre-allocate images and labels for val
-            c_labels = np.zeros((c_levels, n_corruptions*spc), dtype=int) 
-            c_images = np.zeros((c_levels, n_corruptions*spc)+img_shape, dtype=np.uint8)
-
-            files_val = files.copy()
-
-            for ci, f in enumerate(files_val.reverse()):
-                for cl in range(c_levels):
-                    _data = np.load(f).reshape((c_levels, n_samples)+img_shape)
-                    c_labels[:, ci*spc:(ci+1)*spc] = _labels[:, idxs[ci*spc:(ci+1)*spc]]
-                    c_images[:, ci*spc:(ci+1)*spc] = _data[:, idxs[ci*spc:(ci+1)*spc]]
-
             corrupted_datasets_val = {}
             for cl in range(c_levels):
+                corrupted_datasets_test[cl] = CustomDS(
+                        data = c_images_test[cl],
+                        labels = c_labels_test[cl],
+                        transform = transform,
+                        )
+                
                 corrupted_datasets_val[cl] = CustomDS(
-                        data = c_images[cl],
-                        labels = c_labels[cl],
+                        data = c_images_val[cl],
+                        labels = c_labels_val[cl],
                         transform = transform,
                         )
 
