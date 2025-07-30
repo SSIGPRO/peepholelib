@@ -1,8 +1,10 @@
 # torch stuff
 import torch
 from torch.nn.functional import softmax as sm
+from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegressionCV
 import numpy as np
+from tqdm import tqdm
 
 def conceptogram_protoclass_score(**kwargs):
     '''
@@ -199,17 +201,10 @@ def DMD_unaware(**kwargs):
     Args:
     - peepavg (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
     - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - peepavg_atk_dict (dict): The dictionary defines the training and the test set
-                               of the Linear regressor. It is composed of a training and a test key
-                               within train we have the attacks used for training the regressor and each value
-                               corresponds to peepholelib.peepholes.Peepholes while test is the single 
-                               test attack on which we evaluate the performances of the regressor
-    - coreavg_atk_dict (dict): The dictionary defines the training and the test set
-                               of the Linear regressor. It is composed of a training and a test key
-                               within train we have the attacks used for training the regressor and each value
-                               corresponds to peepholelib.coreVectors.CoreVectors while test is the single 
-                               test attack on which we evaluate the performances of the regressor
-    - config (dict): Two-level dictionary, the first keys are the configuration names and the second level key are training and testing attacks
+    - coreavg_atk_train (dict): dictionary containing as keys the attacks used as training of the regressor and as values the corresponding coreavg
+    - peepavg_atk_train (dict): dictionary containing as keys the attacks used as training of the regressor and as values the corresponding peepavg
+    - coreavg_atk_test (peepholelib.peepholes.CoreVectors): coreavg of the attack under test
+    - peepavg_atk_test (peepholelib.coreVectors.Peepholes): peepavg of the attack under test
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
     - verbose (bool): print progress messages.
@@ -218,21 +213,22 @@ def DMD_unaware(**kwargs):
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
 
-    peepavg_atk_dict = kwargs.get('peepavg_atk_dict')
-    coreavg_atk_dict = kwargs.get('coreavg_atk_dict')
+    coreavg_atk_train = kwargs.get('coreavg_atk_train')
+    peepavg_atk_train = kwargs.get('peepavg_atk_train')
+    coreavg_atk_test = kwargs.get('coreavg_atk_test')
+    peepavg_atk_test = kwargs.get('peepavg_atk_test')
     ph = kwargs.get('peepavg')
-    cv = kwargs.get('coreavg')
-    config = kwargs.get('config')    
+    cv = kwargs.get('coreavg')  
+    loaders = kwargs.get('loaders', None) 
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
     atk_name = kwargs.get('atk_name')
 
     # parse arguments
     n_samples = 3333
     score_name = 'DMD-Unaware'
     
-    if loaders == None: loaders = list(peepavg_atk_dict[0].value._phs.keys())
+    if loaders == None: loaders = list(ph._phs.keys())
     if target_modules == None: target_modules = list(ph._phs[loaders[0]].keys())
 
     # create the return dictionary. 
@@ -244,62 +240,150 @@ def DMD_unaware(**kwargs):
         if not ds_key in ret:
             ret[ds_key] = dict()
 
-    #-----------
+    #------------------
     # computations
-    #-----------
+    #------------------
 
-    for c in config.values():
-        train_attacks = c['train']
-        test_attacks = c['test']
-        
-        ph_atk = peepavg_atk_dict[config]['train']
-        ph_atk_test = peepavg_atk_dict[config]['test']
-
-        cv_atk = coreavg_atk_dict[config]['train']
-        cv_atk_test = coreavg_atk_dict[config]['test']
-
+    #------------------
+    #  TRAINING
+    #------------------
                 
-        f_ori = torch.stack([ph._phs['val'][layer]['score_max'] for layer in target_modules],dim=1).detach().cpu().numpy()
-        f_atk = []
-        
-        for i, pha, cva in enumerate(zip(ph_atk, cv_atk)):
+    f_ori = torch.stack([ph._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+    f_atk = {}
                 
-            f_atk[i] = torch.stack([pha._phs['val'][layer]['score_max'] for layer in target_modules],dim=1)
-            idx = torch.argwhere((cv._dss['val']['result']==1) & (cva._dss['val']['attack_success']==1)).squeeze()
+    for i, atk_name in enumerate(peepavg_atk_train.keys()):
             
-            assert len(idx) >= n_samples, f'Not enough samples for attack in training set. Found {len(idx)} samples, expected at least {n_samples}.'
+            f_atk[atk_name] = torch.stack([peepavg_atk_train[atk_name]._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
+            idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_train[atk_name]._dss['val']['attack_success']==1)).squeeze()
+            
+            assert len(idx) >= n_samples, f'Not enough samples for attack {atk_name} in training set. Found {len(idx)} samples, expected at least {n_samples}.'
 
             rand = torch.randperm(len(idx))[:n_samples]
-            f_atk[i] = f_atk[i][idx[rand]]
-                            
-            f_atk = torch.concat(f_atk, dim=0).detach().cpu().numpy()
+            f_atk[atk_name] = f_atk[atk_name][idx[rand]]
+   
+    f_atk = torch.concat([f_atk[atk_name] for atk_name in peepavg_atk_train.keys()], dim=0)#.detach().cpu().numpy()   
+    
+    label_ori = np.ones(len(f_ori))
+    label_atk = np.zeros(len(f_atk))
+    
+    train_data = np.concatenate((f_ori, f_atk), axis=0)
+    train_label = np.concatenate((label_ori, label_atk), axis=0)  
 
-            label_ori = np.zeros(len(f_ori))
-            label_atk = np.ones(len(f_atk))
-            train_data = np.concatenate((f_ori, f_atk), axis=0)
-            train_label = np.concatenate((label_ori, label_atk), axis=0)
+    #------------------
+    #  VALIDATION
+    #------------------ 
 
-                
-        idx = torch.argwhere((cv._dss['test']['result']==1) & (cv_atk_test._dss['test']['attack_success']==1)).squeeze()
-        f_ori = torch.stack([ph._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-        f_atk = torch.stack([ph_atk_test._phs['test'][layer]['score_max'] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_test._dss['val']['attack_success']==1)).squeeze()
+    f_ori = torch.stack([ph._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    f_atk = torch.stack([peepavg_atk_test._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
 
-        label_ori = np.zeros(len(f_ori))
-        label_atk = np.ones(len(f_atk))
+    label_ori = np.ones(len(f_ori))
+    label_atk = np.zeros(len(f_atk))
 
-        test_data = np.concatenate((f_ori, f_atk), axis=0)
-        test_label = np.concatenate((label_ori, label_atk), axis=0)
+    val_data = np.concatenate((f_ori, f_atk), axis=0)
+    val_label = np.concatenate((label_ori, label_atk), axis=0) 
 
-        ret_ = DMD_score(train_data, train_label,
-                     test_data, test_label)
+    ret_ = DMD_score(train_data=train_data, train_label=train_label,
+                    test_data=val_data, test_label=val_label)
+    
+    ret['val'][score_name] = ret_['test']
 
-        ret[atk_name]['val'][score_name] = ret_['val']
-        ret[atk_name]['test'][score_name] = ret_['test']
+    #------------------
+    #  TEST
+    #------------------
 
-        ret[atk_name]['val']['label'] = train_label
-        ret[atk_name]['test']['label'] = test_label
+    idx = torch.argwhere((cv._dss['test']['result']==1) & (coreavg_atk_test._dss['test']['attack_success']==1)).squeeze()
+    f_ori = torch.stack([ph._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    f_atk = torch.stack([peepavg_atk_test._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+
+    label_ori = np.ones(len(f_ori))
+    label_atk = np.zeros(len(f_atk))
+
+    test_data = np.concatenate((f_ori, f_atk), axis=0)
+    test_label = np.concatenate((label_ori, label_atk), axis=0)
+    ret_ = DMD_score(train_data=train_data, train_label=train_label,
+                    test_data=test_data, test_label=test_label)
+
+    ret['test'][score_name] = ret_['test']
 
     return ret
+
+def FeatureSqueezing(**kwargs):
+
+    '''
+    Compute the Feature Squeezing score 
+
+    Args:
+    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - corevectors_atk(peepholelib.peepholes.CoreVectors): corevectors of the attack under test
+    - Detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): Detector used to analyse the input images
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+    - devie 
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    '''
+
+    cva = kwargs.get('corevectors_atk')
+    cv = kwargs.get('corevectors') 
+    device = kwargs.get('device') 
+    detector = kwargs.get('detector', None) 
+    loaders = kwargs.get('loaders', None)
+    append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name','Feature-Squeezing')
+    bs = 64
+    
+    
+    if loaders == None: loaders = list(cv._dss.keys())
+    if append_scores != None:
+        ret = dict(append_scores)
+    else:
+        ret = {}
+    for ds_key in loaders:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
+    loaders_ori = {ds_key: DataLoader(cv._dss[ds_key]['image'], batch_size=bs, shuffle=False, num_workers=4) for ds_key in loaders}
+    loaders_atk = {ds_key: DataLoader(cva._dss[ds_key]['image'], batch_size=bs, shuffle=False, num_workers=4) for ds_key in loaders}
+    for (ds_key, dlo), (_, dla) in zip(loaders_ori.items(), loaders_atk.items()):
+        print(f'------{ds_key}------')
+        print(f'Computing score for Original Dataset')
+
+        idx = torch.argwhere((cv._dss[ds_key]['result']==1) & (cva._dss[ds_key]['attack_success']==1))
+        ori_list = []
+
+        for inputs in tqdm(dlo):
+
+            inputs = inputs.to(device)
+
+            output = detector(inputs)
+
+            ori_list.append(output.detach().cpu())
+
+        s_ori = torch.cat(ori_list, dim=0)
+        s_ori = s_ori[idx]
+
+        print(f'Computing score for Attack Dataset')
+
+        atk_list = []
+
+        for inputs in tqdm(dla):
+
+            inputs = inputs.to(device)
+
+            output = detector(inputs)
+
+            atk_list.append(output.detach().cpu())
+
+        s_atk = torch.cat(atk_list, dim=0)
+        s_atk = s_atk[idx]
+
+        scores = torch.cat([s_atk, s_ori], dim=0)
+        ret[ds_key][score_name] = scores
+
+    return ret
+
 
 def model_confidence_score(**kwargs):
     '''

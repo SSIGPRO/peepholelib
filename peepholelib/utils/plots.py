@@ -209,7 +209,7 @@ def plot_attacks(**kwargs):
                 
                 auc_value = roc_auc_score(y_true, s)
 
-                axs[2].plot(fpr, tpr, lw=2, label=f"AUC {ds_key} = {auc_value:.3f})")
+                axs[2].plot(fpr, tpr, lw=2, label=f"{ds_key} = {auc_value:.3f})")
                 if ds_key == 'val':
                     axs[2].plot([0, 1], [0, 1], color='gray', linestyle='--', label="Chance (AUC = 0.5)")
 
@@ -221,7 +221,7 @@ def plot_attacks(**kwargs):
                 axs[2].legend(loc="lower right")
                 axs[2].grid(True)
                 if ds_key == 'test':
-                    axs_type[j].plot(fpr, tpr, lw=2, label=f"AUC {attack} = {auc_value:.3f}")
+                    axs_type[j].plot(fpr, tpr, lw=2, label=f"{attack} = {auc_value:.3f}")
                     axs_type[j].set_xlim([0.0, 1.0])
                     axs_type[j].set_ylim([0.0, 1.05])
                     axs_type[j].set_xlabel("False Positive Rate")
@@ -230,7 +230,7 @@ def plot_attacks(**kwargs):
                     axs_type[j].legend(loc="lower right")
                     axs_type[j].grid(True)
 
-                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"AUC {type} = {auc_value:.3f}")
+                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
                     axs_atk[k].set_xlim([0.0, 1.0])
                     axs_atk[k].set_ylim([0.0, 1.05])
                     axs_atk[k].set_xlabel("False Positive Rate")
