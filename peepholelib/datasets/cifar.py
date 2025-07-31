@@ -123,8 +123,9 @@ class Cifar(DatasetBase):
             
             files = list(corrupted_path.glob('[!label]*.npy'))
 
-            files_val = files.copy().reverse()
-
+            files_val = files.copy()
+            files_val.reverse()
+            
             img_shape = np.load(files[0])[0].shape
             # get spc (samples per corruption) from each corruption
             n_corruptions = len(files)
