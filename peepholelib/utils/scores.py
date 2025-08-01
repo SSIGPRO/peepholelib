@@ -120,8 +120,77 @@ def DMD_score(**kwargs):
 
     return ret
 
+def DMD_aware_ood(**kwargs):
+    '''
+    Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
 
-def DMD_aware(**kwargs):
+    Args:
+    - peepavg (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
+    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - ood-loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
+    '''
+
+    phs = kwargs.get('peepavg')
+    loaders = kwargs.get('loaders', ['test', 'val'])
+    ood_loaders = kwargs.get('ood-loaders', None)
+    target_modules = kwargs.get('target_modules', None)
+    append_scores = kwargs.get('append_scores', None)
+
+    # parse arguments
+    score_name = 'DMD-Aware'
+    if ood_loaders == None: ood_loaders = ['ood-c0', 'ood-c1', 'ood-c2', 'ood-c3', 'ood-c4']
+    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
+
+    # create the return dictionary. 
+    if append_scores != None:
+        ret = dict(append_scores)
+    else:
+        ret = {}
+    for ds_key in ood_loaders:
+        if not ds_key in ret:
+            ret[f'test-{ds_key}'] = dict()
+            ret[ds_key] = dict()
+
+    #-----------
+    # computations
+    #-----------
+
+    for ood in ood_loaders:
+
+        train_ori = torch.stack([phs._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+        train_ood = torch.stack([phs._phs[f'val-{ood}'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+    
+        train_data = np.concatenate((train_ori, train_ood), axis=0)
+    
+        label_ori = np.ones(len(train_ori))
+        label_ood = np.zeros(len(train_ood))
+        train_label = np.concatenate((label_ori, label_ood), axis=0)
+
+        test_ori = torch.stack([phs._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+        test_ood = torch.stack([phs._phs[f'test-{ood}'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+        
+        test_data = np.concatenate((test_ori, test_ood), axis=0)
+        label_ori = np.ones(len(test_ori))
+        label_ood = np.zeros(len(test_ood))
+        test_label = np.concatenate((label_ori, label_ood), axis=0)
+
+        ret_ = DMD_score(train_data=train_data, train_label=train_label,
+                        test_data=test_data, test_label=test_label)
+
+        #ret[f'val-{ood}'][score_name] = ret_['val']
+        ret[f'test-{ood}'][score_name] = torch.tensor(ret_['test'][:len(test_ori)])
+        ret[ood][score_name] = torch.tensor(ret_['test'][len(test_ori):])
+
+    return ret
+
+def DMD_aware_atk(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
 
@@ -194,7 +263,7 @@ def DMD_aware(**kwargs):
 
     return ret
 
-def DMD_unaware(**kwargs):
+def DMD_unaware_atk(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted from different attack algorithm 
 
