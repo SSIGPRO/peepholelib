@@ -3,7 +3,6 @@ import torch
 from torch.nn.functional import softmax as sm
 from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegressionCV
-import numpy as np
 from tqdm import tqdm
 
 def conceptogram_protoclass_score(**kwargs):
@@ -48,6 +47,7 @@ def conceptogram_protoclass_score(**kwargs):
         ret = dict(append_scores)
     else:
         ret = {}
+    
     for ds_key in loaders:
         if not ds_key in ret:
             ret[ds_key] = dict()
@@ -95,32 +95,29 @@ def DMD_score(**kwargs):
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
 
     Args:
-    - train_data, train_label (numpy arrays): samples used to train the Logistic regresser.
-    - test_data, test_label (numpy.arrays) samples used to validate the trained Logistic regeressor.
+    - train_data
+    - train_label (numpy.array): samples used to train the Logistic regresser.
+    - test_data
+    - test_label (numpy.array) samples used to validate the trained Logistic regeressor.
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
+    # TODO: fix docs
 
     train_data = kwargs.get('train_data')
     train_label = kwargs.get('train_label')
-
     test_data = kwargs.get('test_data')
-    test_label = kwargs.get('test_label')
 
+    # You can use torch tensors for the LogisticRegressionCV, no need to numpy
     lr = LogisticRegressionCV(n_jobs=-1,max_iter=5000).fit(train_data, train_label)
 
-    y_val = lr.predict_proba(train_data)[:, 1]
+    y_train = lr.predict_proba(train_data)[:, 1]
     y_test = lr.predict_proba(test_data)[:, 1]
 
-    ret = dict()
+    return y_train, y_test 
 
-    ret['val'] = y_val
-    ret['test'] = y_test
-
-    return ret
-
-def DMD_aware_ood(**kwargs):
+def ood_aware_DMD_score(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
 
@@ -136,60 +133,62 @@ def DMD_aware_ood(**kwargs):
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
     '''
+    # TODO: fix documentation
 
-    phs = kwargs.get('peepavg')
-    loaders = kwargs.get('loaders', ['test', 'val'])
-    ood_loaders = kwargs.get('ood-loaders', None)
+    phs = kwargs.get('peepholes')
+    id_loader_train = kwargs.get('id_loader_train', 'val')
+    id_loader_test = kwargs.get('id_loader_test', 'test')
+    ood_loaders_train = kwargs.get('ood_loaders_train', None)
+    ood_loaders_test = kwargs.get('ood_loaders_test', None)
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
 
     # parse arguments
     score_name = 'DMD-Aware'
-    if ood_loaders == None: ood_loaders = ['ood-c0', 'ood-c1', 'ood-c2', 'ood-c3', 'ood-c4']
-    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
+    if target_modules == None: target_modules = list(phs._phs[id_loader_train].keys())
 
     # create the return dictionary. 
     if append_scores != None:
         ret = dict(append_scores)
-    else:
-        ret = {}
-    for ds_key in ood_loaders:
+    else: ret = {}
+
+    for ds_key in ood_loaders_train:
         if not ds_key in ret:
-            ret[f'test-{ds_key}'] = dict()
             ret[ds_key] = dict()
+
+    for ds_key in ood_loaders_test:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
 
     #-----------
     # computations
     #-----------
 
-    for ood in ood_loaders:
-
-        train_ori = torch.stack([phs._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
-        train_ood = torch.stack([phs._phs[f'val-{ood}'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
+    # it would be better to stack fisrt then get the max
+    train_ori = torch.stack([phs._phs[id_loader_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    test_ori = torch.stack([phs._phs[id_loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    for ood_train_key, ood_test_key in zip(ood_loaders_train, ood_loaders_test):
+        train_ood = torch.stack([phs._phs[ood_train_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        train_data = torch.vstack((train_ori, train_ood))
     
-        train_data = np.concatenate((train_ori, train_ood), axis=0)
-    
-        label_ori = np.ones(len(train_ori))
-        label_ood = np.zeros(len(train_ood))
-        train_label = np.concatenate((label_ori, label_ood), axis=0)
+        train_label = torch.hstack((torch.ones(len(train_ori)), torch.zeros(len(train_ood))))
 
-        test_ori = torch.stack([phs._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
-        test_ood = torch.stack([phs._phs[f'test-{ood}'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1).detach().cpu().numpy()
-        
-        test_data = np.concatenate((test_ori, test_ood), axis=0)
-        label_ori = np.ones(len(test_ori))
-        label_ood = np.zeros(len(test_ood))
-        test_label = np.concatenate((label_ori, label_ood), axis=0)
+        test_ood = torch.stack([phs._phs[ood_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_data = torch.vstack((test_ori, test_ood))
 
-        ret_ = DMD_score(train_data=train_data, train_label=train_label,
-                        test_data=test_data, test_label=test_label)
+        y_train, y_test = DMD_score(
+                train_data=train_data,
+                train_label=train_label,
+                test_data=test_data,
+                )
 
-        #ret[f'val-{ood}'][score_name] = ret_['val']
-        ret[f'test-{ood}'][score_name] = torch.tensor(ret_['test'][:len(test_ori)])
-        ret[ood][score_name] = torch.tensor(ret_['test'][len(test_ori):])
+        ret[ood_train_key][score_name] = torch.tensor(y_train)
+        ret[ood_test_key][score_name] = torch.tensor(y_test)
 
     return ret
 
+# better namek
 def DMD_aware_atk(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
@@ -263,6 +262,7 @@ def DMD_aware_atk(**kwargs):
 
     return ret
 
+# give a better name
 def DMD_unaware_atk(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted from different attack algorithm 
@@ -377,6 +377,7 @@ def DMD_unaware_atk(**kwargs):
 
     return ret
 
+# give a better name
 def FeatureSqueezing(**kwargs):
 
     '''

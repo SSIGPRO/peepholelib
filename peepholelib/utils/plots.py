@@ -21,14 +21,14 @@ def plot_ood(**kwargs):
 
     Args:
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
-    - id_loader (str): loaders of in-distribution data,  usually 'test'. Defaults to 'test'.
+    - id_loaders (dict(str:str|list(str))): Dictionary of loaders of in-distribution data, with the key being the score type and values a str or list of strings for respective loaders.
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
     - path ('str'): Path to save plots.
     - verbose (bool): print progress messages.
     '''
     scores = kwargs.get('scores')
-    id_loader = kwargs.get('id_loader', 'test')
+    id_loaders = kwargs.get('id_loaders')
     ood_loaders = kwargs.get('ood_loaders')
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
@@ -47,159 +47,85 @@ def plot_ood(**kwargs):
     # save aucs for plotting 
     aucs_df = pd.DataFrame()
 
-    if type(id_loader) is list:
+    for loader_n, ds_key in enumerate(ood_loaders):
+
+        # save in-distribution and out-of-distribution scores for plotting
+        df_idood = pd.DataFrame()
+        cs_idood, ls_idood = {}, {} 
+        for score_n, score_name in enumerate(scores[ds_key].keys()):
+            _id_loader = id_loaders[score_name]
+
+            if type(_id_loader) is list:
+                s_id = scores[_id_loader[loader_n]][score_name] # TODO: rearragen iteration order
+            else:
+                s_id = scores[_id_loader][score_name] # TODO: rearragen iteration order
+
+            s_ood = scores[ds_key][score_name]
+
+            # computing AUC for each score type
+            _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
+            _scores = torch.hstack((s_id, s_ood))
+
+            auc = AUC().update(_scores, _labels).compute().item()
+            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
+            aucs_df = aucs_df._append(
+                    pd.DataFrame({
+                        'AUC': [auc],
+                        'score name': [score_name],
+                        'loader': [ds_key]
+                        }),
+                    ignore_index = True,
+                    )
+
+            df_idood = df_idood._append(
+                    pd.DataFrame({
+                        'score value': _scores,
+                        'score type': \
+                                [score_name+' ID' for i in range(len(s_id))] + \
+                                [score_name+' OOD' for i in range(len(s_ood))]
+                        }),
+                    ignore_index = True,
+                    )
+
+            # saves colors and linestyles
+            cs_idood[score_name+' ID'] = colors[score_n]
+            cs_idood[score_name+' OOD'] = colors[score_n]
+            ls_idood[score_name+' ID'] = '--' 
+            ls_idood[score_name+' OOd'] = '-'
+
+        #--------------------
+        # Plotting
+        #--------------------
+        # plotting IDs and OODs distribution
+                                                                                        
+        ax = axs[loader_n] 
+        p = sb.kdeplot(
+                data = df_idood,
+                ax = ax,
+                x = 'score value',
+                common_norm = False,
+                hue = 'score type',
+                palette = cs_idood,
+                hue_order = list(cs_idood.keys()),
+                clip = [0., 1.],
+                alpha = 0.75,
+                legend = loader_n == 0
+                )
+                                                                                        
+        # set up linestyles
+        for ls, line in zip(list(ls_idood.values()), p.lines):
+            line.set_linestyle(ls)
         
-        for loader_n, (ds_key, id_key) in enumerate(zip(ood_loaders, id_loader)):
-            print(loader_n, ds_key, id_key)
-
-            # save in-distribution and out-of-distribution scores for plotting
-            df_idood = pd.DataFrame()
-            cs_idood, ls_idood = {}, {} 
-            for score_n, score_name in enumerate(scores[ds_key].keys()):
-                print(score_name)
-                s_id = scores[id_key][score_name] # TODO: rearragen iteration order
-                s_ood = scores[ds_key][score_name]
-
-                # computing AUC for each score type
-                _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
-                _scores = torch.hstack((s_id, s_ood))
-
-                auc = AUC().update(_scores, _labels).compute().item()
-                if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
-                aucs_df = aucs_df._append(
-                        pd.DataFrame({
-                            'AUC': [auc],
-                            'score name': [score_name],
-                            'loader': [ds_key]
-                            }),
-                        ignore_index = True,
-                        )
-
-                df_idood = df_idood._append(
-                        pd.DataFrame({
-                            'score value': _scores,
-                            'score type': \
-                                    [score_name+' ID' for i in range(len(s_id))] + \
-                                    [score_name+' OOD' for i in range(len(s_ood))]
-                            }),
-                        ignore_index = True,
-                        )
-
-                # saves colors and linestyles
-                cs_idood[score_name+' ID'] = colors[score_n]
-                cs_idood[score_name+' OOD'] = colors[score_n]
-                ls_idood[score_name+' ID'] = '--' 
-                ls_idood[score_name+' OOd'] = '-'
-
-            #--------------------
-            # Plotting
-            #--------------------
-            # plotting IDs and OODs distribution
-                                                                                            
-            ax = axs[loader_n] 
-            p = sb.kdeplot(
-                    data = df_idood,
-                    ax = ax,
-                    x = 'score value',
-                    common_norm = False,
-                    hue = 'score type',
-                    palette = cs_idood,
-                    hue_order = list(cs_idood.keys()),
-                    clip = [0., 1.],
-                    alpha = 0.75,
-                    legend = loader_n == 0
-                    )
-                                                                                            
-            # set up linestyles
-            for ls, line in zip(list(ls_idood.values()), p.lines):
-                line.set_linestyle(ls)
-            
-            # set legend linestyle
-            if loader_n == 0:
-                handles = p.legend_.legend_handles[::-1]
-                for ls, h in zip(list(ls_idood.values()), handles):
-                    h.set_ls(ls)
-                                                                                            
-            ax.set_xlabel('Score')
-            ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key}')
-            ax.grid(True)
-
-    else:
-
-        for loader_n, ds_key in enumerate(ood_loaders):
-
-            # save in-distribution and out-of-distribution scores for plotting
-            df_idood = pd.DataFrame()
-            cs_idood, ls_idood = {}, {} 
-            for score_n, score_name in enumerate(scores[ds_key].keys()):
-                s_id = scores[id_loader][score_name] # TODO: rearragen iteration order
-                s_ood = scores[ds_key][score_name]
-
-                # computing AUC for each score type
-                _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
-                _scores = torch.hstack((s_id, s_ood))
-
-                auc = AUC().update(_scores, _labels).compute().item()
-                if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
-                aucs_df = aucs_df._append(
-                        pd.DataFrame({
-                            'AUC': [auc],
-                            'score name': [score_name],
-                            'loader': [ds_key]
-                            }),
-                        ignore_index = True,
-                        )
-
-                df_idood = df_idood._append(
-                        pd.DataFrame({
-                            'score value': _scores,
-                            'score type': \
-                                    [score_name+' ID' for i in range(len(s_id))] + \
-                                    [score_name+' OOD' for i in range(len(s_ood))]
-                            }),
-                        ignore_index = True,
-                        )
-
-                # saves colors and linestyles
-                cs_idood[score_name+' ID'] = colors[score_n]
-                cs_idood[score_name+' OOD'] = colors[score_n]
-                ls_idood[score_name+' ID'] = '--' 
-                ls_idood[score_name+' OOd'] = '-'
-
-            #--------------------
-            # Plotting
-            #--------------------
-            # plotting IDs and OODs distribution
-                                                                                            
-            ax = axs[loader_n] 
-            p = sb.kdeplot(
-                    data = df_idood,
-                    ax = ax,
-                    x = 'score value',
-                    common_norm = False,
-                    hue = 'score type',
-                    palette = cs_idood,
-                    hue_order = list(cs_idood.keys()),
-                    clip = [0., 1.],
-                    alpha = 0.75,
-                    legend = loader_n == 0
-                    )
-                                                                                            
-            # set up linestyles
-            for ls, line in zip(list(ls_idood.values()), p.lines):
-                line.set_linestyle(ls)
-            
-            # set legend linestyle
-            if loader_n == 0:
-                handles = p.legend_.legend_handles[::-1]
-                for ls, h in zip(list(ls_idood.values()), handles):
-                    h.set_ls(ls)
-                                                                                            
-            ax.set_xlabel('Score')
-            ax.set_ylabel('%')
-            ax.title.set_text(f'{ds_key}')
-            ax.grid(True)
+        # set legend linestyle
+        if loader_n == 0:
+            handles = p.legend_.legend_handles[::-1]
+            for ls, h in zip(list(ls_idood.values()), handles):
+                h.set_ls(ls)
+                                                                                        
+        ax.set_xlabel('Score')
+        ax.set_ylabel('%')
+        ax.title.set_text(f'{ds_key}')
+        ax.grid(True)
 
     # Plot AUCs
     ax = axs[-1]
@@ -217,7 +143,7 @@ def plot_ood(**kwargs):
     ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
-    plt.savefig((path/f'in_out_distribution_DMD.png').as_posix(), dpi=300, bbox_inches='tight')
+    plt.savefig((path/f'in_out_distribution.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
     
