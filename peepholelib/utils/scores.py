@@ -177,14 +177,14 @@ def ood_aware_DMD_score(**kwargs):
         test_ood = torch.stack([phs._phs[ood_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
         test_data = torch.vstack((test_ori, test_ood))
 
-        y_train, y_test = DMD_score(
+        _, y_test = DMD_score(
                 train_data=train_data,
                 train_label=train_label,
                 test_data=test_data,
                 )
 
-        ret[ood_train_key][score_name] = torch.tensor(y_train)
-        ret[ood_test_key][score_name] = torch.tensor(y_test)
+        ret[ood_train_key][score_name] = torch.tensor(y_test)[:len(test_ori)]
+        ret[ood_test_key][score_name] = torch.tensor(y_test)[len(test_ori):]
 
     return ret
 
