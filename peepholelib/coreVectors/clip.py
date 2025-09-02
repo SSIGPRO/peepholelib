@@ -1,7 +1,3 @@
-# our stuff
-from .classifier_base import DrillBase
-
-# torch stuff
 # torch stuff
 import torch
 from tensordict import TensorDict, PersistentTensorDict
@@ -24,8 +20,8 @@ def get_clip_embeddings(self, **kwargs):
    '''
 
    self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-
-   self._model, _ = clip.load(self.name, device=self.device)
+   self.clip_model = kwargs.get('clip_model', 'ViT-B/32')
+   self._model, _ = clip.load(self.clip_model, device=self.device)
    self._embed_shape = self._model.visual.proj.shape
 
    bs = kwargs.get('batch_size', 64) 
@@ -38,22 +34,23 @@ def get_clip_embeddings(self, **kwargs):
       # pre-allocate clip embeddings
       #------------------------------------------------
       if verbose: print(f'\n ---- Getting CLIP embeddings for {ds_key}\n')
-      file_path = self.path/(self.name.replace('/', '_')+'.'+ds_key)
+      file_path = self.path/(self.name+'.'+ds_key)
 
       if file_path.exists():
          if verbose: print(f'File {file_path} exists. Loading from disk.')
-         self._corevds = PersistentTensorDict.from_h5(file_path, mode='r+')
+         self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
          n_samples = len(self._corevds)
          if verbose: print('loaded n_samples: ', n_samples)
-         self._corevds.batch_size = torch.Size((n_samples,)) 
+         self._corevds[ds_key].batch_size = torch.Size((n_samples,)) 
       else:
          n_samples = len(self._dss[ds_key])
-         self._corevds = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+         self._corevds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
          if verbose: print('created clip embeddings with n_samples: ', n_samples)
       
       if verbose: print(f'\n ---- Getting CLIP embeddings for {ds_key}\n')
 
-      self._corevds[ds_key] = MMT.empty(shape=((n_samples,)+self._embed_shape))
+      self._corevds[ds_key]['embedding'] = MMT.empty(shape=((n_samples,)+(self._embed_shape[1],)))
+
       self._corevds[ds_key].close()
       self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
       
@@ -64,4 +61,4 @@ def get_clip_embeddings(self, **kwargs):
       for embeds_data, ds_data in tqdm(zip(embeds_dl, ds_dl), disable=not verbose, total=len(embeds_dl)):
 
             with torch.no_grad():       
-                    embeds_data = self._model.encode_image(ds_data['image'].to(self.device))
+                    embeds_data['embedding'] = self._model.encode_image(ds_data['image'].to(self.device))
