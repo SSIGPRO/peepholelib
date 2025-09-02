@@ -11,6 +11,7 @@ class CoreVectors():
     from .parse_ds import parse_ds 
     from .activations import get_activations
     from .get_coreVectors import get_coreVectors
+    from .clip import get_clip_embeddings
 
     def __init__(self, **kwargs):
         '''
