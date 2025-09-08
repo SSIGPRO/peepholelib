@@ -76,6 +76,7 @@ class Cifar(DatasetBase):
         # accepts custom transform if provided in kwargs
         transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
         corrupted_path = kwargs.get('corrupted_path', None)
+        ood_dss = kwargs.get('ood_dss', None)
         if not corrupted_path == None: corrupted_path = Path(corrupted_path)
 
         seed = kwargs.get('seed', 42)
@@ -161,7 +162,92 @@ class Cifar(DatasetBase):
                         labels = c_labels_val[cl],
                         transform = transform,
                         )
+        if not ood_dss == None:
 
+            ood_dataset_val = {}
+            ood_dataset_test = {}            
+
+            for ood in ood_dss:
+                print(ood)
+                
+                if ood == 'SVHN':
+
+                    ood_path = str(self.data_path).replace(self.dataset, "")+ood
+
+                    # Test dataset is loaded directly
+        
+                    _test_dataset = datasets.__dict__[ood](
+                        root = ood_path,
+                        split = 'test',
+                        transform = transform,
+                        download = True
+                    )
+                    
+                    # train data will be splitted into training and validation
+                    _train_data = datasets.__dict__[ood]( 
+                        root = ood_path,
+                        split = 'train',
+                        transform = None, #transform,
+                        download = True
+                    )
+                    
+                    _, _val_dataset = random_split(
+                        _train_data,
+                        [0.8, 0.2],
+                        generator=torch.Generator().manual_seed(seed)
+                    )
+
+                    # Apply the transform 
+                    if transform != None:
+                        _val_dataset.dataset.transform = transform
+
+                elif ood == 'Places365':
+
+                    ood_path = str(self.data_path).replace(self.dataset, "")+ood
+
+                    _dataset = datasets.__dict__[ood]( 
+                        root = ood_path,
+                        split = 'val',
+                        transform = None, #transform,
+                        small = True,
+                        download = True
+                    )
+                    
+                    _ , _val_dataset, _test_dataset = random_split(
+                        _dataset,
+                        [0.4520548, 0.2739726, 0.2739726],
+                        generator=torch.Generator().manual_seed(seed)
+                    )
+
+                    # Apply the transform 
+                    if transform != None:
+                        _val_dataset.dataset.transform = transform
+                        _test_dataset.dataset.transform = transform
+
+                elif ood == 'DTD':
+
+                    ood_path = str(self.data_path).replace(self.dataset, "")+ood
+
+                    _val_dataset = datasets.__dict__[ood]( 
+                        root = ood_path,
+                        split = 'val',
+                        transform = transform,
+                        download = True
+                    )
+
+                    _test_dataset = datasets.__dict__[ood]( 
+                        root = ood_path,
+                        split = 'test',
+                        transform = transform,
+                        download = True
+                    )
+                    
+                else:
+                    raise RuntimeError(f'{ood} is not a supported ood dataset supported for CIFAR')                    
+
+                ood_dataset_val[ood] = _val_dataset
+                ood_dataset_test[ood] = _test_dataset    
+    
         # Save datasets as objects in the class
         self._dss = {
                 'train': train_dataset,
@@ -173,6 +259,11 @@ class Cifar(DatasetBase):
             for cl in range(c_levels):
                 self._dss[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
                 self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl]
+
+        if not ood == None:
+            for ds in ood_dataset_val:
+                self._dss[f'val-ood-{ds}'] = ood_dataset_val[ds]
+                self._dss[f'test-ood-{ds}'] = ood_dataset_test[ds]
 
         self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
         
