@@ -7,7 +7,8 @@ from torch.utils.data import random_split, DataLoader
 
 class DatasetBase(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
-        self.data_path = Path(kwargs.get('data_path')) 
+        self.data_path =  Path(kwargs.get('data_path'))
+
         # computed in load_data()
         self._dss = None 
         self._classes = None

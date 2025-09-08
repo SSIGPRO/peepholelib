@@ -10,7 +10,7 @@ means = {
 stds = {
         'cifar10': torch.tensor([0.283, 0.278, 0.284]),
         'cifar100': torch.tensor([0.300, 0.287, 0.294]),
-        'imagenet': torch.tensor([0.283, 0.278, 0.284]),
+        'imagenet': torch.tensor([0.229, 0.224, 0.225]),
         }
 
 #-----------------------------

@@ -609,7 +609,7 @@ class myCW(AttackBase):
         self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
         self.device = kwargs['device']
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
-        self.atk_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
+        self.data_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
         self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
             
         targeted = False if self.mode == None else True
@@ -625,7 +625,7 @@ class myCW(AttackBase):
                                 init_rand=False)
             
     def get_ds_attack(self):
-        self.atk_path.mkdir(parents=True, exist_ok=True)
+        self.data_path.mkdir(parents=True, exist_ok=True)
     
         attack_TensorDict = {}
         
@@ -681,7 +681,7 @@ class myCW(AttackBase):
                 attack_TensorDict[loader_name][bn*bs:bn*bs+n_in] = {'image': attack_images, 
                                                                     'label':labels,
                                                                     'attack_success': results}
-            file_path = self.atk_path/(loader_name)
+            file_path = self.data_path/(loader_name)
             n_threads = 32
             if self.verbose: print(f'Saving {loader_name} to {file_path}.')
             attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)

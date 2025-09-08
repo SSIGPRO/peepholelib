@@ -47,6 +47,10 @@ class ClassifierBase(DrillBase):
         pass
 
     @abc.abstractmethod
+    def predict(self, data):
+        pass
+
+    @abc.abstractmethod
     def fit(self, **kwargs):
         pass        
 
@@ -82,7 +86,7 @@ class ClassifierBase(DrillBase):
         for _dss, _cvs in tqdm(zip(dss_dl, cvs_dl), disable=not verbose):
             data, label = self.parser(cvs=_cvs, dss=_dss)
             data, label = data.to(self.device), label.to(self.device)
-            preds = self._classifier.predict(data)
+            preds = self.predict(data)
             for p, l in zip(preds, label):
                 _empp[int(p), int(l)] += 1
 
@@ -91,7 +95,6 @@ class ClassifierBase(DrillBase):
 
         # replace NaN with 0
         _empp = torch.nan_to_num(_empp)
-
 
         self._empp = _empp.to(self.device)
         
