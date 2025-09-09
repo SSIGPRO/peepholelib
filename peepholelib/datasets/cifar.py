@@ -168,8 +168,8 @@ class Cifar(DatasetBase):
             ood_dataset_test = {}            
 
             for ood in ood_dss:
-                if ood == 'SVHN':
 
+                if ood == 'SVHN':
                     ood_path = str(self.data_path).replace(self.dataset, "")+ood
 
                     # Test dataset is loaded directly
@@ -257,7 +257,7 @@ class Cifar(DatasetBase):
                 self._dss[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
                 self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl]
 
-        if not ood == None:
+        if not ood_dss == None:
             for ds in ood_dataset_val:
                 self._dss[f'val-ood-{ds}'] = ood_dataset_val[ds]
                 self._dss[f'test-ood-{ds}'] = ood_dataset_test[ds]
