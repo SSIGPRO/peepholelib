@@ -173,11 +173,17 @@ class Cifar(DatasetBase):
                     ood_path = str(self.data_path).replace(self.dataset, "")+ood
 
                     # Test dataset is loaded directly
-                    _test_dataset = datasets.__dict__[ood](
+                    _test_data = datasets.__dict__[ood](
                         root = ood_path,
                         split = 'test',
-                        transform = transform,
+                        transform = None, #transform,
                         download = True
+                    )
+
+                    _, _test_dataset = random_split(
+                        _train_data,
+                        [0.61586, 0.38414],
+                        generator=torch.Generator().manual_seed(seed)
                     )
                     
                     # train data will be splitted into training and validation
@@ -190,13 +196,14 @@ class Cifar(DatasetBase):
                     
                     _, _val_dataset = random_split(
                         _train_data,
-                        [0.8, 0.2],
+                        [0.863494, 0.136505],
                         generator=torch.Generator().manual_seed(seed)
                     )
 
                     # Apply the transform 
                     if transform != None:
                         _val_dataset.dataset.transform = transform
+                        _test_dataset.dataset.transform = transform
 
                 elif ood == 'Places365':
 
