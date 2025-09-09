@@ -161,20 +161,18 @@ class Cifar(DatasetBase):
                         labels = _labels[cl],
                         transform = transform,
                         )
+
         if not ood_dss == None:
 
             ood_dataset_val = {}
             ood_dataset_test = {}            
 
             for ood in ood_dss:
-                print(ood)
-                
                 if ood == 'SVHN':
 
                     ood_path = str(self.data_path).replace(self.dataset, "")+ood
 
                     # Test dataset is loaded directly
-        
                     _test_dataset = datasets.__dict__[ood](
                         root = ood_path,
                         split = 'test',
@@ -214,7 +212,7 @@ class Cifar(DatasetBase):
                     
                     _ , _val_dataset, _test_dataset = random_split(
                         _dataset,
-                        [0.4520548, 0.2739726, 0.2739726],
+                        [0.4520548, 0.2739726, 0.2739726], # to get exactly 10000 samples
                         generator=torch.Generator().manual_seed(seed)
                     )
 
