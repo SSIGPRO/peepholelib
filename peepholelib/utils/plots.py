@@ -239,14 +239,26 @@ def plot_attacks(**kwargs):
                     axs_type[j].legend(loc="lower right")
                     axs_type[j].grid(True)
 
-                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
-                    axs_atk[k].set_xlim([0.0, 1.0])
-                    axs_atk[k].set_ylim([0.0, 1.05])
-                    axs_atk[k].set_xlabel("False Positive Rate")
-                    axs_atk[k].set_ylabel("True Positive Rate")
-                    axs_atk[k].set_title(f"{attack}")
-                    axs_atk[k].legend(loc="lower right")
-                    axs_atk[k].grid(True)
+                    if len(attacks)!=1:
+
+                        axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
+                        axs_atk[k].set_xlim([0.0, 1.0])
+                        axs_atk[k].set_ylim([0.0, 1.05])
+                        axs_atk[k].set_xlabel("False Positive Rate")
+                        axs_atk[k].set_ylabel("True Positive Rate")
+                        axs_atk[k].set_title(f"{attack}")
+                        axs_atk[k].legend(loc="lower right")
+                        axs_atk[k].grid(True)
+                    else:
+                        axs_atk.plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
+                        axs_atk.set_xlim([0.0, 1.0])
+                        axs_atk.set_ylim([0.0, 1.05])
+                        axs_atk.set_xlabel("False Positive Rate")
+                        axs_atk.set_ylabel("True Positive Rate")
+                        axs_atk.set_title(f"{attack}")
+                        axs_atk.legend(loc="lower right")
+                        axs_atk.grid(True)
+
                 
             fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
     fig_type.savefig((path/f'AUC_based_type.png').as_posix(), dpi=300, bbox_inches='tight')     
@@ -283,7 +295,6 @@ def plot_confidence(**kwargs):
     if loaders == None: loaders = list(scores.keys())
 
     fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
-
     
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
     lines = ['--', '-']
@@ -306,6 +317,23 @@ def plot_confidence(**kwargs):
 
             s_oks = _scores[results == True]
             s_kos = _scores[results == False]
+
+            sorted_pos, _ = torch.sort(s_oks, descending=True)
+            sorted_neg, _ = torch.sort(s_kos, descending=True)
+            if ds_key == 'test':
+                tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
+                threshold = sorted_pos[tpr95_index]                
+                fpr95 = (s_kos >= threshold).float().mean().item()
+                print(f'FPR95 for {ds_key} {score_name} split: {fpr95:.4f}')
+
+                fpr5_index = int(torch.ceil(torch.tensor(0.05 * sorted_neg.numel())).item()) - 1
+                fpr5_index = max(0, min(fpr5_index, sorted_neg.numel() - 1))
+
+                # threshold = punteggio del negativo a quel rank
+                threshold = sorted_neg[fpr5_index]
+               
+                tpr5 = (s_oks >= threshold).float().mean().item()
+                print(f'TPR5 for {ds_key} {score_name} split: {tpr5:.4f}')
         
             # compute AUC for score and model
             auc = AUC().update(_scores, results.int()).compute().item()

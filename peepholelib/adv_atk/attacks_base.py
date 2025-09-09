@@ -20,7 +20,7 @@ class AttackBase(DatasetBase):
     def __init__(self, **kwargs):
 
         DatasetBase.__init__(self, **kwargs)
-        self.path = Path(kwargs['path'])
+        self.path = Path(kwargs['data_path'])
         self.name = Path(kwargs['name'])
         self.mode = kwargs['mode'] if 'mode' in kwargs else None
         
