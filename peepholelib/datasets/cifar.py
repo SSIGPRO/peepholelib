@@ -181,8 +181,8 @@ class Cifar(DatasetBase):
                     )
 
                     _, _test_dataset = random_split(
-                        _train_data,
-                        [0.61586, 0.38414],
+                        _test_data,
+                        [0.61585, 0.38415],
                         generator=torch.Generator().manual_seed(seed)
                     )
                     
@@ -196,7 +196,7 @@ class Cifar(DatasetBase):
                     
                     _, _val_dataset = random_split(
                         _train_data,
-                        [0.863494, 0.136505],
+                        [0.86349, 0.13651],
                         generator=torch.Generator().manual_seed(seed)
                     )
 
