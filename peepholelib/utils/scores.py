@@ -4,6 +4,7 @@ from torch.nn.functional import softmax as sm
 from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegressionCV
 from tqdm import tqdm
+import numpy as np
 
 def RelU_score(**kwargs):
     '''
