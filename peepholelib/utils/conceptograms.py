@@ -95,10 +95,10 @@ def plot_conceptogram(**kwargs):
             axs[0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
             axs[0].axis('off')
             
-            title = f'True label: {classes[label]}'
+            # title = f'True label: {classes[label]}'
             if scores != None:
                 for score_name in scores[ds_key]:
-                    title += f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
+                    title = f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
 
             axs[0].set_title(title, fontweight='bold')
 
