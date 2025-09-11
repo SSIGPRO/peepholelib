@@ -54,7 +54,7 @@ def plot_ood(**kwargs):
         # save in-distribution and out-of-distribution scores for plotting
         df_idood = pd.DataFrame()
         cs_idood, ls_idood = {}, {} 
-        for score_n, score_name in enumerate(scores[ds_key].keys()):
+        for score_n, score_name in enumerate(id_loaders.keys()):
             _id_loader = id_loaders[score_name]
             
             if type(_id_loader) is list:
@@ -562,17 +562,16 @@ def plot_calibration(**kwargs):
         # Plotting
         #--------------------
         ax = axs[loader_n]
-        sb.barplot(
+        sb.pointplot(
                 data = df_calib,
                 ax = ax,
                 x = x.repeat(len(scores[ds_key].keys())),
                 y = 'accuracy',
                 hue = 'score type',
-                dodge = False,
-                palette = colors[0:len(scores[loaders[0]])],
+                palette = colors[0:len(scores[loaders[-1]])],
                 alpha = 0.75,
-                width = 1.,
-                legend = loader_n == 0,
+                markersize = 8,
+                legend = loader_n == len(loaders)-1,
                 )
 
         sb.pointplot(
@@ -582,9 +581,9 @@ def plot_calibration(**kwargs):
                 y = 'y',
                 markersize = 0,
                 hue = 'score type',
-                palette = ['xkcd:brick red'],
+                palette = ['xkcd:red'],
                 alpha = 0.75,
-                legend = loader_n == 0,
+                legend = loader_n == len(loaders)-1,
                 )
 
         ax.set_xlabel('Confidence')
@@ -601,7 +600,7 @@ def plot_calibration(**kwargs):
             y = 'ECE',
             hue = 'score name',
             markersize = 8,
-            palette = colors[0:len(scores[loaders[0]])],
+            palette = colors[0:len(scores[loaders[-1]])],
             alpha = 0.75,
             legend = True
             )
