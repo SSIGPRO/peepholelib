@@ -28,7 +28,7 @@ def plot_ood(**kwargs):
     - verbose (bool): print progress messages.
     '''
     scores = kwargs.get('scores')
-    id_loaders = kwargs.get('id_loaders')
+    id_loader = kwargs.get('id_loader')
     ood_loaders = kwargs.get('ood_loaders')
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
@@ -53,14 +53,8 @@ def plot_ood(**kwargs):
         df_idood = pd.DataFrame()
         cs_idood, ls_idood = {}, {} 
         for score_n, score_name in enumerate(scores[ds_key].keys()):
-            _id_loader = id_loaders[score_name]
-
-            if type(_id_loader) is list:
-                s_id = scores[_id_loader[loader_n]][score_name] # TODO: rearragen iteration order
-            else:
-                s_id = scores[_id_loader][score_name] # TODO: rearragen iteration order
-
-            s_ood = scores[ds_key][score_name]
+            s_id = scores[id_loader][score_name] # id samples 
+            s_ood = scores[ds_key][score_name] # ood samples
 
             # computing AUC for each score type
             _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
