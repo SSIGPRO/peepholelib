@@ -82,7 +82,7 @@ def conceptogram_protoclass_score(**kwargs):
     - peepholes (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
-    - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
     - proto_key (str): The key in `loaders` to get compute the protoclasses from.
     - proto_th (float): Model's confidence threshold to select samples for the protoclass computation ('0 <= proto_th <= 1').
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
@@ -102,12 +102,10 @@ def conceptogram_protoclass_score(**kwargs):
     proto_th = kwargs.get('proto_threshold', 0.9)
     append_scores = kwargs.get('append_scores', None)
     verbose = kwargs.get('verbose', False)
-    proto = kwargs.get('proto', None)
+    proto = kwargs.get('proto', None) #TODO: is this used? remove
     
     # parse arguments
-    
     if loaders == None: loaders = list(phs._phs.keys())
-    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
     score_name = 'Proto-Class'
 
     # create the return dictionary. 
@@ -129,7 +127,7 @@ def conceptogram_protoclass_score(**kwargs):
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
     nc = cpss[loaders[0]].shape[2] # number of classes
-
+    
     if proto == None:
         cps = cpss[proto_key]
         results = cvs._dss[proto_key]['result']
@@ -144,19 +142,19 @@ def conceptogram_protoclass_score(**kwargs):
             _p = cps[idx].sum(dim=0)  ## P'_j
             _p /= _p.sum(dim=1, keepdim=True)
             proto[i][:] = _p[:]
-
+    
     # compute protoclass score
     for ds_key in loaders:
         cps = cpss[ds_key]
         results = cvs._dss[ds_key]['result']
         pred = (cvs._dss[ds_key]['pred']).int()
-
-        scores = (proto[pred]*cps).sum(dim=(1,2))
-        scores = scores/(proto[pred].norm(dim=(1,2))*cps.norm(dim=(1,2)))
-
-        ret[ds_key][score_name] = scores 
         
-    return ret, proto 
+        scores = (proto[pred]*cps).sum(dim=(1,2))
+        norm_proto = proto[pred].norm(dim=(1,2))
+        norm_cps = cps.norm(dim=(1,2))
+        ret[ds_key][score_name] = scores/(norm_proto*norm_cps)
+        
+    return ret, proto
 
 def dmd_base(**kwargs):
     '''
@@ -332,8 +330,8 @@ def DMD_aware_atk(**kwargs):
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
     '''
+    # TODO: fix documentation
 
     phs = kwargs.get('peepavg')
     cvs = kwargs.get('coreavg')
@@ -586,7 +584,7 @@ def FeatureSqueezing(**kwargs):
 
 def model_confidence_score(**kwargs):
     '''
-    Compute the model confidence score all samples in 'cvs._dss[`loaders`]'. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
+    Compute the model confidence score all samples in 'cvs._dss[`loaders`]'. The score is computed as the max(softmax(model output's)).
 
     Args:
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
