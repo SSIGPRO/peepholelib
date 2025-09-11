@@ -219,9 +219,8 @@ def dmd_base(**kwargs):
         ret[ood][score_name] = conf_ood
     
     return ret
-    
 
-def DMD_score(**kwargs):
+def __DMD_score__(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
 
@@ -248,7 +247,7 @@ def DMD_score(**kwargs):
 
     return y_train, y_test 
 
-def ood_aware_DMD_score(**kwargs):
+def DMD_score(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
 
@@ -307,7 +306,7 @@ def ood_aware_DMD_score(**kwargs):
         test_ood = torch.stack([phs._phs[ood_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
         test_data = torch.vstack((test_ori, test_ood))
 
-        _, y_test = DMD_score(
+        _, y_test = __DMD_score__(
                 train_data=train_data,
                 train_label=train_label,
                 test_data=test_data,
