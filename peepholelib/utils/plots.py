@@ -25,12 +25,14 @@ def plot_ood(**kwargs):
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
     - path ('str'): Path to save plots.
+    - suffix ('str'): Suffix to append to the plot's file name.
     - verbose (bool): print progress messages.
     '''
     scores = kwargs.get('scores')
     id_loaders = kwargs.get('id_loaders')
     ood_loaders = kwargs.get('ood_loaders')
     path = kwargs.get('path', None)
+    suffix = kwargs.get('suffix', '')
     verbose = kwargs.get('verbose', False)
 
     # parse arguments
@@ -41,7 +43,7 @@ def plot_ood(**kwargs):
 
     fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
     lines = ['--', '-']
 
     # save aucs for plotting 
@@ -54,7 +56,7 @@ def plot_ood(**kwargs):
         cs_idood, ls_idood = {}, {} 
         for score_n, score_name in enumerate(scores[ds_key].keys()):
             _id_loader = id_loaders[score_name]
-
+            
             if type(_id_loader) is list:
                 s_id = scores[_id_loader[loader_n]][score_name] # TODO: rearragen iteration order
             else:
@@ -96,8 +98,8 @@ def plot_ood(**kwargs):
         #--------------------
         # Plotting
         #--------------------
+
         # plotting IDs and OODs distribution
-                                                                                        
         ax = axs[loader_n] 
         p = sb.kdeplot(
                 data = df_idood,
@@ -111,7 +113,7 @@ def plot_ood(**kwargs):
                 alpha = 0.75,
                 legend = loader_n == 0
                 )
-                                                                                        
+
         # set up linestyles
         for ls, line in zip(list(ls_idood.values()), p.lines):
             line.set_linestyle(ls)
@@ -143,7 +145,7 @@ def plot_ood(**kwargs):
     ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
-    plt.savefig((path/f'in_out_distribution.png').as_posix(), dpi=300, bbox_inches='tight')
+    plt.savefig((path/f'in_out_distribution{suffix}.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
     
@@ -283,19 +285,20 @@ def plot_confidence(**kwargs):
     fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
 
     
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
     lines = ['--', '-']
 
     # save AUCs for plotting 
     aucs_df = pd.DataFrame()
     drop_df = pd.DataFrame()
+
     for loader_n, ds_key in enumerate(loaders):
-        
         # save OKs and KOs and confidences for plotting
         df_okko = pd.DataFrame()
         cs_okko, ls_okko = {}, {} 
         df_conf = pd.DataFrame()
         cs_conf, ls_conf = {}, {} 
+
         for score_n, score_name in enumerate(scores[ds_key].keys()):
             _scores = scores[ds_key][score_name]
             results = cvs._dss[ds_key]['result'] 
@@ -385,7 +388,7 @@ def plot_confidence(**kwargs):
                 palette = cs_okko,
                 clip = [0., 1.],
                 alpha = 0.75,
-                legend = loader_n == 0
+                legend = loader_n == len(loaders)-1
                 )
 
         # set up linestyles
@@ -393,7 +396,7 @@ def plot_confidence(**kwargs):
             line.set_linestyle(ls)
         
         # set legend linestyle
-        if loader_n == 0:
+        if loader_n == len(loaders)-1:
             handles = p.legend_.legend_handles[::-1]
             for ls, h in zip(list(ls_okko.values()), handles):
                 h.set_ls(ls)
@@ -414,7 +417,7 @@ def plot_confidence(**kwargs):
                 hue_order = list(cs_conf.keys()), 
                 palette = cs_conf,
                 alpha = 0.75,
-                legend = loader_n == 0,
+                legend = loader_n == len(loaders)-1,
                 )
 
         # set up linestyles
@@ -422,7 +425,7 @@ def plot_confidence(**kwargs):
             line.set_linestyle(ls)
         
         # set legend linestyle
-        if loader_n == 0:
+        if loader_n == len(loaders)-1:
             handles = p.legend_.legend_handles[::-1]
             for h in handles:
                 h.set_ls(ls_conf[h._label])
@@ -441,7 +444,7 @@ def plot_confidence(**kwargs):
             y = 'AUC',
             hue = 'score name',
             markersize = 8,
-            palette = colors[0:len(scores[loaders[0]])],
+            palette = colors[0:len(scores[loaders[-1]])],
             alpha = 0.75,
             legend = True
             )
@@ -457,7 +460,7 @@ def plot_confidence(**kwargs):
             y = 'Drop',
             hue = 'score name',
             markersize = 8,
-            palette = colors[0:len(scores[loaders[0]])],
+            palette = colors[0:len(scores[loaders[-1]])],
             alpha = 0.75,
             legend = True
             )
@@ -500,7 +503,7 @@ def plot_calibration(**kwargs):
 
     fig, axs = plt.subplots(1, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:deep red', 'xkcd:puplish']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
 
     n_bins = ceil(1/calib_bin)
     eces_df = pd.DataFrame()
