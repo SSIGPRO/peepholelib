@@ -246,9 +246,12 @@ def dmd_plus(**kwargs):
     driller = kwargs.get('driller')
     append_scores = kwargs.get('append_scores', None)
 
-    score_name = 'dmd_base'
+    score_name = 'dmd_plus'
 
-    data_ori = cvs._corevds[id_loader][layer].to(device)
+    data_ori = cvs._corevds[id_loader][layer].to(device)  
+    
+    data_ori /= torch.linalg.vector_norm(data_ori, ord=2, dim=1, keepdim=True) 
+    
     num_classes = driller.nl_model
     num_samples = data_ori.shape[0]
 
@@ -278,7 +281,7 @@ def dmd_plus(**kwargs):
     for ood in ood_loaders:
         data_ood = cvs._corevds[ood][layer].to(device)
 
-        data_ori = cvs._corevds[id_loader][layer]
+        data_ood /= torch.linalg.vector_norm(data_ood, ord=2, dim=1, keepdim=True) 
 
         class_scores = torch.zeros((num_samples, num_classes))
         for c in range(num_classes):
