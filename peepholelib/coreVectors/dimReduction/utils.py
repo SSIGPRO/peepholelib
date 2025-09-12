@@ -4,6 +4,10 @@ from math import floor
 # torch stuff
 import torch
 
+def activation_base(act_data): 
+    
+    return act_data
+
 def unroll_conv2d_activations(acts, layer):
     '''
     Unroll activations of a `torch.nn.Conv2d` layer. Used during the svd projection `coreVectors.dimReduction.svd.conv2d_kernel_svd_projection()`

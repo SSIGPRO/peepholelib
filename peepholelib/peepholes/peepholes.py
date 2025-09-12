@@ -220,14 +220,17 @@ class Peepholes:
             #-----------------------------------------
             n_samples = len(self._phs[ds_key])
 
-            for module in target_modules if not target_modules is None else self._phs[ds_key].keys():
+            if target_modules == None:
+                target_modules = self._phs[ds_key].keys()
+
+            for module in target_modules:
                 if module not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
 
                 if 'peepholes' not in self._phs[ds_key][module]:
                     raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
 
-            _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in (target_modules if target_modules is not None else self._phs[ds_key].keys())],dim=1)
+            _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in target_modules], dim=1)
 
         return _conceptograms
 

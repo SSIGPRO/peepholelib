@@ -4,6 +4,7 @@ from torch.nn.functional import softmax as sm
 from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegressionCV
 from tqdm import tqdm
+import numpy as np
 
 def RelU_score(**kwargs):
     '''
@@ -81,7 +82,7 @@ def conceptogram_protoclass_score(**kwargs):
     - peepholes (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
-    - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
     - proto_key (str): The key in `loaders` to get compute the protoclasses from.
     - proto_th (float): Model's confidence threshold to select samples for the protoclass computation ('0 <= proto_th <= 1').
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
@@ -101,12 +102,10 @@ def conceptogram_protoclass_score(**kwargs):
     proto_th = kwargs.get('proto_threshold', 0.9)
     append_scores = kwargs.get('append_scores', None)
     verbose = kwargs.get('verbose', False)
-    proto = kwargs.get('proto', None)
+    proto = kwargs.get('proto', None) #TODO: is this used? remove
     
     # parse arguments
-    
     if loaders == None: loaders = list(phs._phs.keys())
-    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
     score_name = 'Proto-Class'
 
     # create the return dictionary. 
@@ -128,7 +127,7 @@ def conceptogram_protoclass_score(**kwargs):
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
     nc = cpss[loaders[0]].shape[2] # number of classes
-
+    
     if proto == None:
         cps = cpss[proto_key]
         results = cvs._dss[proto_key]['result']
@@ -143,21 +142,160 @@ def conceptogram_protoclass_score(**kwargs):
             _p = cps[idx].sum(dim=0)  ## P'_j
             _p /= _p.sum(dim=1, keepdim=True)
             proto[i][:] = _p[:]
-
+    
     # compute protoclass score
     for ds_key in loaders:
         cps = cpss[ds_key]
         results = cvs._dss[ds_key]['result']
         pred = (cvs._dss[ds_key]['pred']).int()
-
-        scores = (proto[pred]*cps).sum(dim=(1,2))
-        scores = scores/(proto[pred].norm(dim=(1,2))*cps.norm(dim=(1,2)))
-
-        ret[ds_key][score_name] = scores 
         
-    return ret, proto 
+        scores = (proto[pred]*cps).sum(dim=(1,2))
+        norm_proto = proto[pred].norm(dim=(1,2))
+        norm_cps = cps.norm(dim=(1,2))
+        ret[ds_key][score_name] = scores/(norm_proto*norm_cps)
+        
+    return ret, proto
 
-def DMD_score(**kwargs):
+def dmd_base(**kwargs):
+    '''
+    Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
+    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - layer (str): string indicating the layer used for the score computation
+    - id
+    - driller (peepholelib.peepholes.DeepMahalnobisDistance.DMD): istance of the classifier used to compute the score
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    '''
+
+    id_loader = kwargs.get('id_loader', 'test')
+    ood_loaders = kwargs.get('ood_loaders')
+    device = kwargs.get('device')
+    layer = kwargs.get('layer')
+    cvs = kwargs.get('coreavg')
+    driller = kwargs.get('driller')
+    append_scores = kwargs.get('append_scores', None)
+
+    score_name = 'dmd_base'
+
+    data_ori = cvs._corevds[id_loader][layer].to(device)
+    num_classes = driller.nl_model
+    num_samples = data_ori.shape[0]
+
+    # create the return dictionary. 
+    if append_scores != None:
+        ret = dict(append_scores)
+    else: ret = {}
+
+    if not id_loader in ret: ret[id_loader] = dict()
+
+    for ds_key in ood_loaders:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
+    # computation
+
+    class_scores = torch.zeros((num_samples, num_classes))
+    for c in range(num_classes):
+        tensor = data_ori - driller._means[c].view(1, -1)
+        class_scores[:, c] = -torch.matmul(
+            torch.matmul(tensor, driller._precision), tensor.t()).diag()
+
+    conf_ori = torch.max(class_scores, dim=1)[0]
+
+    ret[id_loader][score_name] = conf_ori
+
+    for ood in ood_loaders:
+        data_ood = cvs._corevds[ood][layer].to(device)
+
+        data_ori = cvs._corevds[id_loader][layer]
+
+        class_scores = torch.zeros((num_samples, num_classes))
+        for c in range(num_classes):
+            tensor = data_ood - driller._means[c].view(1, -1)
+            class_scores[:, c] = -torch.matmul(
+                torch.matmul(tensor, driller._precision), tensor.t()).diag()
+
+        conf_ood = torch.max(class_scores, dim=1)[0]
+
+        ret[ood][score_name] = conf_ood
+    
+    return ret
+
+def dmd_plus(**kwargs):
+    '''
+    Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
+    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - layer (str): string indicating the layer used for the score computation
+    - id
+    - driller (peepholelib.peepholes.DeepMahalnobisDistance.DMD): istance of the classifier used to compute the score
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    '''
+
+    id_loader = kwargs.get('id_loader', 'test')
+    ood_loaders = kwargs.get('ood_loaders')
+    device = kwargs.get('device')
+    layer = kwargs.get('layer')
+    cvs = kwargs.get('coreavg')
+    driller = kwargs.get('driller')
+    append_scores = kwargs.get('append_scores', None)
+
+    score_name = 'dmd_plus'
+
+    data_ori = cvs._corevds[id_loader][layer].to(device)  
+    
+    data_ori /= torch.linalg.vector_norm(data_ori, ord=2, dim=1, keepdim=True) 
+    
+    num_classes = driller.nl_model
+    num_samples = data_ori.shape[0]
+
+    # create the return dictionary. 
+    if append_scores != None:
+        ret = dict(append_scores)
+    else: ret = {}
+
+    if not id_loader in ret: ret[id_loader] = dict()
+
+    for ds_key in ood_loaders:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
+    # computation
+
+    class_scores = torch.zeros((num_samples, num_classes))
+    for c in range(num_classes):
+        tensor = data_ori - driller._means[c].view(1, -1)
+        class_scores[:, c] = -torch.matmul(
+            torch.matmul(tensor, driller._precision), tensor.t()).diag()
+
+    conf_ori = torch.max(class_scores, dim=1)[0]
+
+    ret[id_loader][score_name] = conf_ori
+
+    for ood in ood_loaders:
+        data_ood = cvs._corevds[ood][layer].to(device)
+
+        data_ood /= torch.linalg.vector_norm(data_ood, ord=2, dim=1, keepdim=True) 
+
+        class_scores = torch.zeros((num_samples, num_classes))
+        for c in range(num_classes):
+            tensor = data_ood - driller._means[c].view(1, -1)
+            class_scores[:, c] = -torch.matmul(
+                torch.matmul(tensor, driller._precision), tensor.t()).diag()
+
+        conf_ood = torch.max(class_scores, dim=1)[0]
+
+        ret[ood][score_name] = conf_ood
+    
+    return ret
+
+def __DMD_score__(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
 
@@ -184,7 +322,7 @@ def DMD_score(**kwargs):
 
     return y_train, y_test 
 
-def ood_aware_DMD_score(**kwargs):
+def DMD_score(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
 
@@ -209,9 +347,9 @@ def ood_aware_DMD_score(**kwargs):
     ood_loaders_test = kwargs.get('ood_loaders_test', None)
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name', 'DMD-Aware')
 
     # parse arguments
-    score_name = 'DMD-Aware'
     if target_modules == None: target_modules = list(phs._phs[id_loader_train].keys())
 
     # create the return dictionary. 
@@ -226,7 +364,6 @@ def ood_aware_DMD_score(**kwargs):
     for ds_key in ood_loaders_test:
         if not ds_key in ret:
             ret[ds_key] = dict()
-
 
     #-----------
     # computations
@@ -244,7 +381,7 @@ def ood_aware_DMD_score(**kwargs):
         test_ood = torch.stack([phs._phs[ood_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
         test_data = torch.vstack((test_ori, test_ood))
 
-        _, y_test = DMD_score(
+        _, y_test = __DMD_score__(
                 train_data=train_data,
                 train_label=train_label,
                 test_data=test_data,
@@ -255,7 +392,7 @@ def ood_aware_DMD_score(**kwargs):
 
     return ret
 
-# better namek
+# better name
 def DMD_aware_atk(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
@@ -270,8 +407,8 @@ def DMD_aware_atk(**kwargs):
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
     '''
+    # TODO: fix documentation
 
     phs = kwargs.get('peepavg')
     cvs = kwargs.get('coreavg')
@@ -524,7 +661,7 @@ def FeatureSqueezing(**kwargs):
 
 def model_confidence_score(**kwargs):
     '''
-    Compute the model confidence score all samples in 'cvs._dss[`loaders`]'. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
+    Compute the model confidence score all samples in 'cvs._dss[`loaders`]'. The score is computed as the max(softmax(model output's)).
 
     Args:
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).

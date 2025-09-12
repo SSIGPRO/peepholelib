@@ -19,7 +19,7 @@ def plot_conceptogram(**kwargs):
         - peepholes (peepholelib.peepholes.peepholes): Loaded peepholes, conceptograms are computed by appending the peepholes for several modules.
         - loaders (list[str]): Loaders to take in consideration, usually `['test']`. Defaults to `['test']`.
         - samples (list[int]): List of indexes to visualize plot.
-        - target_modules (list[str]): List of target modules to consider to create the conceptograms. If `None` uses all modules in `peepholes._phs[loaders[0]].keys()`. Defaults to `None`. 
+        - target_modules (list[str]): List of target modules to consider to create the conceptograms
         - pref_fn (callable): Prediction function which takes the model's output (`corevectors._dss[<loader>]['output']`) and computes the probability of each class. Defaults to `torch.nn.functional.softmax`.
         - label_key (str): Key to get labels from `corevectors._dss[<loader>][label_key]`. Defaults to `'label'`.
         - protoclasses (torch.tensor): Protoclasses (see `peepholelib.utils.scores.conceptogram_protoclass_score()`) for each label. If given, the conceptograms will include the proroclass respective to the prediction. Defaults to `None`. 
@@ -37,7 +37,7 @@ def plot_conceptogram(**kwargs):
     phs = kwargs.get('peepholes') 
     loaders = kwargs.get('loaders')
     samples = kwargs.get('samples')
-    target_modules = kwargs.get('target_modules', None)
+    target_modules = kwargs.get('target_modules')
     pred_fn = kwargs.get('pred_fn', partial(softmax, dim=0))
     label_key = kwargs.get('label_key', 'label')
     protoclasses = kwargs.get('protoclasses', None) 
@@ -48,9 +48,6 @@ def plot_conceptogram(**kwargs):
     classes = kwargs.get('classes') 
     ticks = kwargs.get('ticks', target_modules)
     krows = kwargs.get('krows', 3)
-
-    if target_modules == None:
-        target_modules = list(phs._phs[loaders[0]].keys())
 
     if len(target_modules) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
@@ -95,10 +92,10 @@ def plot_conceptogram(**kwargs):
             axs[0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
             axs[0].axis('off')
             
-            title = f'True label: {classes[label]}'
+            # title = f'True label: {classes[label]}'
             if scores != None:
                 for score_name in scores[ds_key]:
-                    title += f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
+                    title = f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
 
             axs[0].set_title(title, fontweight='bold')
 

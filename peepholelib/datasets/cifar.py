@@ -173,11 +173,17 @@ class Cifar(DatasetBase):
                     ood_path = str(self.data_path).replace(self.dataset, "")+ood
 
                     # Test dataset is loaded directly
-                    _test_dataset = datasets.__dict__[ood](
+                    _test_data = datasets.__dict__[ood](
                         root = ood_path,
                         split = 'test',
-                        transform = transform,
+                        transform = None, #transform,
                         download = True
+                    )
+
+                    _, _test_dataset = random_split(
+                        _test_data,
+                        [0.61585, 0.38415],
+                        generator=torch.Generator().manual_seed(seed)
                     )
                     
                     # train data will be splitted into training and validation
@@ -190,13 +196,14 @@ class Cifar(DatasetBase):
                     
                     _, _val_dataset = random_split(
                         _train_data,
-                        [0.8, 0.2],
+                        [0.86349, 0.13651],
                         generator=torch.Generator().manual_seed(seed)
                     )
 
                     # Apply the transform 
                     if transform != None:
                         _val_dataset.dataset.transform = transform
+                        _test_dataset.dataset.transform = transform
 
                 elif ood == 'Places365':
 
@@ -205,21 +212,16 @@ class Cifar(DatasetBase):
                     _dataset = datasets.__dict__[ood]( 
                         root = ood_path,
                         split = 'val',
-                        transform = None, #transform,
+                        transform = transform,
                         small = True,
                         download = True
                     )
                     
                     _ , _val_dataset, _test_dataset = random_split(
                         _dataset,
-                        [0.4520548, 0.2739726, 0.2739726], # to get exactly 10000 samples
+                        [0.45205478, 0.27397261, 0.27397261], # to get exactly 10000 samples
                         generator=torch.Generator().manual_seed(seed)
                     )
-
-                    # Apply the transform 
-                    if transform != None:
-                        _val_dataset.dataset.transform = transform
-                        _test_dataset.dataset.transform = transform
 
                 elif ood == 'DTD':
 
