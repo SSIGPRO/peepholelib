@@ -77,6 +77,7 @@ class Cifar(DatasetBase):
         transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
         corrupted_path = kwargs.get('corrupted_path', None)
         ood_dss = kwargs.get('ood_dss', None)
+        atk_dss = kwargs.get('atk_dss', None)
         if not corrupted_path == None: corrupted_path = Path(corrupted_path)
 
         seed = kwargs.get('seed', 42)
@@ -162,7 +163,19 @@ class Cifar(DatasetBase):
                         transform = transform,
                         )
                 
-        if not atk_dss == None:
+        # if not atk_dss == None:
+
+        #     for atk_name in atk_dss.keys():
+
+        #         atk_path = str(self.data_path).replace(self.dataset, "")+atk_name
+
+        #         if atk_path.exists():
+                    
+        #         else:
+        #             print("Path does not exist")
+
+                
+
             
 
         if not ood_dss == None:
