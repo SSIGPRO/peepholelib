@@ -161,6 +161,9 @@ class Cifar(DatasetBase):
                         labels = _labels[cl],
                         transform = transform,
                         )
+                
+        if not atk_dss == None:
+            
 
         if not ood_dss == None:
 
