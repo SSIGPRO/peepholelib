@@ -114,6 +114,36 @@ def trim_kernel_corevectors(**kwargs):
     else:
         labels = dss[label_key]
         return trcv, labels 
+    
+
+def null_corevectors(**kwargs):
+    """
+    Takes the corevectors as they are
+
+    Args:
+        cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
+        dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
+        module (str): target module key.
+        label_key (str): key to get labels from
+        cv_dim (int): desired dimension of corevector
+
+    Returns:
+        cvs (torch.tensor): corevectors and correspective labels
+        labels (torch.tensor): Labels from datasate for the samples. Only returned if `dss` is given
+    """
+
+    cvs = kwargs['cvs']
+    dss = kwargs['dss'] if 'dss' in kwargs else None
+    module = kwargs['module']
+    label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label' 
+    
+    _cv = cvs[module]
+    
+    if dss == None:
+        return _cv 
+    else:
+        labels = dss[label_key]
+        return _cv, labels
 
 def get_images(**kwargs):
     """
