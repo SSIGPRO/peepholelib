@@ -12,6 +12,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import random_split
 from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 
 # CIFAR from torchvision
 from torchvision import datasets
@@ -386,11 +387,3 @@ class Cifar(DatasetBase):
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
         return [self._dss[ds_key][idx]]
-    
-    def get_attack_tensordict(self, attack_name, split='test'):
-        """Get TensorDict for a specific attack and split."""
-        key = f'{split}-atk-{attack_name}'
-        if hasattr(self, '_attack_tensordicts') and key in self._attack_tensordicts:
-            return self._attack_tensordicts[key]
-        else:
-            raise KeyError(f"Attack TensorDict {key} not found.")
