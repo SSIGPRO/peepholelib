@@ -458,11 +458,11 @@ def DMD_aware_atk(**kwargs):
     label_atk = np.zeros(len(test_atk))
     test_label = np.concatenate((label_ori, label_atk), axis=0)
 
-    ret_ = __DMD_score__(train_data=train_data, train_label=train_label,
+    y_train, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
                      test_data=test_data, test_label=test_label)
 
-    ret['val'][score_name] = ret_['val']
-    ret['test'][score_name] = ret_['test']
+    ret['val'][score_name] = y_train
+    ret['test'][score_name] = y_test
 
     return ret
 
@@ -556,10 +556,10 @@ def DMD_unaware_atk(**kwargs):
     val_data = np.concatenate((f_ori, f_atk), axis=0)
     val_label = np.concatenate((label_ori, label_atk), axis=0) 
 
-    ret_ = __DMD_score__(train_data=train_data, train_label=train_label,
+    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
                     test_data=val_data, test_label=val_label)
     
-    ret['val'][score_name] = ret_['test']
+    ret['val'][score_name] = y_test
 
     #------------------
     #  TEST
@@ -574,10 +574,10 @@ def DMD_unaware_atk(**kwargs):
 
     test_data = np.concatenate((f_ori, f_atk), axis=0)
     test_label = np.concatenate((label_ori, label_atk), axis=0)
-    ret_ = __DMD_score__(train_data=train_data, train_label=train_label,
+    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
                     test_data=test_data, test_label=test_label)
 
-    ret['test'][score_name] = ret_['test']
+    ret['test'][score_name] = y_test
 
     return ret
 
