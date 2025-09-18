@@ -8,7 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 class CoreVectors():
-    from .parse_ds import parse_ds 
+     
     from .activations import get_activations
     from .get_coreVectors import get_coreVectors
 

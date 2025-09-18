@@ -6,6 +6,8 @@ import abc
 from torch.utils.data import random_split, DataLoader
 
 class DatasetBase(metaclass=abc.ABCMeta):
+
+    from .parse_ds import parse_ds
     def __init__(self, **kwargs):
         self.data_path =  Path(kwargs.get('data_path'))
 
