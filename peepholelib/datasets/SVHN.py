@@ -1,6 +1,5 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 
 # General python stuff
 from pathlib import Path as Path

@@ -1,17 +1,10 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
-
-# General python stuff
-from pathlib import Path as Path
-import numpy as np
-from math import floor
-from tqdm import tqdm
+from peepholelib.datasets.transforms import vgg16_cifar10
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
-from torch.utils.data import Dataset
 
 # CIFAR from torchvision
 from torchvision import datasets
@@ -107,10 +100,11 @@ class Cifar10(DatasetBase):
                 'test': test_dataset
                 }
         
+        classes = {i: class_name for i, class_name in enumerate(train_dataset.classes)}
         self._classes = {
-                'CIFAR10-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-                'CIFAR10-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-                'CIFAR10-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+                'CIFAR10-train': classes,
+                'CIFAR10-val': classes, 
+                'CIFAR10-test': classes
                 }
         
         return 
