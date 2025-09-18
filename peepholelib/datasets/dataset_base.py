@@ -42,14 +42,17 @@ class DatasetBase(metaclass=abc.ABCMeta):
     def parse_ds(cls, **kwargs):
         # TODO: rework
         '''
-        Parse dataset, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
-        Data is saved into a 'tensordict.PersistentTensorDict' at 'self.path/dss.<loader>' (see 'DatasetBase.__init__()'), with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
+        Parse datasets, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
+        Data is saved into a 'tensordict.PersistentTensorDict' at 'save_path/dss.<loader>', with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
         Args:
-        - datasets (peepholelib.dataset_base.DatasetBase): Dataset wrapped in DatasetBase
+        - datasets (peepholelib.dataset_base.DatasetBase): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetBase`.
+        - ds_parsers (dict(str: callable)): Dictionary with same keys as `datasets`, and values being functions taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels']. 
+        - ds_kwargs (dict(str: dict())): Dictionary with same keys as `datasets`, and values being kwargs for the `__load_data__()` implemented in each specific dataset. Facultative.
+        - ds_samplers (dict(str: dict())): Dictionary with same keys as `datasets`, and values being a sampler (see `datasets.functional.samplers`). Facultative.
+        - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+        - pred_fn (callable): Function taking batched model's outputs and selecting a class.
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
-        - ds_parser (callable): Function taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels'].
-        - pred_fn (callable): Function taking batched model's outputs and selecting a class.
         - verbose (bool): print progress messages.
         '''
         
@@ -65,6 +68,8 @@ class DatasetBase(metaclass=abc.ABCMeta):
         n_threads = kwargs.get('n_threads', 1) 
 
         verbose = kwargs.get('verbose', False) 
+
+        # TODO: missing handling self._classes
         
         # some defs for simplicity
         device = model.device 
@@ -75,10 +80,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
 
         ret = cls(data_path = save_path)
         ret._dss = {}
-        
-        # TODO: handle context manager
-        #self.check_uncontexted()
-        # TODO: missing handling classes
+
         for ds_name in dss:
             ds_parser = ds_parsers[ds_name]
             ds_kwargs = ds_kwargs[ds_name]
@@ -87,89 +89,91 @@ class DatasetBase(metaclass=abc.ABCMeta):
                 if verbose: print(f'\n ---- Getting data from {ds_key}\n')
                 file_path = ret.data_path/('dss.'+ds_key)
                 print('file: ', file_path)
+                
+                # enter the context manager
+                with ret:
+                    if file_path.exists():
+                        if verbose: print(f'File {file_path} exists. Loading from disk.')
+                        ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
-                if file_path.exists():
-                    if verbose: print(f'File {file_path} exists. Loading from disk.')
-                    ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+                        n_samples = len(ret._dss[ds_key])
+                        
+                        if verbose: print('loaded n_samples: ', n_samples)
+                    else:
+                        dss[ds_name].__load_data__(**ds_kwargs)
 
-                    n_samples = len(ret._dss[ds_key])
-                    
-                    if verbose: print('loaded n_samples: ', n_samples)
-                else:
-                    dss[ds_name].__load_data__(**ds_kwargs)
+                        if ds_samplers != None and ds_name in ds_samplers:
+                            if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
+                            ds_samplers[ds_name](ds = dss[ds_name])
 
-                    if ds_samplers != None and ds_name in ds_samplers:
-                        if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
-                        ds_samplers[ds_name](ds = dss[ds_name])
+                        n_samples = len(dss[ds_name].__dataset__[ds_key])
+                        if verbose: print('creating dataset with n_samples: ', n_samples)
+                        ret._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+                        
+                        #------------------------
+                        # Pre-allocation 
+                        #------------------------
+                        # if verbose: print(f'Allocating {key_list}')
 
-                    n_samples = len(dss[ds_name].__dataset__[ds_key])
-                    if verbose: print('creating dataset with n_samples: ', n_samples)
-                    ret._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-                    
-                    #------------------------
-                    # Pre-allocation 
-                    #------------------------
-                    # if verbose: print(f'Allocating {key_list}')
+                        # dry run to get shapes
+                        data = ds_parser(dss[ds_name].get(ds_key,0))
 
-                    # dry run to get shapes
-                    data = ds_parser(dss[ds_name].get(ds_key,0))
-
-                    with torch.no_grad():
-                        _res = model(data['image'].to(device))
-                        num_classes = _res.shape[1]
-
-                    for key in data.keys():
-                        _d = data[key]
-                        # pre-allocation activations
-                        ret._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
-                     
-                    if verbose: print(f'Allocating output, pred, result')
-                    # allocate memory for pred and result
-                    ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
-                    ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-                    ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
-
-                    # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                    # This is done so we can use multiple workers with the dataloaders 
-                    ret._dss[ds_key].close()
-                    ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-
-                    #------------------------
-                    # copy images and labels
-                    #------------------------
-                    # create dataloader of input dataset
-                    dl_ori = DataLoader(
-                            dataset = dss[ds_name].__dataset__[ds_key],
-                            batch_size = bs,
-                            collate_fn = ds_parser,
-                            shuffle = False
-                            ) 
-
-                    dl_dst = DataLoader(
-                            ret._dss[ds_key],
-                            batch_size=bs,
-                            collate_fn=lambda x:x,
-                            shuffle=False,
-                            num_workers=n_threads
-                            )
-
-                    if verbose: print(f'Parsing {ds_key}')
-                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
-                        for key in data_in.keys():
-                            
-                            data_t[key] = data_in[key]
-                    
-                        # ---------------------------------------
-                        # compute predictions and get activations
-                        # ---------------------------------------
                         with torch.no_grad():
-                            y_predicted = model(data_t['image'].to(device))
-                    
-                            predicted_labels = pred_fn(y_predicted).detach().cpu()
-                            data_t['output'] = y_predicted
-                            data_t['pred'] = predicted_labels
-                            data_t['result'] = predicted_labels == data_t['label']
+                            _res = model(data['image'].to(device))
+                            num_classes = _res.shape[1]
 
+                        for key in data.keys():
+                            _d = data[key]
+                            # pre-allocation activations
+                            ret._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
+                         
+                        if verbose: print(f'Allocating output, pred, result')
+                        # allocate memory for pred and result
+                        ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
+                        ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
+                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+
+                        # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                        # This is done so we can use multiple workers with the dataloaders 
+                        ret._dss[ds_key].close()
+                        ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+                        #------------------------
+                        # copy images and labels
+                        #------------------------
+                        # create dataloader of input dataset
+                        dl_ori = DataLoader(
+                                dataset = dss[ds_name].__dataset__[ds_key],
+                                batch_size = bs,
+                                collate_fn = ds_parser,
+                                shuffle = False
+                                ) 
+
+                        dl_dst = DataLoader(
+                                ret._dss[ds_key],
+                                batch_size=bs,
+                                collate_fn=lambda x:x,
+                                shuffle=False,
+                                num_workers=n_threads
+                                )
+
+                        if verbose: print(f'Parsing {ds_key}')
+                        for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
+                            for key in data_in.keys():
+                                
+                                data_t[key] = data_in[key]
+                        
+                            # ---------------------------------------
+                            # compute predictions and get activations
+                            # ---------------------------------------
+                            with torch.no_grad():
+                                y_predicted = model(data_t['image'].to(device))
+                        
+                                predicted_labels = pred_fn(y_predicted).detach().cpu()
+                                data_t['output'] = y_predicted
+                                data_t['pred'] = predicted_labels
+                                data_t['result'] = predicted_labels == data_t['label']
+        
         return ret
 
     def load_only(self, **kwargs):
