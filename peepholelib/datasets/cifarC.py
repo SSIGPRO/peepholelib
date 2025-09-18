@@ -130,8 +130,8 @@ class CifarC(DatasetBase):
                     ) 
 
         for cl in range(c_levels):
-            self._dss[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
-            self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl] 
+            self.__dataset__[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
+            self.__dataset__[f'test-ood-c{cl}'] = corrupted_datasets_test[cl] 
         
         return 
     
@@ -146,7 +146,7 @@ class CifarC(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self._dss:
+        if not self.__dataset__:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
-        return [self._dss[ds_key][idx]]
+        return [self.__dataset__[ds_key][idx]]

@@ -101,16 +101,16 @@ class Cifar10(DatasetBase):
             train_dataset.dataset.transform = transform   
     
         # Save datasets as objects in the class
-        self._dss = {
+        self.__dataset__ = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
                 }
         
         self._classes = {
-                'train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-                'val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-                'test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+                'CIFAR10-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+                'CIFAR10-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+                'CIFAR10-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
                 }
         
         return 
@@ -126,7 +126,7 @@ class Cifar10(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self._dss:
+        if not self.__dataset__:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
-        return [self._dss[ds_key][idx]]
+        return [self.__dataset__[ds_key][idx]]

@@ -64,7 +64,7 @@ class ImageNet(DatasetBase):
                 )
 
         # metadata
-        self._dss = {"train": train_ds, "val": val_ds}
+        self.__dataset__ = {"ImageNet-train": train_ds, "ImageNet-val": val_ds}
         self._classes = {i: c for i, c in enumerate(train_ds.classes)}
 
         return
@@ -80,7 +80,7 @@ class ImageNet(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self._dss:
+        if not self.__dataset__:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
-        return [self._dss[ds_key][idx]]
+        return [self.__dataset__[ds_key][idx]]

@@ -29,23 +29,16 @@ class SVHN(DatasetBase):
         '''
 
         DatasetBase.__init__(self, **kwargs)
-        
-        # use SVHN by default
-        self.dataset = kwargs.get('dataset', 'CIFAR10')
-
-        # raise error if the dataset is not SVHN
-        if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be SVHN<10|100>")
 
         return
     
     def __load_data__(self, **kwargs):
         '''
-        Load and prepare SVHN or SVHN data.
+        Load and prepare SVHN data.
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: SVHN for vgg16 transform)
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
@@ -85,10 +78,16 @@ class SVHN(DatasetBase):
             val_dataset.dataset.transform = transform
             train_dataset.dataset.transform = transform 
 
-        self._dss = {
+        self.__dataset__ = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
+                }
+        
+        self._classes = {
+                'SVHN-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+                'SVHN-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+                'SVHN-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
                 }
 
         return 
@@ -104,7 +103,7 @@ class SVHN(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self._dss:
+        if not self.__dataset__:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
-        return [self._dss[ds_key][idx]]
+        return [self.__dataset__[ds_key][idx]]

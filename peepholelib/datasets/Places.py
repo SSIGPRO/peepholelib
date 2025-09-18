@@ -107,10 +107,16 @@ class Places(DatasetBase):
             val_dataset.dataset.transform = transform
             test_dataset.dataset.transform = transform
 
-        self._dss = {
+        self.__dataset__ = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
+                }
+        
+        self._classes = {
+                'Places-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+                'Places-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+                'Places-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
                 }
 
         return
@@ -126,7 +132,7 @@ class Places(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self._dss:
+        if not self.__dataset__:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
-        return [self._dss[ds_key][idx]]
+        return [self.__dataset__[ds_key][idx]]
