@@ -80,16 +80,16 @@ class Places(DatasetBase):
         # set torch seed
         torch.manual_seed(seed)
 
-        train_dataset = datasets.__dict__[ood]( 
-                        root = ood_path,
+        train_dataset = datasets.__dict__[self.dataset]( 
+                        root = self.data_path,
                         split = 'train',
                         transform = transform,
                         small = True,
                         download = True
                     )
 
-        val_set = datasets.__dict__[ood]( 
-                        root = ood_path,
+        val_set = datasets.__dict__[self.dataset]( 
+                        root = self.data_path,
                         split = 'val',
                         transform = None,
                         small = True,
@@ -105,7 +105,15 @@ class Places(DatasetBase):
         # Apply the transform 
         if transform != None:
             val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform
+            test_dataset.dataset.transform = transform
+
+        self._dss = {
+                'train': train_dataset,
+                'val': val_dataset,
+                'test': test_dataset
+                }
+
+        return
     
     def get(self, ds_key, idx):
         '''

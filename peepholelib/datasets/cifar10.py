@@ -13,45 +13,60 @@ import torch
 from torch.utils.data import random_split
 from torch.utils.data import Dataset
 
-# SVHN from torchvision
+# CIFAR from torchvision
 from torchvision import datasets
 from PIL import Image
 
-class SVHN(DatasetBase):
+class CustomDS(Dataset):
+    def __init__(self, data, labels, transform):
+        Dataset.__init__(self) 
+        self.data = []
+        for d in tqdm(data, disable=True):
+            self.data.append(Image.fromarray(d))
+        self.labels = labels
+        self.transform = transform
+        self.len = labels.shape[0]
+        return
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        d = self.transform(self.data[idx])
+        l = self.labels[idx]
+        return d, l
+
+    def __getitems__(self, idxs):
+        return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
+
+class Cifar10(DatasetBase):
     def __init__(self, **kwargs):
         '''
-        SVHN loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        Cifar10 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
 
         Expects:
-            data_path (str): SVHN download folder. If not downloaded, downloads the dataset in this folder.
+            data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
 
         DatasetBase.__init__(self, **kwargs)
-        
-        # use SVHN by default
-        self.dataset = kwargs.get('dataset', 'CIFAR10')
-
-        # raise error if the dataset is not SVHN
-        if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be SVHN<10|100>")
 
         return
     
     def __load_data__(self, **kwargs):
         '''
-        Load and prepare SVHN or SVHN data.
+        Load and prepare CIFAR10 data.
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: SVHN for vgg16 transform)
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        transform = kwargs.get('transform')
 
         seed = kwargs.get('seed', 42)
             
@@ -59,17 +74,17 @@ class SVHN(DatasetBase):
         torch.manual_seed(seed)
 
         # Test dataset is loaded directly
-        test_dataset = datasets.__dict__[self.dataset](
+        test_dataset = datasets.CIFAR10(
             root = self.data_path,
-            split = 'test',
+            train = False,
             transform = transform,
             download = True
         )
         
         # train data will be splitted into training and validation
-        _train_data = datasets.__dict__[self.dataset]( 
+        _train_data = datasets.CIFAR10( 
             root = self.data_path,
-            split = 'train',
+            train = True,
             transform = None, #transform,
             download = True
         )
@@ -83,14 +98,21 @@ class SVHN(DatasetBase):
         # Apply the transform 
         if transform != None:
             val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform 
-
+            train_dataset.dataset.transform = transform   
+    
+        # Save datasets as objects in the class
         self._dss = {
                 'train': train_dataset,
                 'val': val_dataset,
                 'test': test_dataset
                 }
-
+        
+        self._classes = {
+                'train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+                'val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+                'test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+                }
+        
         return 
     
     def get(self, ds_key, idx):

@@ -42,39 +42,38 @@ class CustomDS(Dataset):
 class CifarC(DatasetBase):
     def __init__(self, **kwargs):
         '''
-        Cifar loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        CifarC loader (test).
 
         Expects:
-            data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+            data_path (str): CifarC download folder. If not downloaded, better you download it.
         Returns:
             - a thumbs up
         '''
 
         DatasetBase.__init__(self, **kwargs)
         
-        # use CIFAR10 by default
-        self.dataset = kwargs.get('dataset', 'CIFAR10')
+        self.dataset = kwargs.get('dataset')
 
         # raise error if the dataset is not CIFAR
         if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be CIFAR<10|100>")
+            raise ValueError("Dataset must be CIFAR<10C|100C>")
 
         return
     
     def __load_data__(self, **kwargs):
         '''
-        Load and prepare CIFAR10 or CIFAR100 data.
+        Load and prepare CIFAR10C or CIFAR100C data.
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: CIFAR10/CIFAR100 for vgg16 transform)
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
         - data_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
         
         Returns:
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        transform = kwargs.get('transform')
 
         seed = kwargs.get('seed', 42)
             
@@ -132,9 +131,7 @@ class CifarC(DatasetBase):
 
         for cl in range(c_levels):
             self._dss[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
-            self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl]
-
-        self._classes = {i: class_name for i, class_name in enumerate(test_dataset.classes)}  
+            self._dss[f'test-ood-c{cl}'] = corrupted_datasets_test[cl] 
         
         return 
     
