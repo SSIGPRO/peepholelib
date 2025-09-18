@@ -109,7 +109,7 @@ def plot_ood(**kwargs):
                 hue = 'score type',
                 palette = cs_idood,
                 hue_order = list(cs_idood.keys()),
-                clip = [-500, 0],#clip = [0., 1.],
+                clip = [0., 1.],
                 alpha = 0.75,
                 legend = loader_n == 0
                 )
