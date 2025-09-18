@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import ## WE need he transform as default
+from peepholelib.datasets.transforms import vgg16_svhn
 
 # torch stuff
 import torch
@@ -36,7 +36,7 @@ class SVHN(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform')
+        transform = kwargs.get('transform', vgg16_svhn)
 
         seed = kwargs.get('seed', 42)
             

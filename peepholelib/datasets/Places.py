@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import # We need the transform for Places
+from peepholelib.datasets.transforms import vgg16_imagenet
 
 # torch stuff
 import torch
@@ -36,7 +36,7 @@ class Places(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform')
+        transform = kwargs.get('transform', vgg16_imagenet)
 
         seed = kwargs.get('seed', 42)
             

@@ -10,6 +10,9 @@ from torch.utils.data import Dataset
 # CIFAR from torchvision
 from torchvision import datasets
 from PIL import Image
+from tqdm import tqdm
+import numpy as np
+from math import floor
 
 class CustomDS(Dataset):
     def __init__(self, data, labels, transform):
