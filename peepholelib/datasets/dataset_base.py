@@ -10,14 +10,14 @@ from torch.utils.data import DataLoader
 
 class DatasetBase(metaclass=abc.ABCMeta):
 
-    from .parse_ds import parse_ds
-
     def __init__(self, **kwargs):
         name = kwargs.get('name')
         self.data_path = Path(kwargs.get('data_path'), None)
 
-        # computed in load_data()
+        # computed in __load_data__()
         self.__dataset__ = None # this one saves the dataset as given
+
+        # computed in load_data()
         self._dss = None # this is the parsed datasets as PTD
         self._classes = None
     
