@@ -27,13 +27,11 @@ class foo2(foo):
         return
 
 if __name__ == '__main__':
-    f1 = foo(2)
+    f1 = foo2(2)
     f2 = foo2(3)
-    f3 = foo(4)
+    f3 = foo2(4)
 
     f2.bar(10)
 
     r = foo.cat([f1, f2, f3])
     print('r: ', r.a)
-
-    r.bar(100)

@@ -8,10 +8,11 @@ def random_subsampling(ds, perc):
     assert(isinstance(ds, DatasetBase))
     
     for k in ds._dss:
-        ds._dss[k], _ = random_split(ds._dss[k], [perc, 1.0-perc])
+        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [perc, 1.0-perc])
     return 
 
 def dist_preserving(data, n, weights='label'):
+    # TODO: unused
     if torch.is_tensor(weights) and len(weights.shape) == 1:
         _w = weights 
     elif type(weights) == str:

@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar100
+from peepholelib.datasets.functional.transforms import vgg16_cifar100
 
 # torch stuff
 import torch
@@ -72,17 +72,17 @@ class Cifar100(DatasetBase):
     
         # Save datasets as objects in the class
         self.__dataset__ = {
-                'train': train_dataset,
-                'val': val_dataset,
-                'test': test_dataset
+                'CIFAR100-train': train_dataset,
+                'CIFAR100-val': val_dataset,
+                'CIFAR100-test': test_dataset
                 }
         
-        classes = {i: class_name for i, class_name in enumerate(train_dataset.classes)}
-        self._classes = {
-                'CIFAR100-train': classes,
-                'CIFAR100-val': classes, 
-                'CIFAR100-test': classes
-                }  
+        #TODO: solve this somehow
+        #self._classes = {
+        #        'CIFAR100-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+        #        'CIFAR100-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+        #        'CIFAR100-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+        #        }  
         
         return 
     

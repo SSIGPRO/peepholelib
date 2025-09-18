@@ -2,11 +2,14 @@
 from pathlib import Path as Path
 import abc  
 from tqdm import tqdm
+from math import ceil
 
 # torch stuff
+import torch
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
+from peepholelib.datasets.functional.prediction_fns import multilabel_classification
 
 class DatasetBase(metaclass=abc.ABCMeta):
 
@@ -20,11 +23,11 @@ class DatasetBase(metaclass=abc.ABCMeta):
         self._dss = None # this is the parsed datasets as PTD
         self._classes = None
     
-    @abc.abstractmethod
+    #@abc.abstractmethod # TODO: figure out why does not work
     def __load_data__(self):
         raise NotImplementedError()
     
-    @abc.abstractmethod
+    #@abc.abstractmethod
     def get(self):
         raise NotImplementedError()
     
@@ -35,7 +38,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         return self._classes
    
     @classmethod
-    def load_data(self, **kwargs):
+    def parse_ds(cls, **kwargs):
         # TODO: rework
         '''
         Parse dataset, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
@@ -48,10 +51,9 @@ class DatasetBase(metaclass=abc.ABCMeta):
         - pred_fn (callable): Function taking batched model's outputs and selecting a class.
         - verbose (bool): print progress messages.
         '''
-
-        #self.check_uncontexted()
         
         save_path = Path(kwargs.get('save_path'))
+        model = kwargs.get('model')
         dss = kwargs.get('datasets')
         ds_parsers = kwargs.get('ds_parsers') ## it will be a dictionary
         ds_kwargs = kwargs.get('ds_kwargs', None) ## it will be a dictionary
@@ -63,8 +65,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         verbose = kwargs.get('verbose', False) 
         
         # some defs for simplicity
-        model = self._model
-        device = self._model.device 
+        device = model.device 
 
         if ds_kwargs == None:
             for k in dss:
@@ -72,15 +73,18 @@ class DatasetBase(metaclass=abc.ABCMeta):
 
         ret = cls(data_path = save_path)
         ret._dss = {}
-
+        
+        #self.check_uncontexted()
+        # TODO: missing handling classes
         for ds_name in dss:
             ds_parser = ds_parsers[ds_name]
             ds_kwargs = ds_kwargs[ds_name]
             dss[ds_name].__load_data__(**ds_kwargs)
 
-            for ds_key in dss[ds_name].__datase__:
+            for ds_key in dss[ds_name].__dataset__:
                 if verbose: print(f'\n ---- Getting data from {ds_key}\n')
                 file_path = ret.data_path/('dss.'+ds_key)
+                print('file: ', file_path)
 
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
@@ -115,10 +119,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
                     # allocate memory for pred and result
                     ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
                     ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-
-                    # TODO: not all datasets have labels???
-                    if 'label' in data.keys():
-                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+                    ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
 
                     #------------------------
                     # copy images and labels
@@ -127,7 +128,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
                     dl_ori = DataLoader(
                             dataset = dss[ds_name].__dataset__[ds_key],
                             batch_size = bs,
-                            collate_fn = parser,
+                            collate_fn = ds_parser,
                             shuffle = False
                             ) 
 
@@ -154,15 +155,11 @@ class DatasetBase(metaclass=abc.ABCMeta):
                             predicted_labels = pred_fn(y_predicted).detach().cpu()
                             data_t['output'] = y_predicted
                             data_t['pred'] = predicted_labels
-
-                            # TODO: not all datasets have labels???
-                            if 'label' in data.keys():
-                                data_t['result'] = predicted_labels == data_t['label']
+                            data_t['result'] = predicted_labels == data_t['label']
 
         return ret
 
     def load_only(self, **kwargs):
-        # TODO: think about it
         '''
         Load already computed dataset.
 
