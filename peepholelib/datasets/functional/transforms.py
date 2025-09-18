@@ -5,12 +5,14 @@ means = {
         'cifar10': torch.tensor([0.424, 0.415, 0.384]),
         'cifar100': torch.tensor([0.438, 0.418, 0.377]),
         'imagenet': torch.tensor([0.485, 0.456, 0.406]),
+        'svhn': torch.tensor([0.438, 0.444, 0.473])
         }
 
 stds = {
         'cifar10': torch.tensor([0.283, 0.278, 0.284]),
         'cifar100': torch.tensor([0.300, 0.287, 0.294]),
         'imagenet': torch.tensor([0.229, 0.224, 0.225]),
+        'svhn': torch.tensor([0.198, 0.201, 0.197]),
         }
 
 #-----------------------------
@@ -59,6 +61,21 @@ vgg16_imagenet_augmentations = transforms.Compose([
     ])
 
 #-----------------------------
+# VGG16 on SVHN 
+#-----------------------------
+
+vgg16_svhn = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=means['svhn'], std=stds['svhn'])
+])
+
+vgg16_svhn_augumentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.SVHN), 
+    vgg16_svhn
+])
+
+#-----------------------------
 # ViT on CIFAR 100
 #-----------------------------
 
@@ -74,6 +91,22 @@ vit_b_16_cifar100_augumentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vit_b_16_cifar100
     ])
+
+#-----------------------------
+# ViT on SVHN 
+#-----------------------------
+
+vit_b_16_svhn = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=means['svhn'], std=stds['svhn'])
+])
+
+vit_b_16_svhn_augumentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.SVHN), 
+    vit_b_16_svhn
+])
 
 #-----------------------------
 # Mobilenet on CIFAR 100

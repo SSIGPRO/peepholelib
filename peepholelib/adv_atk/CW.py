@@ -1,24 +1,17 @@
-from .runutils_cw import *
-# import runutils_cw
-from tqdm import tqdm
-from .attacks_base import AttackBase
-from pathlib import Path as Path
-import abc 
+# general python stuff
 import numpy as np
-import operator as op
-import random
 
-from typing import Union, Tuple
-from torch.autograd import Variable
+# import runutils_cw
+from .runutils_cw import *
 
+# Torch stuff used in CW
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
+from torch.autograd import Variable
 
-from torchvision.transforms import AutoAugment, AutoAugmentPolicy
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
+# our stuff
+from .attack_base import AttackBase
 
 """
 Carlini-Wagner attack (http://arxiv.org/abs/1608.04644).
@@ -146,9 +139,20 @@ class L2Adversary(object):
     - ``M``: the number of classes
     """
 
-    def __init__(self, targeted=True, confidence=0.0, c_range=(1e-3, 1e10),
-                 search_steps=5, max_steps=1000, abort_early=True,
-                 box=(-0.5, 0.5), optimizer_lr=1e-2, init_rand=False):
+    def __init__(
+            self,
+            model,
+            device,
+            targeted=True,
+            confidence=0.0,
+            c_range=(1e-3, 1e10),
+            search_steps=5,
+            max_steps=1000,
+            abort_early=True,
+            box=(-0.5, 0.5),
+            optimizer_lr=1e-2,
+            init_rand=False
+            ):
         """
         :param targeted: ``True`` to perform targeted attack in ``self.run``
                method
@@ -208,6 +212,11 @@ class L2Adversary(object):
         if box[0] >= box[1]:
             raise ValueError('box lower bound ({}) is expected to be less than '
                              'box upper bound ({})'.format(*box))
+
+        # to make interface compatible with torchattacks's
+        self.model = model
+        self.device = device 
+
         self.targeted = targeted
         self.confidence = float(confidence)
         self.c_range = (float(c_range[0]), float(c_range[1]))
@@ -230,12 +239,10 @@ class L2Adversary(object):
         # `scale_const` won't ruin the optimum ever found.
         self.repeat = (self.binary_search_steps >= 10)
 
-    def __call__(self, model, inputs, targets,  device, to_numpy=True):
+    def __call__(self, images, labels):
         """
         Produce adversarial examples for ``inputs``.
 
-        :param model: the model to attack
-        :type model: nn.Module
         :param inputs: the original images tensor, of dimension [B x C x H x W].
                ``inputs`` can be on either CPU or GPU, but it will eventually be
                moved to the same device as the one the parameters of ``model``
@@ -253,6 +260,14 @@ class L2Adversary(object):
         :type to_numpy: bool
         :return: the adversarial examples on CPU, of dimension [B x C x H x W]
         """
+        
+        # reattribution to make interface compatible with torchattacks's
+        model = self.model
+        device = self.device
+        inputs = images
+        targets = labels.long()
+        to_numpy = False
+
         # sanity check
         assert isinstance(model, nn.Module)
         assert len(inputs.size()) == 4
@@ -337,8 +352,7 @@ class L2Adversary(object):
         for sstep in range(self.binary_search_steps):
             if self.repeat and sstep == self.binary_search_steps - 1:
                 scale_consts_np = upper_bounds_np
-            scale_consts = torch.from_numpy(np.copy(scale_consts_np)).float()  # type: torch.FloatTensor
-            scale_consts = scale_consts.to(device)
+            scale_consts = torch.tensor(scale_consts_np).to(device)  # type: torch.FloatTensor
             ###-------
             # MODIFICA
             ###-------
@@ -391,7 +405,6 @@ class L2Adversary(object):
                             o_best_l2_ppred[i] = ppred
                             o_best_advx[i] = ax
                             
-
             # binary search of `scale_const`
             for i in range(batch_size):
                 tlabel = targets_np[i]
@@ -421,10 +434,12 @@ class L2Adversary(object):
                         scale_consts_np[i] *= 10
 
         if not to_numpy:
-            o_best_advx = torch.from_numpy(o_best_advx).float()
+            o_best_advx = torch.tensor(o_best_advx).to(device)
+        
+        # TODO: this line was after the return
+        torch.cuda.empty_cache() 
         return o_best_advx
 
-        torch.cuda.empty_cache() 
 
     def _optimize(self, model, optimizer, inputs_tanh_var, pert_tanh_var,
                   targets_oh_var, c_var):
@@ -594,95 +609,29 @@ class myCW(AttackBase):
    
     def __init__(self, **kwargs):
         AttackBase.__init__(self, **kwargs)
-        
-        print('---------- Attack CW init')
-        print()
          
-        self._loaders = kwargs['dl']
-        self.model = kwargs['model']
-        self.nb_classes = kwargs['nb_classes']
-        self.name_model = kwargs['name_model']
-        self.confidence = kwargs['confidence'] if 'confidence' in kwargs else 0
-        self.c_range = kwargs['c_range'] if 'c_range' in kwargs else (1e-3, 1e10)
-        self.max_steps = kwargs['max_steps'] if 'max_steps' in kwargs else 1000
-        self.optimizer_lr = kwargs['optimizer_lr'] if 'optimizer_lr' in kwargs else 1e-2
-        self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
-        self.device = kwargs['device']
-        self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
-        self.data_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
-        self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
+        self.confidence = kwargs.get('confidence', 0)
+        self.c_range = kwargs.get('c_range', (1e-3, 1e10))
+        self.max_steps = kwargs.get('max_steps', 1000)
+        self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
+        self.mode = kwargs.get('mode', 'random')
             
         targeted = False if self.mode == None else True
         
-        self.atk = L2Adversary(targeted=targeted, 
-                                confidence=self.confidence, 
-                                c_range=self.c_range,
-                                search_steps=5, 
-                                max_steps=self.max_steps, 
-                                abort_early=True,
-                                box=(-3, 3), 
-                                optimizer_lr=self.optimizer_lr, 
-                                init_rand=False)
-            
-    def get_ds_attack(self):
-        self.data_path.mkdir(parents=True, exist_ok=True)
-    
-        attack_TensorDict = {}
-        
-        for loader_name in self._loaders.keys():
-            
-            if self.verbose: print(f'\n ---- Getting data from {loader_name}\n')
-            n_samples = len(self._loaders[loader_name].dataset)
-            labels_array = np.arange(0,self.nb_classes)
-            bs = self._loaders[loader_name].batch_size
-            _img, _ = self._loaders[loader_name].dataset[0]
-            attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples)
-            
-            attack_TensorDict[loader_name]['image'] = MMT.empty(shape=torch.Size((n_samples,)+_img.shape))
-            attack_TensorDict[loader_name]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-            attack_TensorDict[loader_name]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-            
-            for bn, data in enumerate(tqdm(self._loaders[loader_name])):
-                images, labels = data
-                images = images.to(self.device)
-                labels = labels.to(self.device)
-                target_ = []
+        self.atk = L2Adversary(
+                model = self.model._model,
+                device = self.model.device,
+                targeted = targeted, 
+                confidence = self.confidence, 
+                c_range = self.c_range,
+                search_steps = 5, 
+                max_steps = self.max_steps, 
+                abort_early = True,
+                box = (-3, 3), 
+                optimizer_lr = self.optimizer_lr, 
+                init_rand = False
+                )
+        return        
 
-                if self.mode == 'random':
-    
-                    for l in labels:
-                    
-                        adv_labels = np.delete(labels_array,l.detach().cpu().numpy())
-                        target_.append(random.choice(adv_labels)) 
-                        
-                    targets_ = torch.LongTensor(target_)
-                    targets_ = targets_.to(self.device)
-                    
-                elif self.mode == 'least-likely':
-                    
-                    with torch.no_grad():
-                        y_predicted = self.model(images)
-                    target_ = y_predicted.argmin(axis = 1)
-                    targets_ = torch.LongTensor(target_)
-                    targets_ = targets_.to(self.device)
-                    
-                else: 
-                    
-                    targets_ = torch.LongTensor(labels)
-                    
-                n_in = len(images)    
-                
-                attack_images = self.atk(model=self.model, inputs=images, targets=targets_, device=self.device, to_numpy=False)
-                
-                with torch.no_grad():
-                        y_predicted = self.model(attack_images.to(self.device))
-                predicted_labels = y_predicted.argmax(axis = 1)
-                results = predicted_labels != labels
-                attack_TensorDict[loader_name][bn*bs:bn*bs+n_in] = {'image': attack_images, 
-                                                                    'label':labels,
-                                                                    'attack_success': results}
-            file_path = self.data_path/(loader_name)
-            n_threads = 32
-            if self.verbose: print(f'Saving {loader_name} to {file_path}.')
-            attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._dss = attack_TensorDict
+    def __call__(self, images, labels):
+        return self.atk(images, labels)
