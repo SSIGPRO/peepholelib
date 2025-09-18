@@ -12,13 +12,13 @@ from torch.utils.data import DataLoader
 # Our stuff
 from peepholelib.models.model_wrap import ModelWrap
 from peepholelib.datasets.dataset_base import DatasetBase 
-from peepholelib.coreVectors.parsers import from_dataset
-from peepholelib.coreVectors.prediction_fns import multilabel_classification
+from peepholelib.datasets.parsers import from_dataset
+from peepholelib.datasets.prediction_fns import multilabel_classification
     
-def parse_ds(self, **kwargs):
+def load_data(self, **kwargs):
     '''
     Parse dataset, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
-    Data is saved into a 'tensordict.PersistentTensorDict' at 'self.path/dss.<loader>' (see 'coreVectors.__init__()'), with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
+    Data is saved into a 'tensordict.PersistentTensorDict' at 'self.path/dss.<loader>' (see 'DatasetBase.__init__()'), with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
     Args:
     - datasets (peepholelib.dataset_base.DatasetBase): Dataset wrapped in DatasetBase
     - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
@@ -29,22 +29,19 @@ def parse_ds(self, **kwargs):
     '''
     self.check_uncontexted()
     
-    ds = kwargs['datasets']
     bs = kwargs.get('batch_size', 64) 
     n_threads = kwargs.get('n_threads', 1) 
 
-    ds_parser = kwargs.get('ds_parser', from_dataset) 
+    ds_parser = kwargs.get('ds_parser') ## it will be a dictionary
     pred_fn = kwargs.get('pred_fn', multilabel_classification)
 
     verbose = kwargs.get('verbose', False) 
 
     model = self._model
     device = self._model.device 
-    
-    assert(isinstance(ds, DatasetBase))
 
     self._dss = {}
-    for ds_key in ds._dss:
+    for ds_key, parser in ds_parser.items():
         if verbose: print(f'\n ---- Getting data from {ds_key}\n')
         file_path = self.path/('dss.'+ds_key)
 
@@ -56,7 +53,7 @@ def parse_ds(self, **kwargs):
             
             if verbose: print('loaded n_samples: ', n_samples)
         else:
-            n_samples = len(ds._dss[ds_key])
+            n_samples = len(self.dss_[ds_key])
             if verbose: print('created datasets dict with n_samples: ', n_samples)
             self._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
             
@@ -66,7 +63,7 @@ def parse_ds(self, **kwargs):
             # if verbose: print(f'Allocating {key_list}')
 
             # dry run to get shapes
-            data = ds_parser(ds.get(ds_key,0))
+            data = parser(ds.get(ds_key,0))
 
             with torch.no_grad():
                 _res = model(data['image'].to(device))
@@ -92,7 +89,7 @@ def parse_ds(self, **kwargs):
             # copy images and labels
             #------------------------
             # create dataloader of input dataset and activations
-            dl_ori = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=ds_parser, shuffle=False) 
+            dl_ori = DataLoader(dataset=self.dss_[ds_key], batch_size=bs, collate_fn=parser, shuffle=False) 
             dl_dst = DataLoader(self._dss[ds_key], batch_size=bs, collate_fn=lambda x:x, shuffle=False, num_workers=n_threads)
 
             if verbose: print('Parsing dataset')
