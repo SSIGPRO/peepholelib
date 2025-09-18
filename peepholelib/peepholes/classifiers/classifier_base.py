@@ -12,7 +12,7 @@ def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase(DrillBase): 
+class ClassifierBase(DrillBase, metaclass=abc.ABCMeta): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
@@ -63,12 +63,14 @@ class ClassifierBase(DrillBase):
         Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to classifier's class g belongs to the model's class c.
 
         Args:
-        - corevectors (peepholelib.coreVectors.CoreVectors): Corevectors.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
         - batch_size: Do the computation in batchs. Defaults to 64.
         - verbose (Bool): Print progress messages. 
         '''
-
+        
+        dss = kwargs.get('datasets')
         cvs = kwargs.get('corevectors')
         loader = kwargs.get('loader', 'train')
         bs = kwargs.get('batch_size', 64)
@@ -78,7 +80,7 @@ class ClassifierBase(DrillBase):
         _empp = torch.zeros(self.nl_class, self.nl_model)
         
         # create dataloaders
-        dss_dl = DataLoader(cvs._dss[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
+        dss_dl = DataLoader(dss._dss[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
         cvs_dl = DataLoader(cvs._corevds[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
 
         # iterate over _fit_data
@@ -109,8 +111,8 @@ class ClassifierBase(DrillBase):
         - verbose (bool): Print progress messages.
         
         '''
-        cvs = kwargs['cvs']
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
+        cvs = kwargs.get('cvs')
+        verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`
         if self._empp == None:

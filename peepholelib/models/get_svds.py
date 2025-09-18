@@ -7,12 +7,12 @@ from tensordict import TensorDict
 from tensordict import MemoryMappedTensor as MMT
 
 def get_svds(self, **kwargs):
-    path = Path(kwargs['path'])
-    name = kwargs['name']
-    target_modules = kwargs['target_modules'] 
-    svd_fns = kwargs['svd_fns']
-    sample_in = kwargs['sample_in']
-    verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+    path = Path(kwargs.get('path'))
+    name = kwargs.get('name')
+    target_modules = kwargs.get('target_modules')
+    svd_fns = kwargs.get('svd_fns')
+    sample_in = kwargs.get('sample_in')
+    verbose = kwargs.get('verbose', False)
 
     # create folder
     path.mkdir(parents=True, exist_ok=True)

@@ -59,10 +59,16 @@ class DeepMahalanobisDistance(DrillBase):
                 precision: list of precisions
         """
 
-        cvs = kwargs['corevectors']
-        dss = kwargs['dataset']
-        label_key = kwargs['label_key'] if 'label_key' in kwargs else 'label'
+        _dss = kwargs['dataset']
+        _cvs = kwargs['corevectors']
+        loader = kwargs.get('loader')
+        drill_key = kwargs.get('drill_key')
+        label_key = kwargs.get('label_key', 'label')
         
+        # parsing for simplification
+        dss = _dss._dss[loader]
+        cvs = _cvs._corevds[loader][drill_key]
+
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
