@@ -7,12 +7,14 @@ from peepholelib.datasets.dataset_base import DatasetBase
 def random_subsampling(ds, perc):
     assert(isinstance(ds, DatasetBase))
     
-    for k in ds._dss:
+    for k in ds.__dataset__:
         ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [perc, 1.0-perc])
     return 
 
 def dist_preserving(data, n, weights='label'):
     # TODO: unused
+    raise RuntimeError('Old deprecated function. Needs reworking')
+
     if torch.is_tensor(weights) and len(weights.shape) == 1:
         _w = weights 
     elif type(weights) == str:

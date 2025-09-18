@@ -22,6 +22,12 @@ class Cifar100(DatasetBase):
 
         DatasetBase.__init__(self, **kwargs)
 
+        self.__dataset__ = {
+                'CIFAR100-train': None,
+                'CIFAR100-val': None,
+                'CIFAR100-test': None 
+                }
+
         return
     
     def __load_data__(self, **kwargs):

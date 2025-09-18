@@ -16,6 +16,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
         self.data_path = Path(kwargs.get('data_path'))
 
+        # Should have keys setted in the __init__() of each dataset inheriting DatasetBase
         # computed in __load_data__()
         self.__dataset__ = None # this one saves the dataset as given
 
@@ -57,6 +58,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         dss = kwargs.get('datasets')
         ds_parsers = kwargs.get('ds_parsers') ## it will be a dictionary
         ds_kwargs = kwargs.get('ds_kwargs', None) ## it will be a dictionary
+        ds_samplers = kwargs.get('ds_samplers', None) ## it will be a dictionary
         pred_fn = kwargs.get('pred_fn', multilabel_classification)
 
         bs = kwargs.get('batch_size', 64) 
@@ -74,13 +76,13 @@ class DatasetBase(metaclass=abc.ABCMeta):
         ret = cls(data_path = save_path)
         ret._dss = {}
         
+        # TODO: handle context manager
         #self.check_uncontexted()
         # TODO: missing handling classes
         for ds_name in dss:
             ds_parser = ds_parsers[ds_name]
             ds_kwargs = ds_kwargs[ds_name]
-            dss[ds_name].__load_data__(**ds_kwargs)
-
+            
             for ds_key in dss[ds_name].__dataset__:
                 if verbose: print(f'\n ---- Getting data from {ds_key}\n')
                 file_path = ret.data_path/('dss.'+ds_key)
@@ -94,6 +96,12 @@ class DatasetBase(metaclass=abc.ABCMeta):
                     
                     if verbose: print('loaded n_samples: ', n_samples)
                 else:
+                    dss[ds_name].__load_data__(**ds_kwargs)
+
+                    if ds_samplers != None and ds_name in ds_samplers:
+                        if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
+                        ds_samplers[ds_name](ds = dss[ds_name])
+
                     n_samples = len(dss[ds_name].__dataset__[ds_key])
                     if verbose: print('creating dataset with n_samples: ', n_samples)
                     ret._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
@@ -120,6 +128,11 @@ class DatasetBase(metaclass=abc.ABCMeta):
                     ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
                     ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
                     ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+
+                    # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                    # This is done so we can use multiple workers with the dataloaders 
+                    ret._dss[ds_key].close()
+                    ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
                     #------------------------
                     # copy images and labels
