@@ -80,7 +80,8 @@ vit_b_16_cifar100_augumentations = transforms.Compose([
 #-----------------------------
 
 vit_b_16_imagenet = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=means['imagenet'], std=stds['imagenet'])
 ])
