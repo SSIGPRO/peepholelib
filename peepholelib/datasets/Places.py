@@ -1,43 +1,13 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
-
-# General python stuff
-from pathlib import Path as Path
-import numpy as np
-from math import floor
-from tqdm import tqdm
+from peepholelib.datasets.transforms import # We need the transform for Places
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
-from torch.utils.data import Dataset
 
 # CIFAR from torchvision
 from torchvision import datasets
-from PIL import Image
-
-class CustomDS(Dataset):
-    def __init__(self, data, labels, transform):
-        Dataset.__init__(self) 
-        self.data = []
-        for d in tqdm(data, disable=True):
-            self.data.append(Image.fromarray(d))
-        self.labels = labels
-        self.transform = transform
-        self.len = labels.shape[0]
-        return
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        d = self.transform(self.data[idx])
-        l = self.labels[idx]
-        return d, l
-
-    def __getitems__(self, idxs):
-        return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
 
 class Places(DatasetBase):
     def __init__(self, **kwargs):
@@ -51,13 +21,6 @@ class Places(DatasetBase):
         '''
 
         DatasetBase.__init__(self, **kwargs)
-        
-        # use Places by default
-        self.dataset = kwargs.get('dataset', 'Places')
-
-        # raise error if the dataset is not Places
-        if "places" not in self.dataset.lower():
-            raise ValueError("Dataset must be Places365")
 
         return
     
@@ -73,7 +36,7 @@ class Places(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        transform = kwargs.get('transform')
 
         seed = kwargs.get('seed', 42)
             

@@ -8,29 +8,6 @@ from torch.utils.data import random_split
 
 # CIFAR from torchvision
 from torchvision import datasets
-from PIL import Image
-
-class CustomDS(Dataset):
-    def __init__(self, data, labels, transform):
-        Dataset.__init__(self) 
-        self.data = []
-        for d in tqdm(data, disable=True):
-            self.data.append(Image.fromarray(d))
-        self.labels = labels
-        self.transform = transform
-        self.len = labels.shape[0]
-        return
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        d = self.transform(self.data[idx])
-        l = self.labels[idx]
-        return d, l
-
-    def __getitems__(self, idxs):
-        return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
 
 class Cifar10(DatasetBase):
     def __init__(self, **kwargs):

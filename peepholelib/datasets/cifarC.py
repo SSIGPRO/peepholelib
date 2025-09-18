@@ -2,12 +2,6 @@
 from peepholelib.datasets.dataset_base import DatasetBase
 from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
 
-# General python stuff
-from pathlib import Path as Path
-import numpy as np
-from math import floor
-from tqdm import tqdm
-
 # torch stuff
 import torch
 from torch.utils.data import random_split

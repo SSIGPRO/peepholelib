@@ -1,20 +1,13 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-
-# General python stuff
-from pathlib import Path as Path
-import numpy as np
-from math import floor
-from tqdm import tqdm
+from peepholelib.datasets.transforms import ## WE need he transform as default
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
-from torch.utils.data import Dataset
 
 # SVHN from torchvision
 from torchvision import datasets
-from PIL import Image
 
 class SVHN(DatasetBase):
     def __init__(self, **kwargs):
@@ -43,7 +36,7 @@ class SVHN(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
+        transform = kwargs.get('transform')
 
         seed = kwargs.get('seed', 42)
             

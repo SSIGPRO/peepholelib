@@ -36,7 +36,7 @@ class Cifar100(DatasetBase):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform')
+        transform = kwargs.get('transform', vgg16_cifar100)
 
         seed = kwargs.get('seed', 42)
             
