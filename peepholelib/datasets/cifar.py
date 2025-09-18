@@ -61,7 +61,7 @@ class Cifar(DatasetBase):
 
         return
     
-    def load_data(self, **kwargs):
+    def __load_data__(self, **kwargs):
         '''
         Load and prepare CIFAR10 or CIFAR100 data.
         
@@ -75,9 +75,6 @@ class Cifar(DatasetBase):
         '''
         # accepts custom transform if provided in kwargs
         transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
-        corrupted_path = kwargs.get('corrupted_path', None)
-        ood_dss = kwargs.get('ood_dss', None)
-        if not corrupted_path == None: corrupted_path = Path(corrupted_path)
 
         seed = kwargs.get('seed', 42)
             
