@@ -1,25 +1,18 @@
-from .runutils_cw import *
-# import runutils_cw
-from tqdm import tqdm
-from .attacks_base import AttackBase
+# general python stuff
 from pathlib import Path as Path
-import abc 
 import numpy as np
-import operator as op
-import random
 
-from typing import Union, Tuple
-from torch.autograd import Variable
+# import runutils_cw
+from .runutils_cw import *
 
+# Torch stuff used in CW
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
+from torch.autograd import Variable
 
-from torchvision.transforms import AutoAugment, AutoAugmentPolicy
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
-
+# our stuff
+from .attacks_base import AttackBase
 """
 Carlini-Wagner attack (http://arxiv.org/abs/1608.04644).
 
@@ -623,66 +616,4 @@ class myCW(AttackBase):
                                 box=(-3, 3), 
                                 optimizer_lr=self.optimizer_lr, 
                                 init_rand=False)
-            
-    def get_ds_attack(self):
-        self.data_path.mkdir(parents=True, exist_ok=True)
-    
-        attack_TensorDict = {}
-        
-        for loader_name in self._loaders.keys():
-            
-            if self.verbose: print(f'\n ---- Getting data from {loader_name}\n')
-            n_samples = len(self._loaders[loader_name].dataset)
-            labels_array = np.arange(0,self.nb_classes)
-            bs = self._loaders[loader_name].batch_size
-            _img, _ = self._loaders[loader_name].dataset[0]
-            attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples)
-            
-            attack_TensorDict[loader_name]['image'] = MMT.empty(shape=torch.Size((n_samples,)+_img.shape))
-            attack_TensorDict[loader_name]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-            attack_TensorDict[loader_name]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-            
-            for bn, data in enumerate(tqdm(self._loaders[loader_name])):
-                images, labels = data
-                images = images.to(self.device)
-                labels = labels.to(self.device)
-                target_ = []
-
-                if self.mode == 'random':
-    
-                    for l in labels:
-                    
-                        adv_labels = np.delete(labels_array,l.detach().cpu().numpy())
-                        target_.append(random.choice(adv_labels)) 
-                        
-                    targets_ = torch.LongTensor(target_)
-                    targets_ = targets_.to(self.device)
-                    
-                elif self.mode == 'least-likely':
-                    
-                    with torch.no_grad():
-                        y_predicted = self.model(images)
-                    target_ = y_predicted.argmin(axis = 1)
-                    targets_ = torch.LongTensor(target_)
-                    targets_ = targets_.to(self.device)
-                    
-                else: 
-                    
-                    targets_ = torch.LongTensor(labels)
-                    
-                n_in = len(images)    
-                
-                attack_images = self.atk(model=self.model, inputs=images, targets=targets_, device=self.device, to_numpy=False)
-                
-                with torch.no_grad():
-                        y_predicted = self.model(attack_images.to(self.device))
-                predicted_labels = y_predicted.argmax(axis = 1)
-                results = predicted_labels != labels
-                attack_TensorDict[loader_name][bn*bs:bn*bs+n_in] = {'image': attack_images, 
-                                                                    'label':labels,
-                                                                    'attack_success': results}
-            file_path = self.data_path/(loader_name)
-            n_threads = 32
-            if self.verbose: print(f'Saving {loader_name} to {file_path}.')
-            attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._dss = attack_TensorDict
+        return        

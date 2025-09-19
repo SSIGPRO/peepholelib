@@ -1,15 +1,11 @@
+# general python stuff
+from pathlib import Path as Path
+
+# torch stuff
 import torchattacks
 
-import torch
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
-
-from pathlib import Path as Path
-import abc 
-
+# our stuff
 from .attacks_base import AttackBase
-from tqdm import tqdm
-
 
 class myDeepFool(AttackBase):
    
@@ -47,48 +43,5 @@ class myDeepFool(AttackBase):
         self.atk = torchattacks.DeepFool(model=self.model,
                                             steps=self.steps,
                                             overshoot=self.overshoot)
-
-    def get_ds_attack(self):
-        self.data_path.mkdir(parents=True, exist_ok=True)
-
-        attack_TensorDict = {}
-        
-        for loader_name in self._loaders:
-            
-            if self.verbose: print(f'\n ---- Getting data from {loader_name}\n')
-            print(len(self._loaders[loader_name].dataset))
-            n_samples = len(self._loaders[loader_name].dataset)
-
-            if self.verbose: print('loader n_samples: ', n_samples) 
-            #TODO: check device
-            attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples) 
-
-            file_path = self.data_path/(loader_name)
-            n_threads = 32
-            
-            bs = self._loaders[loader_name].batch_size
-            _img, _ = self._loaders[loader_name].dataset[0]
-            
-            attack_TensorDict[loader_name]['image'] = MMT.empty(shape=torch.Size((n_samples,)+_img.shape))
-            attack_TensorDict[loader_name]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-            attack_TensorDict[loader_name]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-            for bn, data in enumerate(tqdm(self._loaders[loader_name])):
-                images, labels = data
-                images = images.to(self.device)
-                labels = labels.to(self.device)
-                n_in = len(images)
-                attack_images = self.atk(images, labels)
-                
-                with torch.no_grad():
-                        y_predicted = self.model(attack_images)
-                predicted_labels = y_predicted.argmax(axis = 1)
-                results = predicted_labels != labels
-
-                attack_TensorDict[loader_name]['image'][bn*bs:bn*bs+n_in] = attack_images
-                attack_TensorDict[loader_name]['label'][bn*bs:bn*bs+n_in] = labels
-                attack_TensorDict[loader_name]['attack_success'][bn*bs:bn*bs+n_in] = results                
-            
-            if self.verbose: print(f'Saving {loader_name} to {file_path}.')
-            attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._dss = attack_TensorDict
+        return
 
