@@ -597,7 +597,7 @@ class myCW(AttackBase):
         self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
         self.mode = kwargs.get('mode', 'random')
 
-        self.data_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
+        self.name = 'CW-'
             
         targeted = False if self.mode == None else True
         

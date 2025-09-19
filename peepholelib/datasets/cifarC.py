@@ -40,7 +40,6 @@ class CifarC(DatasetBase):
         CifarC loader (test).
 
         Args:
-            data_path (str): CifarC download folder. If not downloaded, better you download it.
         Returns:
             - a thumbs up
         '''
@@ -68,13 +67,13 @@ class CifarC(DatasetBase):
         torch.manual_seed(seed)
 
         c_levels = 5
-        label_file = list(self.data_path.glob('labels.npy'))[0]
+        label_file = list(self.path.glob('labels.npy'))[0]
         _labels = np.load(label_file).astype(int)
         _labels = _labels.reshape(c_levels, int(_labels.shape[0]/c_levels))
         n_samples = _labels.shape[1]
 
         # list files with different corruptions
-        files = list(self.data_path.glob('[!label]*.npy'))
+        files = list(self.path.glob('[!label]*.npy'))
         files_val = files.copy()
         files_val.reverse()
 
@@ -118,8 +117,8 @@ class CifarC(DatasetBase):
 
         self.__dataset__ = {}
         for cl in range(c_levels):
-            self.__dataset__[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
-            self.__dataset__[f'test-ood-c{cl}'] = corrupted_datasets_test[cl] 
+            self.__dataset__[f'CIFAR100-C-val-c{cl}'] = corrupted_datasets_val[cl]
+            self.__dataset__[f'CIFAR100-C-test-c{cl}'] = corrupted_datasets_test[cl] 
         
         return 
     

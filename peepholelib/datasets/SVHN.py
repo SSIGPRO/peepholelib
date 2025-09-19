@@ -14,7 +14,7 @@ class SVHN(DatasetBase):
         SVHN loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
 
         Expects:
-            data_path (str): SVHN download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): SVHN download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
@@ -46,7 +46,7 @@ class SVHN(DatasetBase):
 
         # Test dataset is loaded directly
         test_dataset = datasets.__dict__[self.dataset](
-            root = self.data_path,
+            root = self.path,
             split = 'test',
             transform = transform,
             download = True
@@ -54,7 +54,7 @@ class SVHN(DatasetBase):
         
         # train data will be splitted into training and validation
         _train_data = datasets.__dict__[self.dataset]( 
-            root = self.data_path,
+            root = self.path,
             split = 'train',
             transform = None, #transform,
             download = True

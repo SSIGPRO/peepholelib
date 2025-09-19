@@ -15,7 +15,7 @@ class Cifar100(DatasetBase):
         Cifar100 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
 
         Args:
-            data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
@@ -44,7 +44,7 @@ class Cifar100(DatasetBase):
 
         # Test dataset is loaded directly
         test_dataset = datasets.CIFAR100(
-            root = self.data_path,
+            root = self.path,
             train = False,
             transform = transform,
             download = True
@@ -52,7 +52,7 @@ class Cifar100(DatasetBase):
         
         # train data will be splitted into training and validation
         _train_data = datasets.CIFAR100( 
-            root = self.data_path,
+            root = self.path,
             train = True,
             transform = None, #transform,
             download = True

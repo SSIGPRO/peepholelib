@@ -4,11 +4,15 @@ import abc
 from tqdm import tqdm
 from math import ceil
 
-# torch stuff
-import torch
+# tensordict
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
+
+# torch stuff
+import torch
 from torch.utils.data import DataLoader
+
+# our stuff
 from peepholelib.datasets.functional.prediction_fns import multilabel_classification
 
 class DatasetBase(metaclass=abc.ABCMeta):
@@ -20,10 +24,10 @@ class DatasetBase(metaclass=abc.ABCMeta):
         Args:
         - seed (int): Random seed for reproducibility.
         - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
-        - data_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
+        - path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
 
         '''
-        self.data_path = Path(kwargs.get('data_path'))
+        self.path = Path(kwargs.get('path'))
 
         self.transform = kwargs.get('transform', None)
         self.seed = kwargs.get('seed', 42)
@@ -34,7 +38,24 @@ class DatasetBase(metaclass=abc.ABCMeta):
         # computed in load_data()
         self._dss = None # this is the parsed datasets as PTD
         self._classes = None
-    
+        
+        # used in the contexted manager
+        is_contexted = None 
+        return
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        verbose = True 
+
+        if self._dss == None:
+            if verbose: print('no dss to close.')
+        else:
+            for ds_key in self._dss:
+                if verbose: print(f'closing {ds_key}')
+                self._dss[ds_key].close()
+
+        self._ 
+        
+        
     #@abc.abstractmethod # TODO: figure out why does not work
     def __load_data__(self):
         raise NotImplementedError()
@@ -83,7 +104,8 @@ class DatasetBase(metaclass=abc.ABCMeta):
         # some defs for simplicity
         device = model.device 
 
-        ret = cls(data_path = save_path)
+        save_path.mkdir(parents=True, exist_ok=True)
+        ret = cls(path = save_path)
         ret._dss = {}
 
         # enter the context manager
@@ -99,7 +121,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
 
                 for ds_key in dss[ds_name].__dataset__:
                     if verbose: print(f'\n ---- Getting data from {ds_key}\n')
-                    file_path = ret.data_path/('dss.'+ds_key)
+                    file_path = ret.path/('dss.'+ds_key)
                     
                     if file_path.exists():
                         if verbose: print(f'File {file_path} exists. Loading from disk.')
@@ -110,7 +132,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
                         if verbose: print('loaded n_samples: ', n_samples)
                     else:
                         n_samples = len(dss[ds_name].__dataset__[ds_key])
-                        if verbose: print('creating dataset with n_samples: ', n_samples)
+                        if verbose: print('Creating dataset with n_samples: ', n_samples)
                         ret._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
                         
                         #------------------------
@@ -154,10 +176,10 @@ class DatasetBase(metaclass=abc.ABCMeta):
 
                         dl_dst = DataLoader(
                                 ret._dss[ds_key],
-                                batch_size=bs,
-                                collate_fn=lambda x:x,
-                                shuffle=False,
-                                num_workers=n_threads
+                                batch_size = bs,
+                                collate_fn = lambda x:x,
+                                shuffle = False,
+                                num_workers = n_threads
                                 )
 
                         if verbose: print(f'Parsing {ds_key}')
@@ -201,7 +223,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             
-            _dss_file_paths = self.data_path/('dss.'+ds_key)
+            _dss_file_paths = self.path/('dss.'+ds_key)
 
             if verbose: print(f'Loading files {_dss_file_paths} from disk. ')
             self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode=mode)
@@ -226,8 +248,8 @@ class DatasetBase(metaclass=abc.ABCMeta):
                 if ds_key in self._dss:
                     raise RuntimeError(f'Trying to add {ds_key} from others, but key is already present in self.')
                     
-                    self._dss[ds_key] = ods._dss[ds_key]
-                    print(f'appending {ds_key}')
+                self._dss[ds_key] = ods._dss[ds_key]
+                print(f'appending {ds_key}')
         return
 
     def __enter__(self):

@@ -2,13 +2,18 @@
 from pathlib import Path as Path
 import abc 
 from tqdm import tqdm
+from math import ceil
+
+# tensordict
+from tensordict import PersistentTensorDict
+from tensordict import MemoryMappedTensor as MMT
 
 # Torch stuff
 import torch
 import torchattacks
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
+from torch.utils.data import DataLoader
 
+# our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
 
 def from_tensorDict(data, key_list):
@@ -21,25 +26,9 @@ class AttackBase(DatasetBase):
         DatasetBase.__init__(self, **kwargs)
 
         self.model = kwargs.get('model')
-        self.name_model = kwargs.get('name_model')
-
         return
     
-    def load_only(self, **kwargs):
-
-        loaders = kwargs.get('loaders')
-        verbose = kwargs.get('verbose', False)
-
-        if not self.save_path.exists(): raise RuntimeError(f'Attack path {self.save_path} does not exist. Please run get_ds_attack() first.')
-
-        if verbose: print(f'Loading files {self.save_path} from disk. ')
-        
-        self._dss = {}
-        for ds_key in loaders:
-            self._dss[ds_key] = TensorDict.load_memmap(self.save_path/ds_key)
-        return
-    
-    def get_ds_attack(self):
+    def apply_attack(self, **kwargs):
         # TODO: make documentation after rework
         '''
         Applies attacks to a dataset, saving attacked images in a `TensorDict`.
@@ -48,34 +37,69 @@ class AttackBase(DatasetBase):
         -
         '''
         
-        _loaders = kwargs.get('loaders')
-        device = kwargs.get('device') 
+        self.check_uncontexted()
 
-        self.save_path.mkdir(parents=True, exist_ok=True)
+        ds = kwargs.get('dataset') 
+        loaders = kwargs.get('loaders', None)
+        bs = kwargs.get('batch_size', 64) 
+        n_threads = kwargs.get('n_threads', 1) 
+
+        self.path.mkdir(parents=True, exist_ok=True)
+        verbose = kwargs.get('verbose', False) 
+
+        # some defs for simplicity 
+        device = self.model.device
         
-        attack_TensorDict = {}
-        for loader_name in _loaders:
-            
-            if self.verbose: print(f'\n ---- Getting data from {loader_name}\n')
-            n_samples = len(_loaders[loader_name].dataset)
+        self._dss = {}
+        for ds_key in loaders:
+            tdsk = self.name + ds_key
+            file_path = self.path/('dss.'+tdsk) 
 
-            if self.verbose: print('loader n_samples: ', n_samples) 
-            attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples) 
+            if file_path.exists():
+                print(f'{file_path} exists. I am not overwritting it. Skipping')
+                continue
 
-            file_path = self.save_path/(loader_name)
-            n_threads = 32
+            if verbose: print(f'\n ---- Getting data from {ds_key}\n')
+            n_samples = len(ds._dss[ds_key])
+            if verbose: print('loader n_samples: ', n_samples) 
+
+            self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w') 
+
+            img_shape = ds._dss[ds_key]['image'][0].shape
             
-            bs = _loaders[loader_name].batch_size
-            _img, _ = _loaders[loader_name].dataset[0]
-            
-            attack_TensorDict[loader_name]['image'] = MMT.empty(shape=torch.Size((n_samples,)+_img.shape))
-            attack_TensorDict[loader_name]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-            attack_TensorDict[loader_name]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-            for bn, data in enumerate(tqdm(_loaders[loader_name])):
-                images, labels = data
-                images = images.to(device)
-                labels = labels.to(device)
-                n_in = len(images)
+            self._dss[tdsk]['image'] = MMT.empty(shape=torch.Size((n_samples,)+img_shape))
+            self._dss[tdsk]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
+            self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
+
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers with the dataloaders 
+            self._dss[tdsk].close()
+            self._dss[tdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+             
+            #------------------------
+            # copy images and labels
+            #------------------------               
+            # create dataloader of input dataset
+            dl_ori = DataLoader(
+                    dataset = ds._dss[ds_key],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False
+                    ) 
+                                                                
+            dl_dst = DataLoader(
+                    self._dss[tdsk],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
+
+            if verbose: print(f'Applying {self.name} to {ds_key}')
+            for di, dt in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
+
+                images = di['image'].to(device)
+                labels = di['label'].to(device)
                 attack_images = self.atk(images, labels)
                 
                 with torch.no_grad():
@@ -83,13 +107,9 @@ class AttackBase(DatasetBase):
                 predicted_labels = y_predicted.argmax(axis = 1)
                 results = predicted_labels != labels
 
-                attack_TensorDict[loader_name]['image'][bn*bs:bn*bs+n_in] = attack_images
-                attack_TensorDict[loader_name]['label'][bn*bs:bn*bs+n_in] = labels
-                attack_TensorDict[loader_name]['attack_success'][bn*bs:bn*bs+n_in] = results                
-            
-            # if self.verbose: print(f'Saving {loader_name} to {file_path}.')
-            attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            self._dss = attack_TensorDict
+                dt['image'] = attack_images
+                dt['label'] = labels
+                dt['attack_success'] = results                
         return
 
     def get(self, ds_key, idx):

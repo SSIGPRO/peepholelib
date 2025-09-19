@@ -15,7 +15,7 @@ class Places(DatasetBase):
         Places loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
 
         Expects:
-            data_path (str): Places download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): Places download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
@@ -43,7 +43,7 @@ class Places(DatasetBase):
         torch.manual_seed(seed)
 
         train_dataset = datasets.__dict__[self.dataset]( 
-                        root = self.data_path,
+                        root = self.path,
                         split = 'train',
                         transform = transform,
                         small = True,
@@ -51,7 +51,7 @@ class Places(DatasetBase):
                     )
 
         val_set = datasets.__dict__[self.dataset]( 
-                        root = self.data_path,
+                        root = self.path,
                         split = 'val',
                         transform = None,
                         small = True,

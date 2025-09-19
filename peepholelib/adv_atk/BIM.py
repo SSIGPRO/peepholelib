@@ -41,10 +41,10 @@ class myBIM(AttackBase):
         self.steps = kwargs.get('steps', 10)
         self.mode = kwargs.get('mode', 'random')
 
-        self.save_path = self.data_path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
+        self.name = 'BIM-'
 
         self.atk = torchattacks.BIM(
-                model = self.model, 
+                model = self.model._model, 
                 eps = self.eps, 
                 alpha = self.alpha, 
                 steps = self.steps

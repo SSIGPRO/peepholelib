@@ -32,10 +32,10 @@ class myDeepFool(AttackBase):
         self.steps = kwargs.get('steps', 50)
         self.overshoot = kwargs.get('overshoot', 0.02)
 
-        self.data_path = self.path/Path(f'model_{self.name_model}/steps_{self.steps}/overshoot_{self.overshoot}')
+        self.name = 'DF-'
 
         self.atk = torchattacks.DeepFool(
-                model=self.model,
+                model=self.model._model,
                 steps=self.steps,
                 overshoot=self.overshoot
                 )

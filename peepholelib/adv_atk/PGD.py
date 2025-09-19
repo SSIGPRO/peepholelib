@@ -26,7 +26,7 @@ class myPGD(AttackBase):
     
         Shape:
             - images: :math:`(N, C, H, W)` where `N = number of batches`, `C = number of channels`,        `H = height` and `W = width`. It must have a range [0, 1].
-            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 \leq y_i \leq` `number of labels`.
+            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 >= y_i >=` `number of labels`.
             - output: :math:`(N, C, H, W)`.
     
         Examples::
@@ -41,11 +41,11 @@ class myPGD(AttackBase):
         self.steps = kwargs.get('steps', 10)
         self.random_start = kwargs.get('random_start', True)
         self.mode = kwargs.get('mode', 'random')
-
-        self.data_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}/random_start_{self.random_start}')
+        
+        self.name = 'PGD-'
         
         self.atk = torchattacks.PGD(
-                model=self.model, 
+                model=self.model._model, 
                 eps=self.eps, 
                 alpha=self.alpha, 
                 steps=self.steps,
