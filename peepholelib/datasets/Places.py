@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_imagenet
+from peepholelib.datasets.functional.transforms import vgg16_imagenet
 
 # torch stuff
 import torch
@@ -20,26 +20,25 @@ class Places(DatasetBase):
             - a thumbs up
         '''
 
+        # add a default transform for specific DS
+        if 'transform' not in kwargs:
+            kwargs['transform'] = vgg16_imagenet
+
         DatasetBase.__init__(self, **kwargs)
 
         return
     
-    def __load_data__(self, **kwargs):
+    def __load_data__(self):
         '''
         Load and prepare Places data.
-        
-        Args:
-        - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset. (default: Places for vgg16 transform)
         
         Returns:
         - a thumbs up
         '''
-        # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', vgg16_imagenet)
 
-        seed = kwargs.get('seed', 42)
-            
+        transform = self.transform
+        seed = self.seed              
+
         # set torch seed
         torch.manual_seed(seed)
 

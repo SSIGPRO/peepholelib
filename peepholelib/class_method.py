@@ -26,10 +26,15 @@ class foo2(foo):
         self.a += y
         return
 
+class foo3(foo):
+    def __init__(self, x=0):
+        foo.__init__(self, x)
+        return
+
 if __name__ == '__main__':
     f1 = foo2(2)
     f2 = foo2(3)
-    f3 = foo2(4)
+    f3 = foo3(4)
 
     f2.bar(10)
 

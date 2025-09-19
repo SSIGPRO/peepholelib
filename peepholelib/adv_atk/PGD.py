@@ -35,25 +35,23 @@ class myPGD(AttackBase):
     
         """
         print('---------- Attack PGD init')
-        print()
          
-        self._loaders = kwargs['dl']
-        self.model = kwargs['model']
-        self.name_model = kwargs['name_model']
-        self.eps = kwargs['eps'] if 'eps' in kwargs else 8/255
-        self.alpha = kwargs['alpha'] if 'alpha' in kwargs else 1/255
-        self.steps = kwargs['steps'] if 'steps' in kwargs else 10
-        self.random_start = kwargs['random_start'] if 'random_start' in kwargs else True
-        self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
-        self.device = kwargs['device']
+        self.eps = kwargs.get('eps', 8/255)
+        self.alpha = kwargs.get('alpha', 1/255)
+        self.steps = kwargs.get('steps', 10)
+        self.random_start = kwargs.get('random_start', True)
+        self.mode = kwargs.get('mode', 'random')
+
         self.data_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}/random_start_{self.random_start}')
-        self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
         
-        self.atk = torchattacks.PGD(model=self.model, 
-                                    eps=self.eps, 
-                                    alpha=self.alpha, 
-                                    steps=self.steps,
-                                    random_start=self.random_start)
+        self.atk = torchattacks.PGD(
+                model=self.model, 
+                eps=self.eps, 
+                alpha=self.alpha, 
+                steps=self.steps,
+                random_start=self.random_start
+                )
+
         if self.mode == 'random':
             self.atk.set_mode_targeted_random(quiet=False)
         elif self.mode == 'least-likely':

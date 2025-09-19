@@ -14,9 +14,20 @@ from peepholelib.datasets.functional.prediction_fns import multilabel_classifica
 class DatasetBase(metaclass=abc.ABCMeta):
 
     def __init__(self, **kwargs):
+        '''
+        Creates instance of dataset base. For base datasets, `Transform` is mandatory.
+
+        Args:
+        - seed (int): Random seed for reproducibility.
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
+        - data_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
+
+        '''
         self.data_path = Path(kwargs.get('data_path'))
 
-        # Should have keys setted in the __init__() of each dataset inheriting DatasetBase
+        self.transform = kwargs.get('transform', None)
+        self.seed = kwargs.get('seed', 42)
+
         # computed in __load_data__()
         self.__dataset__ = None # this one saves the dataset as given
 
@@ -47,7 +58,6 @@ class DatasetBase(metaclass=abc.ABCMeta):
         Args:
         - datasets (peepholelib.dataset_base.DatasetBase): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetBase`.
         - ds_parsers (dict(str: callable)): Dictionary with same keys as `datasets`, and values being functions taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels']. 
-        - ds_kwargs (dict(str: dict())): Dictionary with same keys as `datasets`, and values being kwargs for the `__load_data__()` implemented in each specific dataset. Facultative.
         - ds_samplers (dict(str: dict())): Dictionary with same keys as `datasets`, and values being a sampler (see `datasets.functional.samplers`). Facultative.
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
         - pred_fn (callable): Function taking batched model's outputs and selecting a class.
@@ -74,24 +84,24 @@ class DatasetBase(metaclass=abc.ABCMeta):
         # some defs for simplicity
         device = model.device 
 
-        if ds_kwargs == None:
-            for k in dss:
-                ds_kwargs[k] = {}
-
         ret = cls(data_path = save_path)
         ret._dss = {}
 
-        for ds_name in dss:
-            ds_parser = ds_parsers[ds_name]
-            ds_kwargs = ds_kwargs[ds_name]
-            
-            for ds_key in dss[ds_name].__dataset__:
-                if verbose: print(f'\n ---- Getting data from {ds_key}\n')
-                file_path = ret.data_path/('dss.'+ds_key)
-                print('file: ', file_path)
+        # enter the context manager
+        with ret:
+            for ds_name in dss:
+                ds_parser = ds_parsers[ds_name]
                 
-                # enter the context manager
-                with ret:
+                dss[ds_name].__load_data__()
+
+                if ds_samplers != None and ds_name in ds_samplers:
+                    if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
+                    ds_samplers[ds_name](ds = dss[ds_name])
+
+                for ds_key in dss[ds_name].__dataset__:
+                    if verbose: print(f'\n ---- Getting data from {ds_key}\n')
+                    file_path = ret.data_path/('dss.'+ds_key)
+                    
                     if file_path.exists():
                         if verbose: print(f'File {file_path} exists. Loading from disk.')
                         ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
@@ -100,12 +110,6 @@ class DatasetBase(metaclass=abc.ABCMeta):
                         
                         if verbose: print('loaded n_samples: ', n_samples)
                     else:
-                        dss[ds_name].__load_data__(**ds_kwargs)
-
-                        if ds_samplers != None and ds_name in ds_samplers:
-                            if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
-                            ds_samplers[ds_name](ds = dss[ds_name])
-
                         n_samples = len(dss[ds_name].__dataset__[ds_key])
                         if verbose: print('creating dataset with n_samples: ', n_samples)
                         ret._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')

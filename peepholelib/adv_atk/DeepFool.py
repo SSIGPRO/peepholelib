@@ -28,20 +28,16 @@ class myDeepFool(AttackBase):
             >>> adv_images = attack(images, labels)
         """
         print('---------- Attack DeepFool init')
-        print()
          
-        self._loaders = kwargs['dl']
-        self.model = kwargs['model']
-        self.name_model = kwargs['name_model']
-        self.steps = kwargs['steps'] if 'steps' in kwargs else 50
-        self.overshoot = kwargs['overshoot'] if 'steps' in kwargs else 0.02
-        self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
-        self.device = kwargs['device'] 
+        self.steps = kwargs.get('steps', 50)
+        self.overshoot = kwargs.get('overshoot', 0.02)
+
         self.data_path = self.path/Path(f'model_{self.name_model}/steps_{self.steps}/overshoot_{self.overshoot}')
 
-            
-        self.atk = torchattacks.DeepFool(model=self.model,
-                                            steps=self.steps,
-                                            overshoot=self.overshoot)
+        self.atk = torchattacks.DeepFool(
+                model=self.model,
+                steps=self.steps,
+                overshoot=self.overshoot
+                )
         return
 

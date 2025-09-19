@@ -8,9 +8,7 @@ import torchattacks
 from .attacks_base import AttackBase
 
 class myBIM(AttackBase):
-   
     def __init__(self, **kwargs):
-        AttackBase.__init__(self, **kwargs)
         """
         BIM or iterative-FGSM in the paper 'Adversarial Examples in the Physical World'
         [https://arxiv.org/abs/1607.02533]
@@ -27,26 +25,23 @@ class myBIM(AttackBase):
     
         Shape:
             - images: :math:`(N, C, H, W)` where `N = number of batches`, `C = number of channels`,        `H = height` and `W = width`. It must have a range [0, 1].
-            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 \leq y_i \leq` `number of labels`.
+            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 <= y_i <= `number of labels`.
             - output: :math:`(N, C, H, W)`.
     
         Examples::
-            >>> attack = torchattacks.BIM(model, eps=8/255, alpha=2/255, steps=10)
-            >>> adv_images = attack(images, labels)
+            attack = torchattacks.BIM(model, eps=8/255, alpha=2/255, steps=10)
+            adv_images = attack(images, labels)
         """
+
         print('---------- Attack BIM init')
-         
-        self._loaders = kwargs.get('dl')
-        self.model = kwargs.get('model')
-        self.name_model = kwargs.get('name_model')
+        AttackBase.__init__(self, **kwargs)
+        
         self.eps = kwargs.get('eps', 8/255)
         self.alpha = kwargs.get('alpha', 2/255)
         self.steps = kwargs.get('steps', 10)
-        self.device = kwargs.get('device') 
         self.mode = kwargs.get('mode', 'random')
-        self.verbose = kwargs.get('verbose', True)
-        
-        self.data_path = self.path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
+
+        self.save_path = self.data_path/Path(f'model_{self.name_model}/eps_{self.eps:.2f}/alpha_{self.alpha:.2f}/steps_{self.steps}')
 
         self.atk = torchattacks.BIM(
                 model = self.model, 

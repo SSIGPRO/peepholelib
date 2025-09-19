@@ -589,31 +589,27 @@ class myCW(AttackBase):
         AttackBase.__init__(self, **kwargs)
         
         print('---------- Attack CW init')
-        print()
          
-        self._loaders = kwargs['dl']
-        self.model = kwargs['model']
-        self.nb_classes = kwargs['nb_classes']
-        self.name_model = kwargs['name_model']
-        self.confidence = kwargs['confidence'] if 'confidence' in kwargs else 0
-        self.c_range = kwargs['c_range'] if 'c_range' in kwargs else (1e-3, 1e10)
-        self.max_steps = kwargs['max_steps'] if 'max_steps' in kwargs else 1000
-        self.optimizer_lr = kwargs['optimizer_lr'] if 'optimizer_lr' in kwargs else 1e-2
-        self.verbose = kwargs['verbose'] if 'verbose' in kwargs else True
-        self.device = kwargs['device']
-        self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
+        self.nb_classes = kwargs.get('nb_classes')
+        self.confidence = kwargs.get('confidence', 0)
+        self.c_range = kwargs.get('c_range', (1e-3, 1e10))
+        self.max_steps = kwargs.get('max_steps', 1000)
+        self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
+        self.mode = kwargs.get('mode', 'random')
+
         self.data_path = self.path/Path(f'model_{self.name_model}/confidence_{self.confidence}/c_range_{self.c_range}/max_steps_{self.max_steps}/optimizer_lr_{self.optimizer_lr}')
-        self.mode = kwargs['mode'] if 'mode' in kwargs else 'random'
             
         targeted = False if self.mode == None else True
         
-        self.atk = L2Adversary(targeted=targeted, 
-                                confidence=self.confidence, 
-                                c_range=self.c_range,
-                                search_steps=5, 
-                                max_steps=self.max_steps, 
-                                abort_early=True,
-                                box=(-3, 3), 
-                                optimizer_lr=self.optimizer_lr, 
-                                init_rand=False)
+        self.atk = L2Adversary(
+                targeted = targeted, 
+                confidence = self.confidence, 
+                c_range = self.c_range,
+                search_steps = 5, 
+                max_steps = self.max_steps, 
+                abort_early = True,
+                box = (-3, 3), 
+                optimizer_lr = self.optimizer_lr, 
+                init_rand = False
+                )
         return        

@@ -1,10 +1,9 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_svhn
+from peepholelib.datasets.functional.transforms import vgg16_svhn
 
 # torch stuff
 import torch
-from torch.utils.data import random_split
 
 # SVHN from torchvision
 from torchvision import datasets
@@ -19,12 +18,16 @@ class SVHN(DatasetBase):
         Returns:
             - a thumbs up
         '''
+        
+        # add a default transform for specific DS
+        if 'transform' not in kwargs:
+            kwargs['transform'] = vgg16_svhn
 
         DatasetBase.__init__(self, **kwargs)
 
         return
     
-    def __load_data__(self, **kwargs):
+    def __load_data__(self):
         '''
         Load and prepare SVHN data.
         
@@ -35,11 +38,9 @@ class SVHN(DatasetBase):
         Returns:
         - a thumbs up
         '''
-        # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', vgg16_svhn)
+        transform = self.transform
+        seed = self.seed 
 
-        seed = kwargs.get('seed', 42)
-            
         # set torch seed
         torch.manual_seed(seed)
 

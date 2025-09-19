@@ -14,37 +14,30 @@ class Cifar100(DatasetBase):
         '''
         Cifar100 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
 
-        Expects:
+        Args:
             data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
+        
+        # add a default transform for specific DS
+        if 'transform' not in kwargs:
+            kwargs['transform'] = vgg16_cifar100
 
         DatasetBase.__init__(self, **kwargs)
 
-        self.__dataset__ = {
-                'CIFAR100-train': None,
-                'CIFAR100-val': None,
-                'CIFAR100-test': None 
-                }
-
         return
     
-    def __load_data__(self, **kwargs):
+    def __load_data__(self):
         '''
         Load and prepare CIFAR100 data.
-        
-        Args:
-        - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
         '''
-        # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform', vgg16_cifar100)
-
-        seed = kwargs.get('seed', 42)
+        
+        transform = self.transform
+        seed = self.seed
             
         # set torch seed
         torch.manual_seed(seed)

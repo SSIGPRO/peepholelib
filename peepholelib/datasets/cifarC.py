@@ -1,14 +1,12 @@
 # Our stuff
 from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar10, vgg16_cifar100
+from peepholelib.datasets.functional.transforms import vgg16_cifar100
 
 # torch stuff
 import torch
-from torch.utils.data import random_split
 from torch.utils.data import Dataset
 
 # CIFAR from torchvision
-from torchvision import datasets
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
@@ -41,38 +39,30 @@ class CifarC(DatasetBase):
         '''
         CifarC loader (test).
 
-        Expects:
+        Args:
             data_path (str): CifarC download folder. If not downloaded, better you download it.
         Returns:
             - a thumbs up
         '''
 
+        # add a default transform for specific DS
+        if 'transform' not in kwargs:
+            kwargs['transform'] = vgg16_cifar100
+
         DatasetBase.__init__(self, **kwargs)
         
-        self.dataset = kwargs.get('dataset')
-
-        # raise error if the dataset is not CIFAR
-        if "cifar" not in self.dataset.lower():
-            raise ValueError("Dataset must be CIFAR<10C|100C>")
-
         return
     
-    def __load_data__(self, **kwargs):
+    def __load_data__(self):
         '''
         Load and prepare CIFAR10C or CIFAR100C data.
-        
-        Args:
-        - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
-        - data_path (str): Path for corrupted data (CIFAR-100-C). Saved as 'ood' loader.
         
         Returns:
         - a thumbs up
         '''
-        # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform')
 
-        seed = kwargs.get('seed', 42)
+        transform = self.transform
+        seed = self.seed 
             
         # set torch seed
         torch.manual_seed(seed)
@@ -126,6 +116,7 @@ class CifarC(DatasetBase):
                     transform = transform,
                     ) 
 
+        self.__dataset__ = {}
         for cl in range(c_levels):
             self.__dataset__[f'val-ood-c{cl}'] = corrupted_datasets_val[cl]
             self.__dataset__[f'test-ood-c{cl}'] = corrupted_datasets_test[cl] 
