@@ -51,7 +51,6 @@ class DatasetBase(metaclass=abc.ABCMeta):
    
     @classmethod
     def parse_ds(cls, **kwargs):
-        # TODO: rework
         '''
         Parse datasets, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
         Data is saved into a 'tensordict.PersistentTensorDict' at 'save_path/dss.<loader>', with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
@@ -212,6 +211,25 @@ class DatasetBase(metaclass=abc.ABCMeta):
 
         return
     
+    def lazy_stack(self, **kwargs):
+        '''
+        Append other parsed datasets to self. `parsed datasets` contain then `self._dss` stribute.
+
+        Args:
+        others (list[peepholelib.datasets.dataset_base.DatasetBase]): list os datasets inheriting `DatasetBase` which have been parsed.
+        '''
+        others = kwargs.get('others')
+
+        for ods in others:
+            for ds_key in ods._dss:
+                print('dskey: ', ds_key)
+                if ds_key in self._dss:
+                    raise RuntimeError(f'Trying to add {ds_key} from others, but key is already present in self.')
+                    
+                    self._dss[ds_key] = ods._dss[ds_key]
+                    print(f'appending {ds_key}')
+        return
+
     def __enter__(self):
         self._is_contexted = True
         return self

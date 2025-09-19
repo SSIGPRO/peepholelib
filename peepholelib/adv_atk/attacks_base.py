@@ -12,10 +12,7 @@ from tensordict import MemoryMappedTensor as MMT
 from peepholelib.datasets.dataset_base import DatasetBase
 
 def from_tensorDict(data, key_list):
-    r = {}
-    for k in key_list:
-        r[k] = data[k]
-    return r 
+    return {k: data[k] for k in key_list} 
 
 class AttackBase(DatasetBase):
     
@@ -28,19 +25,18 @@ class AttackBase(DatasetBase):
 
         return
     
-    def __load_data__(self, **kwargs):
+    def load_only(self, **kwargs):
 
+        loaders = kwargs.get('loaders')
         verbose = kwargs.get('verbose', False)
 
         if not self.save_path.exists(): raise RuntimeError(f'Attack path {self.save_path} does not exist. Please run get_ds_attack() first.')
 
-        if verbose: print(f'File {self.save_path} exists.')
+        if verbose: print(f'Loading files {self.save_path} from disk. ')
         
-        # TODO: this should be removed during the rework
-        ds_keys = [fp.as_posix().replace(self.save_path.as_posix()+'/','') for fp in list(self.save_path.glob('*'))]
-        self.__dataset__ = {}
-        for ds_key in ds_keys:
-            self.__dataset__[ds_key] = TensorDict.load_memmap(self.save_path/ds_key)
+        self._dss = {}
+        for ds_key in loaders:
+            self._dss[ds_key] = TensorDict.load_memmap(self.save_path/ds_key)
         return
     
     def get_ds_attack(self):
@@ -107,11 +103,11 @@ class AttackBase(DatasetBase):
         Returns:
         - a tuple of (image, label)
         '''
-        if not self.__dataset__:
+        if not self._dss:
             raise RuntimeError('Data not loaded. Please run load_data() first.')
 
         data = {
-                'image': self.__dataset__[ds_key]['image'][idx].unsqueeze(0),
-                'label': self.__dataset__[ds_key]['label'][idx].unsqueeze(0),
-                'attack_success': self.__dataset__[ds_key]['attack_success'][idx].unsqueeze(0)}
+                'image': self._dss[ds_key]['image'][idx].unsqueeze(0),
+                'label': self._dss[ds_key]['label'][idx].unsqueeze(0),
+                'attack_success': self._dss[ds_key]['attack_success'][idx].unsqueeze(0)}
         return data
