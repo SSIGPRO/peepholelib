@@ -1,5 +1,4 @@
 # general python stuff
-from pathlib import Path as Path
 import numpy as np
 
 # import runutils_cw
@@ -12,7 +11,8 @@ import torch.optim as optim
 from torch.autograd import Variable
 
 # our stuff
-from .attacks_base import AttackBase
+from .attack_base import AttackBase
+
 """
 Carlini-Wagner attack (http://arxiv.org/abs/1608.04644).
 
@@ -139,9 +139,20 @@ class L2Adversary(object):
     - ``M``: the number of classes
     """
 
-    def __init__(self, targeted=True, confidence=0.0, c_range=(1e-3, 1e10),
-                 search_steps=5, max_steps=1000, abort_early=True,
-                 box=(-0.5, 0.5), optimizer_lr=1e-2, init_rand=False):
+    def __init__(
+            self,
+            model,
+            device,
+            targeted=True,
+            confidence=0.0,
+            c_range=(1e-3, 1e10),
+            search_steps=5,
+            max_steps=1000,
+            abort_early=True,
+            box=(-0.5, 0.5),
+            optimizer_lr=1e-2,
+            init_rand=False
+            ):
         """
         :param targeted: ``True`` to perform targeted attack in ``self.run``
                method
@@ -201,6 +212,11 @@ class L2Adversary(object):
         if box[0] >= box[1]:
             raise ValueError('box lower bound ({}) is expected to be less than '
                              'box upper bound ({})'.format(*box))
+
+        # to make interface compatible with torchattacks's
+        self.model = model
+        self.device = device 
+
         self.targeted = targeted
         self.confidence = float(confidence)
         self.c_range = (float(c_range[0]), float(c_range[1]))
@@ -223,12 +239,10 @@ class L2Adversary(object):
         # `scale_const` won't ruin the optimum ever found.
         self.repeat = (self.binary_search_steps >= 10)
 
-    def __call__(self, model, inputs, targets,  device, to_numpy=True):
+    def __call__(self, images, labels):
         """
         Produce adversarial examples for ``inputs``.
 
-        :param model: the model to attack
-        :type model: nn.Module
         :param inputs: the original images tensor, of dimension [B x C x H x W].
                ``inputs`` can be on either CPU or GPU, but it will eventually be
                moved to the same device as the one the parameters of ``model``
@@ -246,6 +260,14 @@ class L2Adversary(object):
         :type to_numpy: bool
         :return: the adversarial examples on CPU, of dimension [B x C x H x W]
         """
+        
+        # reattribution to make interface compatible with torchattacks's
+        model = self.model
+        device = self.device
+        inputs = images
+        targets = labels.long()
+        to_numpy = False
+
         # sanity check
         assert isinstance(model, nn.Module)
         assert len(inputs.size()) == 4
@@ -330,8 +352,7 @@ class L2Adversary(object):
         for sstep in range(self.binary_search_steps):
             if self.repeat and sstep == self.binary_search_steps - 1:
                 scale_consts_np = upper_bounds_np
-            scale_consts = torch.from_numpy(np.copy(scale_consts_np)).float()  # type: torch.FloatTensor
-            scale_consts = scale_consts.to(device)
+            scale_consts = torch.tensor(scale_consts_np).to(device)  # type: torch.FloatTensor
             ###-------
             # MODIFICA
             ###-------
@@ -384,7 +405,6 @@ class L2Adversary(object):
                             o_best_l2_ppred[i] = ppred
                             o_best_advx[i] = ax
                             
-
             # binary search of `scale_const`
             for i in range(batch_size):
                 tlabel = targets_np[i]
@@ -414,10 +434,12 @@ class L2Adversary(object):
                         scale_consts_np[i] *= 10
 
         if not to_numpy:
-            o_best_advx = torch.from_numpy(o_best_advx).float()
+            o_best_advx = torch.tensor(o_best_advx).to(device)
+        
+        # TODO: this line was after the return
+        torch.cuda.empty_cache() 
         return o_best_advx
 
-        torch.cuda.empty_cache() 
 
     def _optimize(self, model, optimizer, inputs_tanh_var, pert_tanh_var,
                   targets_oh_var, c_var):
@@ -587,21 +609,18 @@ class myCW(AttackBase):
    
     def __init__(self, **kwargs):
         AttackBase.__init__(self, **kwargs)
-        
-        print('---------- Attack CW init')
          
-        self.nb_classes = kwargs.get('nb_classes')
         self.confidence = kwargs.get('confidence', 0)
         self.c_range = kwargs.get('c_range', (1e-3, 1e10))
         self.max_steps = kwargs.get('max_steps', 1000)
         self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
         self.mode = kwargs.get('mode', 'random')
-
-        self.name = 'CW-'
             
         targeted = False if self.mode == None else True
         
         self.atk = L2Adversary(
+                model = self.model._model,
+                device = self.model.device,
                 targeted = targeted, 
                 confidence = self.confidence, 
                 c_range = self.c_range,
@@ -613,3 +632,6 @@ class myCW(AttackBase):
                 init_rand = False
                 )
         return        
+
+    def __call__(self, images, labels):
+        return self.atk(images, labels)

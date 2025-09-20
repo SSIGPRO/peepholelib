@@ -1,11 +1,8 @@
-# general python stuff
-from pathlib import Path as Path
-
 # torch stuff
 import torchattacks
 
 # our stuff
-from .attacks_base import AttackBase
+from .attack_base import AttackBase
 
 class myBIM(AttackBase):
     def __init__(self, **kwargs):
@@ -33,15 +30,12 @@ class myBIM(AttackBase):
             adv_images = attack(images, labels)
         """
 
-        print('---------- Attack BIM init')
         AttackBase.__init__(self, **kwargs)
-        
+
         self.eps = kwargs.get('eps', 8/255)
         self.alpha = kwargs.get('alpha', 2/255)
         self.steps = kwargs.get('steps', 10)
         self.mode = kwargs.get('mode', 'random')
-
-        self.name = 'BIM-'
 
         self.atk = torchattacks.BIM(
                 model = self.model._model, 
@@ -57,3 +51,6 @@ class myBIM(AttackBase):
             self.atk.get_least_likely_label
 
         return
+
+    def __call__(self, images, labels):
+        return self.atk(images, labels)

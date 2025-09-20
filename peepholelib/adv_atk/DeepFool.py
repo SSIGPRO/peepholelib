@@ -1,16 +1,13 @@
 # general python stuff
-from pathlib import Path as Path
-
 # torch stuff
 import torchattacks
 
 # our stuff
-from .attacks_base import AttackBase
+from .attack_base import AttackBase
 
 class myDeepFool(AttackBase):
    
     def __init__(self, **kwargs):
-        AttackBase.__init__(self, **kwargs)
         """
         'DeepFool: A Simple and Accurate Method to Fool Deep Neural Networks'
         [https://arxiv.org/abs/1511.04599]
@@ -21,18 +18,16 @@ class myDeepFool(AttackBase):
             overshoot (float): parameter for enhancing the noise. (Default: 0.02)
         Shape:
             - images: :math:`(N, C, H, W)` where `N = number of batches`, `C = number of channels`,        `H = height` and `W = width`. It must have a range [0, 1].
-            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 \leq y_i \leq` `number of labels`.
+            - labels: :math:`(N)` where each value :math:`y_i` is :math:`0 <= y_i ` `number of labels`.
             - output: :math:`(N, C, H, W)`.
         Examples::
             >>> attack = torchattacks.DeepFool(model, steps=50, overshoot=0.02)
             >>> adv_images = attack(images, labels)
         """
-        print('---------- Attack DeepFool init')
+        AttackBase.__init__(self, **kwargs)
          
         self.steps = kwargs.get('steps', 50)
         self.overshoot = kwargs.get('overshoot', 0.02)
-
-        self.name = 'DF-'
 
         self.atk = torchattacks.DeepFool(
                 model=self.model._model,
@@ -41,3 +36,5 @@ class myDeepFool(AttackBase):
                 )
         return
 
+    def __call__(self, images, labels):
+        return self.atk(images, labels)

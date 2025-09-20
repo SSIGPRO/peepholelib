@@ -1,16 +1,12 @@
-# general python stuff
-from pathlib import Path as Path
-
 # torch stuff
 import torchattacks
 
 # our stuff
-from .attacks_base import AttackBase
+from .attack_base import AttackBase
 
 class myPGD(AttackBase):
    
     def __init__(self, **kwargs):
-        AttackBase.__init__(self, **kwargs)
         """
         PGD in the paper 'Towards Deep Learning Models Resistant to Adversarial Attacks'
         [https://arxiv.org/abs/1706.06083]
@@ -34,15 +30,13 @@ class myPGD(AttackBase):
             >>> adv_images = attack(images, labels)
     
         """
-        print('---------- Attack PGD init')
+        AttackBase.__init__(self, **kwargs)
          
         self.eps = kwargs.get('eps', 8/255)
         self.alpha = kwargs.get('alpha', 1/255)
         self.steps = kwargs.get('steps', 10)
         self.random_start = kwargs.get('random_start', True)
         self.mode = kwargs.get('mode', 'random')
-        
-        self.name = 'PGD-'
         
         self.atk = torchattacks.PGD(
                 model=self.model._model, 
@@ -59,3 +53,5 @@ class myPGD(AttackBase):
             self.atk.get_least_likely_label
         return            
       
+    def __call__(self, images, labels):
+        return self.atk(images, labels)
