@@ -66,33 +66,30 @@ def DOCTOR_score(**kwargs):
     
         for _dss in tqdm(dl_dss,total=ceil(n_samples/bs)):
 
-            input = _dss['image'].to(device)
-            
+            inputs = _dss['image'].to(device)
             
             if magnitude == 0:
                 output = _dss['output'].to(device)
-                scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
-
             else:
-                input.requires_grad_(True)
+                inputs.requires_grad_(True)
                 model._model.zero_grad()
 
-                output = net(input)
+                output = net(inputs)
                 scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
-
             
                 log_scores = torch.log(torch.clamp(scores, min=1e-12))
                 log_scores.sum().backward()
 
-                new_inputs = input + magnitude * torch.sign(input.grad)
+                new_inputs = inputs + magnitude * torch.sign(inputs.grad)
                 new_inputs = new_inputs.clamp(0, 1).detach()
 
-                input.requires_grad_(False)
+                inputs.requires_grad_(False)
                 net.zero_grad(set_to_none=True)
                 with torch.no_grad():
 
                     output = net(new_inputs)
-                    scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
+
+            scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
             bsz = scores.shape[0]
 
             ret[ds_key][score_name][write_ptr:write_ptr+bsz] = scores.detach().cpu()
