@@ -12,12 +12,9 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import random_split
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 
 # CIFAR from torchvision
 from torchvision import datasets
-from tensordict import TensorDict
-from tensordict.tensordict import MemoryMappedTensor as MMT
 from PIL import Image
 
 class CustomDS(Dataset):
@@ -80,8 +77,6 @@ class Cifar(DatasetBase):
         transform = kwargs.get('transform', eval('vgg16_'+self.dataset.lower()))
         corrupted_path = kwargs.get('corrupted_path', None)
         ood_dss = kwargs.get('ood_dss', None)
-        atk_dss = kwargs.get('atk_dss', None)
-        atk_split = kwargs.get('atk_split', None)
         if not corrupted_path == None: corrupted_path = Path(corrupted_path)
 
         seed = kwargs.get('seed', 42)
@@ -166,105 +161,6 @@ class Cifar(DatasetBase):
                         labels = _labels[cl],
                         transform = transform,
                         )
-                
-        if not atk_dss == None:
-
-            attack_TensorDict = {}
-
-            for atk_name, attack_obj in atk_dss.items():
-            
-                # Store the attack object for use during generation
-                self.atk = attack_obj
-                
-                # Process both validation and test datasets
-                for split in atk_split:
-                    loader_name = f'{split}-atk-{atk_name}'
-                    dataset_key = split
-                    
-                    if dataset_key not in self._dss:
-                        print(f"Warning: {dataset_key} dataset not found, skipping {loader_name}")
-                        continue
-                    
-                    atk_path = self.data_path.parent / self.dataset / f"{atk_name}_{split}"
-                    
-                    # Check if TensorDict already exists
-                    if atk_path.exists() and (atk_path / "meta.json").exists():
-                        if self.verbose: 
-                            print(f"Loading existing TensorDict for {loader_name} from {atk_path}")
-                        try:
-                            attack_TensorDict[loader_name] = TensorDict.load_memmap(atk_path)
-                            continue  # Skip generation if successfully loaded
-                        except Exception as e:
-                            print(f"Failed to load existing TensorDict: {e}. Regenerating...")
-                    
-                    # Create directory for saving
-                    atk_path.mkdir(parents=True, exist_ok=True)
-                    
-                    if self.verbose:
-                        print(f"Generating adversarial examples for {loader_name}")
-                    
-                
-                    # Get dataset and create a temporary loader for batch processing
-                    dataset = self._dss[dataset_key]
-                    n_samples = len(dataset)
-                    
-                    # Create a DataLoader for batch processing
-                    temp_loader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=0)
-                    bs = temp_loader.batch_size
-                    
-                    # Get sample to determine shape
-                    _img, _ = dataset[0]
-                    if not isinstance(_img, torch.Tensor):
-                        _img = transform(_img) if transform else _img
-                    
-                    # Initialize TensorDict
-                    attack_TensorDict[loader_name] = TensorDict(batch_size=n_samples)
-                    attack_TensorDict[loader_name]['image'] = MMT.empty(shape=torch.Size((n_samples,) + _img.shape))
-                    attack_TensorDict[loader_name]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-                    attack_TensorDict[loader_name]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-                    
-                    # Set model to evaluation mode
-                    if hasattr(self, 'model') and self.model is not None:
-                        self.model.eval()
-                    else:
-                        raise RuntimeError("A model is required to generate adversarial examples. Please provide a model.")
-                    
-                    # Generate adversarial examples in batches
-                    for bn, data in enumerate(tqdm(temp_loader, desc=f"Generating {atk_name} {split} examples")):
-                        images, labels = data
-                        images = images.to(self.device)
-                        labels = labels.to(self.device)
-                        n_in = len(images)
-                        
-                        # Generate adversarial examples
-                        attack_images = self.atk(images, labels)
-                        
-                        # Test attack success
-                        with torch.no_grad():
-                            y_predicted = self.model(attack_images)
-                            predicted_labels = y_predicted.argmax(axis=1)
-                            results = predicted_labels != labels
-                        
-                        # Store results in TensorDict
-                        start_idx = bn * bs
-                        end_idx = start_idx + n_in
-                        attack_TensorDict[loader_name][start_idx:end_idx] = {
-                            'image': attack_images.cpu(),  # Move back to CPU for storage
-                            'label': labels.cpu(),
-                            'attack_success': results.cpu()
-                        }
-                    
-                    # Save TensorDict to disk
-                    file_path = atk_path
-                    n_threads = kwargs.get('n_threads', 32)
-                    if self.verbose: 
-                        print(f'Saving {loader_name} to {file_path}.')
-                    attack_TensorDict[loader_name].memmap(file_path, num_threads=n_threads)
-            
-            # Update the main datasets dictionary with TensorDict references
-            if not hasattr(self, '_attack_tensordicts'):
-                self._attack_tensordicts = {}
-            self._attack_tensordicts.update(attack_TensorDict)                
 
         if not ood_dss == None:
 
