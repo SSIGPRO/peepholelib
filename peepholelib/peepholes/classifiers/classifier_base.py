@@ -12,7 +12,7 @@ def null_parser(**kwargs):
     data = kwargs['data']
     return data['data'], data['label'] 
     
-class ClassifierBase(DrillBase): 
+class ClassifierBase(DrillBase, metaclass=abc.ABCMeta): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
@@ -68,7 +68,8 @@ class ClassifierBase(DrillBase):
         - batch_size: Do the computation in batchs. Defaults to 64.
         - verbose (Bool): Print progress messages. 
         '''
-
+        
+        dss = kwargs.get('datasets')
         cvs = kwargs.get('corevectors')
         loader = kwargs.get('loader', 'train')
         bs = kwargs.get('batch_size', 64)
@@ -78,7 +79,7 @@ class ClassifierBase(DrillBase):
         _empp = torch.zeros(self.nl_class, self.nl_model)
         
         # create dataloaders
-        dss_dl = DataLoader(cvs._dss[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
+        dss_dl = DataLoader(dss._dss[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
         cvs_dl = DataLoader(cvs._corevds[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
 
         # iterate over _fit_data

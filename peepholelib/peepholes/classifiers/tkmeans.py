@@ -79,6 +79,9 @@ class KMeans(ClassifierBase): # quella buona
             
         return probs 
     
+    def predict(self, data):
+        return self._classifier.predict(data)
+
     def save(self, **kwargs):
         self._clas_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self._clas_path)
