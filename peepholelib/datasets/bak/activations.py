@@ -17,7 +17,10 @@ from peepholelib.coreVectors.prediction_fns import multilabel_classification
     
 def get_activations(self, **kwargs):
     self.check_uncontexted()
-    
+   
+    # TODO: move this to new datasets
+    raise RuntimeError('Deprecated.')
+
     bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64
     n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False

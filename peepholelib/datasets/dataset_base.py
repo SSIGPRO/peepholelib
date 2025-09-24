@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 
 # our stuff
-from peepholelib.datasets.functional.prediction_fns import multilabel_classification
+from peepholelib.models.prediction_fns import multilabel_classification
 
 class DatasetBase(metaclass=abc.ABCMeta):
 
@@ -56,7 +56,7 @@ class DatasetBase(metaclass=abc.ABCMeta):
         self._ 
         
         
-    #@abc.abstractmethod # TODO: figure out why does not work
+    #@abc.abstractmethod
     def __load_data__(self):
         raise NotImplementedError()
     
