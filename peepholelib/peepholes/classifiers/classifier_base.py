@@ -18,6 +18,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
 
         # number of classes in classifier a.k.a. number of clusters
         self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None# computed in fit()
+        self.label_key = kwargs['label_key']
 
         self._classifier = None
 

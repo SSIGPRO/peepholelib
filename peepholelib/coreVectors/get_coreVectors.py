@@ -26,6 +26,7 @@ def get_coreVectors(self, **kwargs):
     Args:
     - datasets (dict(str: peepholelib.datasets.parsedDataset.ParsedDataset)): Parsed datasets.
     - loaders (list[str]): List of loaders in `datasets.keys()` to compute corevectors. If `None` uses `datasets._dss.keys()`. Defaults to `None`.
+    - input_key TODO
     - reduction_fns (dict(str: Callable)): A dictionary with keys being the module names as per the model's state_dict, and values being a callable foo(acts) which takes as input the model's batched activations and returns a dimentionality reduced version of its outputs. 
     - activations_parser (callable): A function for parsing activations. Defaults to 'get_in_activations()' (see peepholelib.models.model_wrap.py for details on how we get the activations).
     - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
@@ -36,9 +37,9 @@ def get_coreVectors(self, **kwargs):
     
     datasets = kwargs.get('datasets')
     loaders = kwargs.get('loaders', None)
+    input_key = kwargs.get('input_key','image')
     reduction_fns = kwargs.get('reduction_fns')
     activations_parser = kwargs.get('activations_parser', get_in_activations)
-
     bs = kwargs.get('batch_size', 64) 
     n_threads = kwargs.get('n_threads', 1) 
 
@@ -94,7 +95,7 @@ def get_coreVectors(self, **kwargs):
         else:
             # from a model with a dry run
             with torch.no_grad():
-                model(datasets._dss[ds_key][0:1]['image'].to(device))
+                model(datasets._dss[ds_key][0:1][input_key].to(device))
                 _act0 = activations_parser(model._acts)
 
         for mk in model._target_modules.keys(): 
@@ -140,7 +141,7 @@ def get_coreVectors(self, **kwargs):
 
             for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
                 with torch.no_grad():
-                    model(ds_data['image'].to(device))
+                    model(ds_data[input_key].to(device))
                     
                 for mk in _modules_to_save:
                     act_data = activations_parser(model._acts)

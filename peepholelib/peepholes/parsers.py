@@ -29,6 +29,7 @@ def trim_corevectors(**kwargs):
         return tcvs
     else:
         labels =  dss[label_key]
+        print(labels)
         return tcvs, labels  
 
 def trim_channelwise_corevectors(**kwargs):
