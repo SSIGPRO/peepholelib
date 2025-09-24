@@ -1,4 +1,4 @@
-import os
+
 # general python stuff
 from pathlib import Path
 import pandas as pd
@@ -8,29 +8,42 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 
-
 # peepholelib imports
 from peepholelib.datasets.dataset_base import DatasetBase
-# from peepholelib.datasets.transforms import vgg16_imagenet
+from peepholelib.datasets.transforms import vgg16_imagenet
 
 class Sentinel(DatasetBase):#DatasetBase
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        #DatasetBase.__init__(self, **kwargs)
         
-        self.data_dir = "/srv/newpenny/dataset/TASI/sentinel"
-        self.freq = '4s'
+        #self.freq = kwargs.get('freq', '4s')
         
-        # load the dataset
-        self.dataset = f'sentinel_{self.freq}_clean_std'
-        print(f"dataset: {self.dataset}")
         return
 
     def load_data(self, **kwargs):
+        train_file = Path(self.data_path)/'train_data.pkl'
+        test_file = Path(self.data_path)/'test_data.pkl'
 
-        data_train_std = pd.read_pickle(os.path.join(self.data_dir, self.dataset, 'train_data.pkl'))
-        data_test_std = pd.read_pickle(os.path.join(self.data_dir, self.dataset, 'test_data.pkl'))
+        data_train_std = pd.read_pickle(train_file.as_posix())
+        data_test_std = pd.read_pickle(test_file.as_posix())
+        #print(f'Data_Train:{data_train_std}\nData_Test:{data_test_std}')
+        #data_test_std = pd.read_pickle((self.data_dir, self.dataset, 'test_data.pkl'))
         
+
+        seed = kwargs['seed']
+        #data_test_std['label'] = 0
+        data_train_df_ = data_train_std.values
+        train_set , val_set = torch.utils.data.random_split(
+                data_train_df_,
+                [0.8, 0.2],
+                generator = torch.Generator().manual_seed(seed)
+        )
+        print(type(train_set))
+        print(f'train set:{train_set}\nval set:{val_set}')
+        quit()
+        '''
         #transform = kwargs['transform'] if 'transform' in kwargs else ToTensor()
 
         #seed = kwargs['seed']
@@ -68,7 +81,7 @@ class Sentinel(DatasetBase):#DatasetBase
         # metadata
         #self._dss = {"train": train_df, "val": val_df}
         #self._classes = {i: c for i, c in enumerate(train_ds.classes)}
-
+        '''
         return
     
     def get(self, ds_key, idx):
@@ -86,6 +99,3 @@ class Sentinel(DatasetBase):#DatasetBase
             raise RuntimeError('Data not loaded. Please run load_data() first.')
         
         return [self._dss[ds_key][idx]]
-
-mydata = Sentinel()
-mydata.load_data()
