@@ -229,6 +229,7 @@ def plot_attacks(**kwargs):
                 axs[2].set_title("Receiver Operating Characteristic")
                 axs[2].legend(loc="lower right")
                 axs[2].grid(True)
+
                 if ds_key == 'test':
                     axs_type[j].plot(fpr, tpr, lw=2, label=f"{attack} = {auc_value:.3f}")
                     axs_type[j].set_xlim([0.0, 1.0])
@@ -240,25 +241,18 @@ def plot_attacks(**kwargs):
                     axs_type[j].grid(True)
 
                     if len(attacks)!=1:
-
-                        axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
-                        axs_atk[k].set_xlim([0.0, 1.0])
-                        axs_atk[k].set_ylim([0.0, 1.05])
-                        axs_atk[k].set_xlabel("False Positive Rate")
-                        axs_atk[k].set_ylabel("True Positive Rate")
-                        axs_atk[k].set_title(f"{attack}")
-                        axs_atk[k].legend(loc="lower right")
-                        axs_atk[k].grid(True)
+                        _axs_atk = axs_atk[k]
                     else:
-                        axs_atk.plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
-                        axs_atk.set_xlim([0.0, 1.0])
-                        axs_atk.set_ylim([0.0, 1.05])
-                        axs_atk.set_xlabel("False Positive Rate")
-                        axs_atk.set_ylabel("True Positive Rate")
-                        axs_atk.set_title(f"{attack}")
-                        axs_atk.legend(loc="lower right")
-                        axs_atk.grid(True)
+                        _axs_atk = axs_atk
 
+                    _axs_atk.plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
+                    _axs_atk.set_xlim([0.0, 1.0])
+                    _axs_atk.set_ylim([0.0, 1.05])
+                    _axs_atk.set_xlabel("False Positive Rate")
+                    _axs_atk.set_ylabel("True Positive Rate")
+                    _axs_atk.set_title(f"{attack}")
+                    _axs_atk.legend(loc="lower right")
+                    _axs_atk.grid(True)
                 
             fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
     fig_type.savefig((path/f'AUC_based_type.png').as_posix(), dpi=300, bbox_inches='tight')     
