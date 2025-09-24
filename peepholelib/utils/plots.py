@@ -312,23 +312,6 @@ def plot_confidence(**kwargs):
             s_oks = _scores[results == True]
             s_kos = _scores[results == False]
 
-            sorted_pos, _ = torch.sort(s_oks, descending=True)
-            sorted_neg, _ = torch.sort(s_kos, descending=True)
-            if ds_key == 'test':
-                tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
-                threshold = sorted_pos[tpr95_index]                
-                fpr95 = (s_kos >= threshold).float().mean().item()
-                print(f'FPR95 for {ds_key} {score_name} split: {fpr95:.4f}')
-
-                fpr5_index = int(torch.ceil(torch.tensor(0.05 * sorted_neg.numel())).item()) - 1
-                fpr5_index = max(0, min(fpr5_index, sorted_neg.numel() - 1))
-
-                # threshold = punteggio del negativo a quel rank
-                threshold = sorted_neg[fpr5_index]
-               
-                tpr5 = (s_oks >= threshold).float().mean().item()
-                print(f'TPR5 for {ds_key} {score_name} split: {tpr5:.4f}')
-        
             # compute AUC for score and model
             auc = AUC().update(_scores, results.int()).compute().item()
             if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
