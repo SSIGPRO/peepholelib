@@ -10,6 +10,9 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
+def img_classification_acc(pred, target):
+    return torch.count_nonzero(torch.argmax(pred, axis=1)==labels)
+
 def fine_tune(**kwargs):
     model = kwargs['model']
     device = model.device
@@ -23,13 +26,15 @@ def fine_tune(**kwargs):
     ds = kwargs['dataset']
     train_key = kwargs.get('train_key', 'train')
     val_key = kwargs.get('val_key', 'val')
+    in_parser = kwargs.get('in_parser', lambda x:x)
+    out_parser = kwargs.get('out_parser', lambda x:x.long())
 
     # training artifacts
     _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
     loss_kwargs = kwargs.get('loss_kwargs', dict())
     _opt = kwargs.get('optimizer', torch.optim.SGD)
     optim_kwargs = kwargs.get('optim_kwargs', dict())
-    pred_fn = kwargs.get('pred_fn', partial(torch.argmax, axis=1))
+    acc_fn = kwargs.get('acc_fn', img_classification_acc)
     _sched = kwargs.get('scheduler', None)
     scheduler_kwargs = kwargs['scheduler_kwargs'] if 'scheduler_kwargs' in kwargs and 'scheduler' in kwargs else {} 
     
@@ -58,8 +63,8 @@ def fine_tune(**kwargs):
         iter_val = iterations 
 
     # dataloader for the dataset
-    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs, collate_fn=lambda x:x)
-    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs, collate_fn=lambda x:x) 
+    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x)
+    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x) 
     
     # to save losses
     file = path/name
@@ -112,7 +117,6 @@ def fine_tune(**kwargs):
     # training loop
     if verbose: print('training------')
     best_val_loss = float('inf')
-    patience_counter = 0
     old_lr = lr
 
     for epoch in range(initial_epoch, max_epochs):
@@ -121,17 +125,21 @@ def fine_tune(**kwargs):
         loss_acc = 0.0
         acc_acc = 0.0
         samples_acc = 0
-        for it, data in zip(range(iter_train), train_dl):
+        for it, _data in zip(range(iter_train), train_dl):
+            data = in_parser(_data)
             n_samples = len(data['image'])
             samples_acc += n_samples 
-            pred = model(data['image'].to(device))
-            labels = data['label'].long().to(device)
+            labels = data['label'].to(device)
+
+            model_out = model(data['image'].to(device))
+            pred = out_parser(model_out)
             loss = loss_fn(pred, labels)
             optim.zero_grad()
             loss.backward()
             optim.step()
             loss_acc += loss*n_samples
-            acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
+            acc_acc += acc_fn(pred, labels)
+
         train_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
         train_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
 
@@ -140,14 +148,17 @@ def fine_tune(**kwargs):
             loss_acc = 0.0
             acc_acc = 0.0
             samples_acc = 0
-            for it, data in zip(range(iter_val), val_dl):
+            for it, _data in zip(range(iter_val), val_dl):
+                data = in_parser(_data)
                 n_samples = len(data['image'])
                 samples_acc += n_samples 
-                pred = model(data['image'].to(device))
-                labels = data['label'].long().to(device)
+                labels = data['label'].to(device)
+
+                model_out = model(data['image'].to(device))
+                pred = out_parser(model_out)
                 loss = loss_fn(pred, labels)
                 loss_acc += loss*n_samples
-                acc_acc += torch.count_nonzero(pred_fn(pred)==labels)
+                acc_acc += acc_fn(pred, labels)
             val_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
             val_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
 
@@ -164,7 +175,6 @@ def fine_tune(**kwargs):
         
         if loss < best_val_loss:
             best_val_loss = loss
-            patience_counter = 0
             # Save best model
             _d = {
                   'train_losses': train_losses[:epoch+1],
@@ -176,7 +186,6 @@ def fine_tune(**kwargs):
                   'scheduler': scheduler.state_dict() if not scheduler == None else None
                   }
             torch.save(_d, best_model_path/'best_model_config.pt')
-            torch.save(model._model.state_dict(), best_model_path/'best_model.pth')
 
         if verbose: print(f'epoch {epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]} - train acc: {train_acc[epoch]} - val acc: {val_acc[epoch]} - time: {time()-t0}')
         

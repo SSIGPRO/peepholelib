@@ -208,7 +208,6 @@ def DMD_score(**kwargs):
     test_pos = torch.stack([phs._phs[pos_loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
 
     nps = len(train_pos) # number of positive samples
-    idx = torch.randperm(nps)
 
     for neg_test_key, neg_train_loaders in neg_loaders.items():
         nnl = len(neg_train_loaders) # number of negative loaders
@@ -218,6 +217,7 @@ def DMD_score(**kwargs):
         train_neg = []
         for i, nl in enumerate(neg_train_loaders):
             _train_neg = torch.stack([phs._phs[nl][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+            idx = torch.randperm(len(_train_neg))
             train_neg.append(_train_neg[idx[i*nspnl:(i+1)*nspnl]])
         train_neg = torch.vstack(train_neg)
 

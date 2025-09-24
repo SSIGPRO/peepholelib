@@ -33,6 +33,7 @@ def get_svds(self, **kwargs):
    
     # Turn on activation saving
     self.set_activations(save_input=True, save_output=False)
+    
     # Dry run to get shapes
     with torch.no_grad():
         _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)

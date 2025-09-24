@@ -105,3 +105,77 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
 
         ret = csrs
     return ret 
+
+def ct2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, warns=True):
+    if not isinstance(layer, torch.nn.ConvTranspose2d):
+        raise RuntimeError('Input layer should be a torch.nn.Conv2D or torch.nn.ConvTranspose2d')
+
+    weight = layer.weight
+    bias = layer.bias
+    groups = layer.groups
+    stride = layer.stride
+    padding = layer.padding
+    dilation = layer.dilation
+    output_padding = layer.output_padding
+
+    if padding != (0,0) or dilation != (1,1) or groups!=1 or channel_wise == True:
+        raise RuntimeError('This functions does not account for padding, dilation, groups, and channelwise if you extendent it, please send us a PR ;).')
+    
+    kernel = weight
+    Wk = weight.shape[3]
+    Hk = weight.shape[2]
+
+    # swap in and out
+    # We will compute as a normal conv and transpose later.
+    # Note that the paddins are inverted here
+    Hout = input_shape[1]+2*padding[0]
+    Wout = input_shape[2]+2*padding[1]
+    # TODO: padding is not working
+    Hin=(Hout-1)*stride[0]-2*padding[0]+dilation[0]*(Hk-1)+output_padding[0]+1
+    Win=(Wout-1)*stride[1]-2*padding[1]+dilation[1]*(Wk-1)+output_padding[1]+1
+
+    Cout, Cin = kernel.shape[0], kernel.shape[1]
+    kernel_size = Hk*Wk
+    input_size = Hin*Win
+    output_size = Hout*Wout
+    
+    # getting columns
+    cols = torch.zeros(Cout*output_size, Cin*kernel_size, dtype=torch.int)
+    data = torch.zeros(Cout*output_size, Cin*kernel_size)
+    
+    base_row = torch.zeros(Cin*kernel_size, dtype=torch.int)
+    for cin in range(Cin):
+        c_shift = cin*input_size
+        for hk in range(Hk):
+            h_shift = hk*Win
+            for wk in range(Wk):
+                idx = cin*kernel_size+hk*Wk+wk
+                w_shift = wk
+                base_row[idx] = c_shift+h_shift+w_shift
+
+    for cout in range(0, Cout): 
+        k =  kernel[cout, :, :, :].flatten() 
+        for ho in range(Hout):
+            h_shift = ho*Win*stride[0]
+            for wo in range(Wout):
+                w_shift = wo*stride[1]
+                idx = cout*output_size+ho*Wout+wo
+                shift = h_shift+w_shift
+                cols[idx, 0:Cin*kernel_size] = base_row+shift
+                data[idx, 0:Cin*kernel_size] = k
+                    
+    shape_out = torch.Size((Cout*output_size+(0 if bias is None else 1), Cin*input_size))
+    crow = (torch.arange(shape_out[0])*kernel_size*Cin).int()
+    if bias is not None:
+        crow = torch.hstack((crow, torch.tensor([crow[-1]+Cin*input_size])))
+
+        cols = cols.flatten()
+        data = data.flatten()
+
+        cols = torch.hstack((cols, torch.arange(Cin*Hin*Win))) 
+        for cin in range(0, Cin): 
+            data = torch.hstack((data, bias[cin].cpu()*torch.ones(Hin*Win))) 
+
+    ret = torch.sparse_csr_tensor(crow, cols, data, size=shape_out, device=device)
+    ret = ret.t()
+    return ret 

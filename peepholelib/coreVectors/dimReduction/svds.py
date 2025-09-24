@@ -26,7 +26,7 @@ def linear_svd_projection(**kwargs):
     device = kwargs['device'] 
     
     if use_s:
-        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+        reduct_m = (torch.diag(svd['s'])@svd['Vh']).detach().to(device)
     else:
         reduct_m = svd['Vh'].detach().to(device)
 
@@ -48,7 +48,7 @@ def linear_svd_projection_ViT(**kwargs):
     device = kwargs['device'] 
 
     if use_s:
-        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+        reduct_m = (torch.diag(svd['s'])@svd['Vh']).detach().to(device)
     else:
         reduct_m = svd['Vh'].detach().to(device)
 
@@ -82,7 +82,7 @@ def conv2d_toeplitz_svd_projection(**kwargs):
     device = kwargs['device'] 
 
     if use_s:
-        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+        reduct_m = (torch.diag(svd['s'])@svd['Vh']).detach().to(device)
     else:
         reduct_m = svd['Vh'].detach().to(device)
 
@@ -133,7 +133,7 @@ def conv2d_kernel_svd_projection(**kwargs):
     device = kwargs['device'] 
     
     if use_s:
-        reduct_m = torch.diag(svd['s'].detach().to(device))@svd['Vh'].detach().to(device)
+        reduct_m = (torch.diag(svd['s'])@svd['Vh']).detach().to(device)
     else:
         reduct_m = svd['Vh'].detach().to(device)
 

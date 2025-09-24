@@ -22,15 +22,15 @@ class GMM(ClassifierBase): # quella buona
                 **cls_kwargs,
                 trainer_params = dict(
                     num_nodes = 1,
+                    max_epochs = 50000,
                     accelerator = self.device.type,
                     devices = [self.device.index],
-                    max_epochs = 50000,
                     enable_progress_bar = False 
                     )
                 )
 
         self._clas_path = self.path/(self.name+'.GMM'+self._suffix)
-        self._empp_file = self._clas_path/'empp.pt'
+        self._empp_file = self._clas_path/f'empp_{self.label_key}.pt'
         return
 
     def fit(self, **kwargs):
@@ -42,7 +42,7 @@ class GMM(ClassifierBase): # quella buona
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
         - verbose (Bool): Print progress messages. 
         '''
-        _cvs = kwargs.get('corevectors')
+        _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
@@ -94,5 +94,10 @@ class GMM(ClassifierBase): # quella buona
     def load(self, **kwargs):
         self._classifier = tGMM.load(self._clas_path)
         super().load()
+        
+        return
+    
+    def load_without_empp(self, **kwargs):
+        self._classifier = tGMM.load(self._clas_path)
         
         return
