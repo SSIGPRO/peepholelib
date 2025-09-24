@@ -229,6 +229,7 @@ def plot_attacks(**kwargs):
                 axs[2].set_title("Receiver Operating Characteristic")
                 axs[2].legend(loc="lower right")
                 axs[2].grid(True)
+
                 if ds_key == 'test':
                     axs_type[j].plot(fpr, tpr, lw=2, label=f"{attack} = {auc_value:.3f}")
                     axs_type[j].set_xlim([0.0, 1.0])
@@ -239,14 +240,19 @@ def plot_attacks(**kwargs):
                     axs_type[j].legend(loc="lower right")
                     axs_type[j].grid(True)
 
-                    axs_atk[k].plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
-                    axs_atk[k].set_xlim([0.0, 1.0])
-                    axs_atk[k].set_ylim([0.0, 1.05])
-                    axs_atk[k].set_xlabel("False Positive Rate")
-                    axs_atk[k].set_ylabel("True Positive Rate")
-                    axs_atk[k].set_title(f"{attack}")
-                    axs_atk[k].legend(loc="lower right")
-                    axs_atk[k].grid(True)
+                    if len(attacks)!=1:
+                        _axs_atk = axs_atk[k]
+                    else:
+                        _axs_atk = axs_atk
+
+                    _axs_atk.plot(fpr, tpr, lw=2, label=f"{type} = {auc_value:.3f}")
+                    _axs_atk.set_xlim([0.0, 1.0])
+                    _axs_atk.set_ylim([0.0, 1.05])
+                    _axs_atk.set_xlabel("False Positive Rate")
+                    _axs_atk.set_ylabel("True Positive Rate")
+                    _axs_atk.set_title(f"{attack}")
+                    _axs_atk.legend(loc="lower right")
+                    _axs_atk.grid(True)
                 
             fig.savefig((path/f'{attack}_{type}_distribution.png').as_posix(), dpi=300, bbox_inches='tight')    
     fig_type.savefig((path/f'AUC_based_type.png').as_posix(), dpi=300, bbox_inches='tight')     
@@ -283,7 +289,6 @@ def plot_confidence(**kwargs):
     if loaders == None: loaders = list(scores.keys())
 
     fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
-
     
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
     lines = ['--', '-']
@@ -306,7 +311,7 @@ def plot_confidence(**kwargs):
 
             s_oks = _scores[results == True]
             s_kos = _scores[results == False]
-        
+
             # compute AUC for score and model
             auc = AUC().update(_scores, results.int()).compute().item()
             if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
@@ -471,6 +476,79 @@ def plot_confidence(**kwargs):
     plt.savefig((path/f'confidence.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
+
+def FPR95_confidence(**kwargs):
+    '''
+    Computes the FPR at 95% TPR for the confidence case
+
+    Args:
+    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
+    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
+    - verbose (bool): print progress messages.
+    '''
+
+    cvs = kwargs.get('corevectors')
+    scores = kwargs.get('scores')
+    loaders = kwargs.get('loaders', None)
+
+    if loaders == None: loaders = list(scores.keys())
+
+    for ds_key in loaders:
+            
+            score = scores[ds_key]
+
+            for name, s in score.items():
+                
+                results = cvs._dss[ds_key]['result'] 
+
+                s_oks = s[results == True]
+                s_kos = s[results == False]
+
+                sorted_pos, _ = torch.sort(s_oks, descending=True)
+                
+                tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
+                threshold = sorted_pos[tpr95_index]                
+                fpr95 = (s_kos >= threshold).float().mean().item()
+                print(f'FPR95 for {ds_key} {name} split: {fpr95:.4f}')
+    return
+
+def FPR95_OOD_AA(**kwargs):
+    '''
+    Computes the FPR at 95% TPR for both OOD and Adversarial Attacks
+
+    Args:
+    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
+    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
+    - verbose (bool): print progress messages.
+    '''
+
+    cvs = kwargs.get('corevectors')
+    scores = kwargs.get('scores')
+    val_loader = kwargs.get('val_loader', None)
+    test_loaders = kwargs.get('test_loaders', None)
+
+    scores_name = list(scores[val_loader].keys())
+
+    for sn in scores_name:
+        s_val = scores[val_loader][sn]
+        results_val = cvs._dss[val_loader]['result']
+
+        s_oks = s_val[results_val == True]
+        sorted_pos, _ = torch.sort(s_oks, descending=True)
+        tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
+        threshold = sorted_pos[tpr95_index]
+
+        for test in test_loaders:
+            s_test = scores[test][sn]
+            results_test = cvs._dss[test]['result']
+            s_kos = s_test[results_test == False]
+            fpr95 = (s_kos >= threshold).float().mean().item()
+            print(f'FPR95 for {test} {sn} split: {fpr95:.4f}')
+
+    return
+
 
 def plot_calibration(**kwargs):
     '''
