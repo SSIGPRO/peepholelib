@@ -1,255 +1,9 @@
 # torch stuff
 import torch
-from torch.nn.functional import softmax as sm
-from torch.utils.data import DataLoader
 from sklearn.linear_model import LogisticRegressionCV
-from tqdm import tqdm
-from tensordict import MemoryMappedTensor as MMT
 import numpy as np
-from math import ceil
 
-def DOCTOR_score(**kwargs):
-    '''
-    Compute DOCTOR score described in https://arxiv.org/pdf/2106.02395
-    Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - loaders (list[str]): loaders to consider, usually `['train', 'test', 'val']`, if `None`, gets all loaders in `corevectors._dss`. Defaults to `None`.
-    - net (torch.nn.Module): model used to compute the logits.
-    - temperature (float): temperature factor. Defaults to 1.0.
-    - magnitude (float): magnitude of the adversarial perturbation.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-    - bs (int): batch size used to compute the scores.
-    - device (torch.device): device where to perform the computations.
-    - n_threads (int): number of workers used in the dataloader. Defaults to 1.
-    '''
-
-    cvs = kwargs.get('corevectors')
-    loaders = kwargs.get('loaders', None)
-    temperature = kwargs.get('temperature', 1.)
-    magnitude = kwargs.get('magnitude', 0.)
-    append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
-    model = kwargs.get('net', None)
-    device = kwargs.get('device')
-    n_threads = kwargs.get('n_threads', 32)
-    bs = kwargs.get('bs', 128)
-
-    # parse arguments
-    if loaders == None: loaders = list(cvs._dss.keys())
-    score_name = 'DOCTOR'
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    net = model._model
-    net.to(device)
-    net.eval()
-
-    for ds_key in loaders:
-        dssds = cvs._dss[ds_key]
-
-        n_samples = len(dssds)
-        
-        ret[ds_key][score_name] = torch.empty(n_samples, dtype=torch.float32)
-        
-        dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads, shuffle=False)
-        
-        write_ptr = 0
-    
-        for _dss in tqdm(dl_dss,total=ceil(n_samples/bs)):
-
-            inputs = _dss['image'].to(device)
-            
-            if magnitude == 0:
-                output = _dss['output'].to(device)
-            else:
-                inputs.requires_grad_(True)
-                model._model.zero_grad()
-
-                output = net(inputs)
-                scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
-            
-                log_scores = torch.log(torch.clamp(scores, min=1e-12))
-                log_scores.sum().backward()
-
-                new_inputs = inputs + magnitude * torch.sign(inputs.grad)
-                new_inputs = new_inputs.clamp(0, 1).detach()
-
-                inputs.requires_grad_(False)
-                net.zero_grad(set_to_none=True)
-                with torch.no_grad():
-
-                    output = net(new_inputs)
-
-            scores = torch.sum(sm(output/temperature, dim=1) ** 2, dim=1)
-            bsz = scores.shape[0]
-
-            ret[ds_key][score_name][write_ptr:write_ptr+bsz] = scores.detach().cpu()
-
-            write_ptr += bsz
-                
-    return ret       
-
-def RelU_score(**kwargs):
-    '''
-    Compute the Relative Uncertainty score as described in https://arxiv.org/abs/2306.01710.
-
-    Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - loaders (list[str]): loaders to consider, usually `['train', 'test', 'val']`, if `None`, gets all loaders in `corevectors._dss`. Defaults to `None`.
-    - fit_key (str): loader to fit distributions. Usually `'train'`. Defaults to `'train'`.
-    - lbd (float): lambda factor. Defaults to 0.5.
-    - temperature (float): temperature factor. Defaults to 1.0.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-
-    '''
-
-    cvs = kwargs.get('corevectors')
-    loaders = kwargs.get('loaders', None)
-    fit_key = kwargs.get('fit_key', 'train')
-    lbd = kwargs.get('lbd', 0.5)
-    temperature = kwargs.get('temperature', 1.)
-    append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
-    score_name = kwargs.get('score_name', 'Rel-U')
-
-    # parse arguments
-    if loaders == None: loaders = list(cvs._dss.keys())
-    
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-    
-    #-----------
-    # computations
-    #-----------
-    results = cvs._dss[fit_key]['result']
-    outputs = sm(cvs._dss[fit_key]['output']/temperature, dim=-1)
-
-    train_probs_pos = outputs[results == 1] 
-    train_probs_neg = outputs[results == 0] 
-
-    d_pos = torch.einsum("ij,ik->ijk", train_probs_pos, train_probs_pos).mean(dim=0)
-    d_neg = torch.einsum("ij,ik->ijk", train_probs_neg, train_probs_neg).mean(dim=0)
-    params = -(1 - lbd)*d_pos + lbd*d_neg 
-    params = torch.tril(params, diagonal=-1)
-    params = params + params.T
-    params = torch.relu(params)
-    params = params / params.norm()
-
-    _scores = torch.diag(outputs@params@outputs.T) 
-    s_min = _scores.min()
-    s_max = _scores.max()
-
-    for ds_key in loaders:
-        outputs = sm(cvs._dss[ds_key]['output']/temperature, dim=-1)
-        _params = torch.tril(params, diagonal=-1)
-        _params = _params + _params.T
-        _params = _params / _params.norm()
-        scores = torch.diag(outputs@_params@outputs.T) 
-        ret[ds_key][score_name] = 1-((scores - s_min)/(s_max - s_min)).clip(0., 1.)
-
-    return ret
-
-def conceptogram_protoclass_score(**kwargs):
-    '''
-    Compute the Proto-Class score of all conceptograms in `phs._phs[`loaders`]`. `target_modules` are passed to `ph.get_conceptograms()` so the evaluation only consider the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. #TODO: Add paper or a full description.
-
-    Args:
-    - peepholes (peepholelib.peepholes.Peepholes): peepholes from which to take the conceptograms.
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
-    - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
-    - proto_key (str): The key in `loaders` to get compute the protoclasses from.
-    - proto_th (float): Model's confidence threshold to select samples for the protoclass computation ('0 <= proto_th <= 1').
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-    - proto proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
-    '''
-
-    phs = kwargs.get('peepholes')
-    cvs = kwargs.get('corevectors')
-    loaders = kwargs.get('loaders', None)
-    target_modules = kwargs.get('target_modules', None)
-    proto_key = kwargs.get('proto_key', 'train')
-    proto_th = kwargs.get('proto_threshold', 0.9)
-    append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
-    proto = kwargs.get('proto', None) #TODO: is this used? remove
-    
-    # parse arguments
-    if loaders == None: loaders = list(phs._phs.keys())
-    score_name = 'Proto-Class'
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    #-----------
-    # computations
-    #-----------
-    # get conceptogram 
-    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
-
-    # sizes and values just to facilitate 
-    nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
-    nc = cpss[loaders[0]].shape[2] # number of classes
-    
-    if proto == None:
-        cps = cpss[proto_key]
-        results = cvs._dss[proto_key]['result']
-        labels = cvs._dss[proto_key]['label']
-        confs = sm(cvs._dss[proto_key]['output'], dim=-1).max(dim=-1).values
-        # compute proto-classes
-        proto = torch.zeros(nc, nd, nc)
-        for i in range(nc):
-            cl = torch.logical_and(labels == i, results == 1)
-            idx = torch.logical_and(cl, confs>proto_th)
-            
-            _p = cps[idx].sum(dim=0)  ## P'_j
-            _p /= _p.sum(dim=1, keepdim=True)
-            proto[i][:] = _p[:]
-    
-    # compute protoclass score
-    for ds_key in loaders:
-        cps = cpss[ds_key]
-        results = cvs._dss[ds_key]['result']
-        pred = (cvs._dss[ds_key]['pred']).int()
-        
-        scores = (proto[pred]*cps).sum(dim=(1,2))
-        norm_proto = proto[pred].norm(dim=(1,2))
-        norm_cps = cps.norm(dim=(1,2))
-        ret[ds_key][score_name] = scores/(norm_proto*norm_cps)
-        
-    return ret, proto
-
-def dmd_base(**kwargs):
+def DMD_base(**kwargs):
     '''
     Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
     - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
@@ -317,7 +71,7 @@ def dmd_base(**kwargs):
     
     return ret
 
-def dmd_plus(**kwargs):
+def DMD_plus(**kwargs):
     '''
     Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
     - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
@@ -390,13 +144,12 @@ def dmd_plus(**kwargs):
 
 def __DMD_score__(**kwargs):
     '''
-    Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
+    Compute the DMD score by training a linear regressor on two datasets.
 
     Args:
-    - train_data
-    - train_label (numpy.array): samples used to train the Logistic regresser.
-    - test_data
-    - test_label (numpy.array) samples used to validate the trained Logistic regeressor.
+    - train_data (torch.Tensor): train samples.
+    - train_label (torch.Tensor): train labels.
+    - test_data (torch.tensor): test samples.
 
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
@@ -465,6 +218,7 @@ def DMD_score(**kwargs):
     # it would be better to stack fisrt then get the max
     train_ori = torch.stack([phs._phs[id_loader_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
     test_ori = torch.stack([phs._phs[id_loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+
     for ood_train_key, ood_test_key in zip(ood_loaders_train, ood_loaders_test):
         train_ood = torch.stack([phs._phs[ood_train_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
         train_data = torch.vstack((train_ori, train_ood))
@@ -491,8 +245,8 @@ def DMD_aware_atk(**kwargs):
     Compute the DMD score by training a linear regressor on the original dataset and the attack dataset. We consider as training and test samples attacks crafted with the same algorithm 
 
     Args:
-    - peepavg (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
-    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - peepavg_ori (peepholelib.peepholes.peepholes.Peepholes): peepholes from which we compute the linear regressor.
+    - peepavg_atk (peepholelib.peepholes.peepholes.Peepholes): peepholes from which we compute the linear regressor.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
@@ -501,12 +255,9 @@ def DMD_aware_atk(**kwargs):
     Returns
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
-    # TODO: fix documentation
 
-    phs = kwargs.get('peepavg')
-    cvs = kwargs.get('coreavg')
+    phs_ori = kwargs.get('peepavg_ori')
     phs_atk = kwargs.get('peepavg_atk')
-    cvs_atk = kwargs.get('coreavg_atk')
     loaders = kwargs.get('loaders', None)
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
@@ -529,31 +280,33 @@ def DMD_aware_atk(**kwargs):
     #-----------
     # computations
     #-----------
+    # TODO: this should be done in the evaluation functions
+    #idx = torch.argwhere((cvs._dss['val']['result']==1) & (cvs_atk._dss['val']['attack_success']==1)).squeeze()
 
-    idx = torch.argwhere((cvs._dss['val']['result']==1) & (cvs_atk._dss['val']['attack_success']==1)).squeeze()
-
-    train_ori = torch.stack([phs._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    train_atk = torch.stack([phs_atk._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
+    train_ori = torch.stack([phs_ori._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    train_atk = torch.stack([phs_atk._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    train_data = torch.concatenate((train_ori, train_atk), axis=0)
     
-    train_data = np.concatenate((train_ori, train_atk), axis=0)
-    
-    label_ori = np.ones(len(train_ori))
-    label_atk = np.zeros(len(train_atk))
+    label_ori = torch.ones(len(train_ori))
+    label_atk = torch.zeros(len(train_atk))
     train_label = np.concatenate((label_ori, label_atk), axis=0)
 
-    idx = torch.argwhere((cvs._dss['test']['result']==1) & (cvs_atk._dss['test']['attack_success']==1)).squeeze()
+    # TODO: this should be done in the evaluation functions
+    #idx = torch.argwhere((cvs._dss['test']['result']==1) & (cvs_atk._dss['test']['attack_success']==1)).squeeze()
 
-    test_ori = torch.stack([phs._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    test_atk = torch.stack([phs_atk._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    test_ori = torch.stack([phs._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    test_atk = torch.stack([phs_atk._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    test_data = torch.concatenate((test_ori, test_atk), axis=0)
     
-    test_data = np.concatenate((test_ori, test_atk), axis=0)
-    label_ori = np.ones(len(test_ori))
-    label_atk = np.zeros(len(test_atk))
-    test_label = np.concatenate((label_ori, label_atk), axis=0)
-
-    y_train, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
-                     test_data=test_data, test_label=test_label)
-
+    y_train, y_test = __DMD_score__(
+            train_data = train_data,
+            train_label = train_label,
+            test_data = test_data,
+            test_label = test_label
+            )
+    
+    # TODO: wtf keys?
     ret['val'][score_name] = y_train
     ret['test'][score_name] = y_test
 
@@ -629,6 +382,7 @@ def DMD_unaware_atk(**kwargs):
    
     f_atk = torch.concat([f_atk[atk_name] for atk_name in peepavg_atk_train.keys()], dim=0)#.detach().cpu().numpy()   
     
+    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
     label_ori = np.ones(len(f_ori))
     label_atk = np.zeros(len(f_atk))
     
@@ -643,6 +397,7 @@ def DMD_unaware_atk(**kwargs):
     f_ori = torch.stack([ph._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
     f_atk = torch.stack([peepavg_atk_test._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
 
+    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
     label_ori = np.ones(len(f_ori))
     label_atk = np.zeros(len(f_atk))
 
@@ -662,6 +417,7 @@ def DMD_unaware_atk(**kwargs):
     f_ori = torch.stack([ph._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
     f_atk = torch.stack([peepavg_atk_test._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
 
+    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
     label_ori = np.ones(len(f_ori))
     label_atk = np.zeros(len(f_atk))
 
@@ -673,122 +429,3 @@ def DMD_unaware_atk(**kwargs):
     ret['test'][score_name] = y_test
 
     return ret
-
-# give a better name
-def FeatureSqueezing(**kwargs):
-
-    '''
-    Compute the Feature Squeezing score 
-
-    Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - corevectors_atk(peepholelib.peepholes.CoreVectors): corevectors of the attack under test
-    - Detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): Detector used to analyse the input images
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-    - devie 
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
-
-    cva = kwargs.get('corevectors_atk')
-    cv = kwargs.get('corevectors') 
-    device = kwargs.get('device') 
-    detector = kwargs.get('detector', None) 
-    loaders = kwargs.get('loaders', None)
-    append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'Feature-Squeezing')
-    bs = 64
-    
-    
-    if loaders == None: loaders = list(cv._dss.keys())
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    loaders_ori = {ds_key: DataLoader(cv._dss[ds_key]['image'], batch_size=bs, shuffle=False, num_workers=4) for ds_key in loaders}
-    loaders_atk = {ds_key: DataLoader(cva._dss[ds_key]['image'], batch_size=bs, shuffle=False, num_workers=4) for ds_key in loaders}
-    for (ds_key, dlo), (_, dla) in zip(loaders_ori.items(), loaders_atk.items()):
-        print(f'------{ds_key}------')
-        print(f'Computing score for Original Dataset')
-
-        idx = torch.argwhere((cv._dss[ds_key]['result']==1) & (cva._dss[ds_key]['attack_success']==1))
-        ori_list = []
-
-        for inputs in tqdm(dlo):
-
-            inputs = inputs.to(device)
-
-            output = detector(inputs)
-
-            ori_list.append(output.detach().cpu())
-
-        s_ori = torch.cat(ori_list, dim=0)
-        s_ori = s_ori[idx]
-
-        print(f'Computing score for Attack Dataset')
-
-        atk_list = []
-
-        for inputs in tqdm(dla):
-
-            inputs = inputs.to(device)
-
-            output = detector(inputs)
-
-            atk_list.append(output.detach().cpu())
-
-        s_atk = torch.cat(atk_list, dim=0)
-        s_atk = s_atk[idx]
-
-        scores = torch.cat([s_atk, s_ori], dim=0)
-        ret[ds_key][score_name] = scores
-
-    return ret
-
-
-def model_confidence_score(**kwargs):
-    '''
-    Compute the model confidence score all samples in 'cvs._dss[`loaders`]'. The score is computed as the max(softmax(model output's)).
-
-    Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'corevectors._dss'. Defaults to 'None'.
-    - append_scores (dict): Append the scores in this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-
-    Returns:
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Model-Confidence'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
-
-    cvs = kwargs.get('corevectors')
-    loaders = kwargs.get('loaders', None)
-    append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
-    
-    # parse arguments
-    score_name = 'Model-Confidence'
-    if loaders == None: loaders = list(cvs._dss.keys())
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    #-----------
-    # computations
-    #-----------
-    for loader_n, ds_key in enumerate(loaders):
-        scores = sm(cvs._dss[ds_key]['output'], dim=-1).max(dim=-1).values
-        ret[ds_key][score_name] = scores 
-        
-    return ret 
