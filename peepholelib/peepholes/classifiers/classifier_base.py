@@ -63,7 +63,8 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to classifier's class g belongs to the model's class c.
 
         Args:
-        - corevectors (peepholelib.coreVectors.CoreVectors): Corevectors.
+        - datasets (peepholelib.datasets.dataset_base.DatasetBase): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
         - batch_size: Do the computation in batchs. Defaults to 64.
         - verbose (Bool): Print progress messages. 
@@ -110,8 +111,8 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         - verbose (bool): Print progress messages.
         
         '''
-        cvs = kwargs['cvs']
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False 
+        cvs = kwargs.get('cvs')
+        verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`
         if self._empp == None:

@@ -38,7 +38,8 @@ class Peepholes:
         Compute peepholes given `corevectors` and `drillers`.
         
         Args:
-        - corevectors (peepholelib.coreVectors.coreVectors): corevectors object containing corevectors and datasets.
+        - datasets (peepholelib.datasets.dataset_base.DatasetBase): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.coreVectors): corevectors respective the `datasets`.
         - loaders (list[str]): list of loaders, usually `['train', 'val', 'test']`. If `None` uses all loaders in `corevectors._corevds.keys()`. Defaults to dss `None`.
         - target_modules (list[str]): list of modules to consider as in `model.state_dict`.
         - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
@@ -47,8 +48,9 @@ class Peepholes:
         - verbose (bool): print progress messages
         '''
         self.check_uncontexted()
-
-        cvs = kwargs.get('corevectors')
+        
+        datasets = kwargs.get('datasets')
+        corevectors = kwargs.get('corevectors')
         loaders  = kwargs.get('loaders', None)
         self.target_modules = kwargs.get('target_modules') # list of peep modules
         self._drillers = kwargs.get('drillers')
@@ -57,12 +59,11 @@ class Peepholes:
         n_threads = kwargs.get('n_threads', 1)
         verbose = kwargs.get('verbose', False)
 
-        if loaders == None: loaders = list(cvs._corevds.keys())
+        if loaders == None: loaders = list(corevectors._corevds.keys())
 
         for ds_key in loaders:
-            print(cvs)
-            cvds = cvs._corevds[ds_key]
-            dssds = cvs._dss[ds_key]
+            cvds = corevectors._corevds[ds_key]
+            dssds = datasets._dss[ds_key]
 
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)

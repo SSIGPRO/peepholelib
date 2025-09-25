@@ -1,7 +1,7 @@
 # python stuff
 import abc 
 
-class DrillBase: 
+class DrillBase(metaclass=abc.ABCMeta): 
     def __init__(self, **kwargs):
         self.path = kwargs['path']
         self.name = kwargs['name']
