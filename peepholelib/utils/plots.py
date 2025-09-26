@@ -5,6 +5,7 @@ import numpy as np
 
 # plotting stuff
 from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.ticker import FormatStrFormatter
 import seaborn as sb
 import pandas as pd
@@ -43,7 +44,7 @@ def plot_ood(**kwargs):
 
     fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:golden yellow']
     lines = ['--', '-']
 
     # save aucs for plotting 
@@ -288,8 +289,8 @@ def plot_confidence(**kwargs):
 
     if loaders == None: loaders = list(scores.keys())
 
-    fig, axs = plt.subplots(2, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
-    
+    #fig, axs = plt.subplots(1, len(loaders)+1, sharex='none', sharey='none', figsize=(5*(len(loaders)+1), 5*2))
+    fig, ax = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(4,5))
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
     lines = ['--', '-']
 
@@ -380,98 +381,159 @@ def plot_confidence(**kwargs):
         #--------------------
         # Plotting
         #--------------------
+        ax_i = ax if not isinstance(ax, (list, np.ndarray)) else ax[loader_n]
 
-        # plotting OKs and KOs distribution
-        ax = axs[0][loader_n] 
+        # seaborn plot (turn off its legend)
         p = sb.kdeplot(
-                data = df_okko,
-                ax = ax,
-                x = 'score value',
-                common_norm = False,
-                hue = 'score type',
-                hue_order = list(cs_okko.keys()), 
-                palette = cs_okko,
-                clip = [0., 1.],
-                alpha = 0.75,
-                legend = loader_n == len(loaders)-1
-                )
+            data=df_okko,
+            ax=ax_i,
+            x='score value',
+            common_norm=False,
+            hue='score type',
+            hue_order=list(cs_okko.keys()),
+            palette=cs_okko,
+            clip=[0., 1.],
+            alpha=0.75,
+            legend=False,  # <- important: we'll add custom legends
+        )
 
-        # set up linestyles
+        # apply per-line linestyles already computed
         for ls, line in zip(list(ls_okko.values()), p.lines):
             line.set_linestyle(ls)
+
+        # -------------------------
+        # Build 2 separate legends
+        # -------------------------
+
+        # 1) Color legend: score types (one color per score_name)
+        score_names = list(scores[ds_key].keys())  # order matches 'colors'
+        color_handles = [
+            Line2D([0], [0], color=colors[i], lw=2)
+            for i, _ in enumerate(score_names)
+        ]
+        color_legend = ax_i.legend(
+            color_handles,
+            score_names,
+            title='Score type',
+            loc='upper left',
+            frameon=True,
+        )
+
+        # 2) Linestyle legend: outcome (OK vs KO)
+        ls_handles = [
+            Line2D([0], [0], color='black', lw=2, linestyle='--'),  # OK
+            Line2D([0], [0], color='black', lw=2, linestyle='-'),   # KO
+        ]
+        ls_legend = ax_i.legend(
+            ls_handles,
+            ['correct', 'wrong'],
+            title='Classification',
+            loc='upper left',
+            bbox_to_anchor=(0, 0.7),
+            frameon=True,
+        )
+
+        # Make sure both legends show
+        ax_i.add_artist(color_legend)
+
+        # labels / grid
+        ax_i.set_xlabel('Score')
+        ax_i.set_ylabel('%')
+        ax_i.set_title('score distribution')
+        ax_i.grid(True)
+
+        # plotting OKs and KOs distribution
+        #ax = axs[loader_n]#ax = axs[0][loader_n] 
+        # p = sb.kdeplot(
+        #         data = df_okko,
+        #         ax = ax,
+        #         x = 'score value',
+        #         common_norm = False,
+        #         hue = 'score type',
+        #         hue_order = list(cs_okko.keys()), 
+        #         palette = cs_okko,
+        #         clip = [0., 1.],
+        #         alpha = 0.75,
+        #         legend = loader_n == len(loaders)-1
+        #         )
+
+        # # set up linestyles
+        # for ls, line in zip(list(ls_okko.values()), p.lines):
+        #     line.set_linestyle(ls)
         
-        # set legend linestyle
-        if loader_n == len(loaders)-1:
-            handles = p.legend_.legend_handles[::-1]
-            for ls, h in zip(list(ls_okko.values()), handles):
-                h.set_ls(ls)
+        # # set legend linestyle
+        # if loader_n == len(loaders)-1:
+        #     handles = p.legend_.legend_handles[::-1]
+        #     for ls, h in zip(list(ls_okko.values()), handles):
+        #         h.set_ls(ls)
 
-        ax.set_xlabel('Score')
-        ax.set_ylabel('%')
-        ax.title.set_text(f'{ds_key}')
-        ax.grid(True)
+        # ax.set_xlabel('Score')
+        # ax.set_ylabel('%')
+        # # ax.title.set_text(f'{ds_key}')
+        # ax.title.set_text('score distribution')
+        # ax.grid(True)
 
-        # plotting Confidences
-        ax = axs[1][loader_n]
-        p = sb.lineplot(
-                data = df_conf,
-                ax = ax,
-                x = 'ths', 
-                y = 'value',
-                hue = 'score type',
-                hue_order = list(cs_conf.keys()), 
-                palette = cs_conf,
-                alpha = 0.75,
-                legend = loader_n == len(loaders)-1,
-                )
+    #     # plotting Confidences
+    #     ax = axs[1][loader_n]
+    #     p = sb.lineplot(
+    #             data = df_conf,
+    #             ax = ax,
+    #             x = 'ths', 
+    #             y = 'value',
+    #             hue = 'score type',
+    #             hue_order = list(cs_conf.keys()), 
+    #             palette = cs_conf,
+    #             alpha = 0.75,
+    #             legend = loader_n == len(loaders)-1,
+    #             )
 
-        # set up linestyles
-        for ls, line in zip(list(ls_conf.values()), p.lines):
-            line.set_linestyle(ls)
+    #     # set up linestyles
+    #     for ls, line in zip(list(ls_conf.values()), p.lines):
+    #         line.set_linestyle(ls)
         
-        # set legend linestyle
-        if loader_n == len(loaders)-1:
-            handles = p.legend_.legend_handles[::-1]
-            for h in handles:
-                h.set_ls(ls_conf[h._label])
+    #     # set legend linestyle
+    #     if loader_n == len(loaders)-1:
+    #         handles = p.legend_.legend_handles[::-1]
+    #         for h in handles:
+    #             h.set_ls(ls_conf[h._label])
 
-        ax.set_xlabel('Score Threshold')
-        ax.set_ylabel('%')
-        ax.grid(True)
+    #     ax.set_xlabel('Score Threshold')
+    #     ax.set_ylabel('%')
+    #     ax.grid(True)
 
-    # Plot AUCs
+    # # Plot AUCs
                                                               
-    ax = axs[0][-1]
-    sb.pointplot(
-            data = aucs_df,
-            ax = ax,
-            x = 'loader',
-            y = 'AUC',
-            hue = 'score name',
-            markersize = 8,
-            palette = colors[0:len(scores[loaders[-1]])],
-            alpha = 0.75,
-            legend = True
-            )
-    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
-    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    # ax = axs[0][-1]
+    # sb.pointplot(
+    #         data = aucs_df,
+    #         ax = ax,
+    #         x = 'loader',
+    #         y = 'AUC',
+    #         hue = 'score name',
+    #         markersize = 8,
+    #         palette = colors[0:len(scores[loaders[-1]])],
+    #         alpha = 0.75,
+    #         legend = True
+    #         )
+    # ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    # ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
-    # plot samples droppedn (<th) at max acc
-    ax = axs[1][-1]
-    sb.pointplot(
-            data = drop_df,
-            ax = ax,
-            x = 'loader',
-            y = 'Drop',
-            hue = 'score name',
-            markersize = 8,
-            palette = colors[0:len(scores[loaders[-1]])],
-            alpha = 0.75,
-            legend = True
-            )
-    ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
-    ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-    ax.set_ylabel('# score < th (%)')
+    # # plot samples droppedn (<th) at max acc
+    # ax = axs[1][-1]
+    # sb.pointplot(
+    #         data = drop_df,
+    #         ax = ax,
+    #         x = 'loader',
+    #         y = 'Drop',
+    #         hue = 'score name',
+    #         markersize = 8,
+    #         palette = colors[0:len(scores[loaders[-1]])],
+    #         alpha = 0.75,
+    #         legend = True
+    #         )
+    # ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=90)
+    # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    # ax.set_ylabel('# score < th (%)')
 
     plt.savefig((path/f'confidence.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
