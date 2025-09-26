@@ -43,31 +43,24 @@ def DMD_base(**kwargs):
             ret[ds_key] = dict()
 
     # computation
-
     class_scores = torch.zeros((num_samples, num_classes))
     for c in range(num_classes):
         tensor = data_ori - driller._means[c].view(1, -1)
         class_scores[:, c] = -torch.matmul(
             torch.matmul(tensor, driller._precision), tensor.t()).diag()
 
-    conf_ori = torch.max(class_scores, dim=1)[0]
-
-    ret[id_loader][score_name] = conf_ori
+    ret[id_loader][score_name] = torch.max(class_scores, dim=1)[0]
 
     for ood in ood_loaders:
         data_ood = cvs._corevds[ood][layer].to(device)
-
         data_ori = cvs._corevds[id_loader][layer]
 
         class_scores = torch.zeros((num_samples, num_classes))
         for c in range(num_classes):
             tensor = data_ood - driller._means[c].view(1, -1)
-            class_scores[:, c] = -torch.matmul(
-                torch.matmul(tensor, driller._precision), tensor.t()).diag()
+            class_scores[:, c] = -torch.matmul(torch.matmul(tensor, driller._precision), tensor.t()).diag()
 
-        conf_ood = torch.max(class_scores, dim=1)[0]
-
-        ret[ood][score_name] = conf_ood
+        ret[ood][score_name] = torch.max(class_scores, dim=1)[0]
     
     return ret
 
@@ -121,24 +114,18 @@ def DMD_plus(**kwargs):
         class_scores[:, c] = -torch.matmul(
             torch.matmul(tensor, driller._precision), tensor.t()).diag()
 
-    conf_ori = torch.max(class_scores, dim=1)[0]
-
-    ret[id_loader][score_name] = conf_ori
+    ret[id_loader][score_name] = torch.max(class_scores, dim=1)[0]
 
     for ood in ood_loaders:
         data_ood = cvs._corevds[ood][layer].to(device)
-
         data_ood /= torch.linalg.vector_norm(data_ood, ord=2, dim=1, keepdim=True) 
 
         class_scores = torch.zeros((num_samples, num_classes))
         for c in range(num_classes):
             tensor = data_ood - driller._means[c].view(1, -1)
-            class_scores[:, c] = -torch.matmul(
-                torch.matmul(tensor, driller._precision), tensor.t()).diag()
+            class_scores[:, c] = -torch.matmul(torch.matmul(tensor, driller._precision), tensor.t()).diag()
 
-        conf_ood = torch.max(class_scores, dim=1)[0]
-
-        ret[ood][score_name] = conf_ood
+        ret[ood][score_name] = torch.max(class_scores, dim=1)[0]
     
     return ret
 
@@ -169,6 +156,80 @@ def __DMD_score__(**kwargs):
     return y_train, y_test 
 
 def DMD_score(**kwargs):
+    '''
+    Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
+
+    Args:
+    - peepavg (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
+    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
+    - ood-loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
+    - target_modules (list[str]): list if target modules, as keys from the model `statedict`. If 'None' uses all modules in 'peepholes._phs[loaders[0]]'.
+    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - verbose (bool): print progress messages.
+
+    Returns
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
+    - proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
+    '''
+    # TODO: fix documentation
+
+    phs = kwargs.get('peepholes')
+    train_loaders = kwargs.get('train_loaders')
+    test_loaders = kwargs.get('test_loaders')
+    target_modules = kwargs.get('target_modules', None)
+    append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name', 'DMD')
+    verbose = kwargs.get('verbose', False)
+
+    # parse arguments
+    if target_modules == None: target_modules = list(phs._phs[list(train_loaders.keys())[0]].keys())
+
+    # create the return dictionary. 
+    if append_scores != None:
+        ret = dict(append_scores)
+    else: ret = {}
+
+    for ds_key_train, ds_key_test in zip(train_loaders.keys(), test_loaders.keys()):
+        if not ds_key_train in ret:
+            ret[ds_key_train] = dict()
+        if not ds_key_test in ret:
+            ret[ds_key_test] = dict()
+
+    #-----------
+    # computations
+    #----------- 
+    for pos_key_train in train_loaders.keys()):
+        # positive samples are In-distribution or non-attacked ones
+        train_pos = torch.stack([phs._phs[pos_key_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        
+        # get negative samples from multiple loaders
+        n_pos_samples = len(train_pos)
+        n_neg_loaders = len(train_loaders[pos_key_train])
+        n_spnl = floor(n_pos_samples/n_neg_loaders) # number sampler per neg loader
+        for neg_key_train in train_loaders[pos_key_train]:
+            train_neg = torch.stack([phs._phs[neg_key_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+
+        train_data = torch.vstack((train_pos, train_neg))
+        train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+
+    '''
+    for pos_key_train, pos_key_test in zip(train_loaders.keys(), test_loaders.keys()):
+        test_pos = torch.stack([phs._phs[pos_key_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_ood = torch.stack([phs._phs[ood_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_data = torch.vstack((test_ori, test_ood))
+
+        _, y_test = __DMD_score__(
+                train_data=train_data,
+                train_label=train_label,
+                test_data=test_data,
+                )
+
+        ret[ood_train_key][score_name] = torch.tensor(y_test)[:len(test_ori)]
+        ret[ood_test_key][score_name] = torch.tensor(y_test)[len(test_ori):]
+    '''
+    return ret
+
+def DMD_score_bak(**kwargs):
     '''
     Compute the DMD score by training a linear regressor on the a validation portion of the ood dataset 
 
@@ -373,58 +434,46 @@ def DMD_unaware_atk(**kwargs):
     for i, atk_name in enumerate(peepavg_atk_train.keys()):
             
             f_atk[atk_name] = torch.stack([peepavg_atk_train[atk_name]._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
-            idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_train[atk_name]._dss['val']['attack_success']==1)).squeeze()
+            #idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_train[atk_name]._dss['val']['attack_success']==1)).squeeze()
             
-            assert len(idx) >= n_samples, f'Not enough samples for attack {atk_name} in training set. Found {len(idx)} samples, expected at least {n_samples}.'
+            #assert len(idx) >= n_samples, f'Not enough samples for attack {atk_name} in training set. Found {len(idx)} samples, expected at least {n_samples}.'
 
             rand = torch.randperm(len(idx))[:n_samples]
             f_atk[atk_name] = f_atk[atk_name][idx[rand]]
    
     f_atk = torch.concat([f_atk[atk_name] for atk_name in peepavg_atk_train.keys()], dim=0)#.detach().cpu().numpy()   
+    train_data = torch.concatenate((f_ori, f_atk), axis=0)
     
-    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
-    label_ori = np.ones(len(f_ori))
-    label_atk = np.zeros(len(f_atk))
-    
-    train_data = np.concatenate((f_ori, f_atk), axis=0)
-    train_label = np.concatenate((label_ori, label_atk), axis=0)  
+    label_ori = torch.ones(len(f_ori))
+    label_atk = torch.zeros(len(f_atk))
+    train_label = torch.concatenate((label_ori, label_atk), axis=0)  
 
     #------------------
     #  VALIDATION
     #------------------ 
 
-    idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_test._dss['val']['attack_success']==1)).squeeze()
-    f_ori = torch.stack([ph._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    f_atk = torch.stack([peepavg_atk_test._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    #idx = torch.argwhere((cv._dss['val']['result']==1) & (coreavg_atk_test._dss['val']['attack_success']==1)).squeeze()
+    f_ori = torch.stack([ph._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
+    f_atk = torch.stack([peepavg_atk_test._phs['val'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
+    val_data = torch.concatenate((f_ori, f_atk), axis=0)
 
-    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
-    label_ori = np.ones(len(f_ori))
-    label_atk = np.zeros(len(f_atk))
-
-    val_data = np.concatenate((f_ori, f_atk), axis=0)
-    val_label = np.concatenate((label_ori, label_atk), axis=0) 
-
-    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
-                    test_data=val_data, test_label=val_label)
+    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label, test_data=val_data)
     
     ret['val'][score_name] = y_test
 
     #------------------
     #  TEST
     #------------------
+    #idx = torch.argwhere((cv._dss['test']['result']==1) & (coreavg_atk_test._dss['test']['attack_success']==1)).squeeze()
+    f_ori = torch.stack([ph._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
+    f_atk = torch.stack([peepavg_atk_test._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)
 
-    idx = torch.argwhere((cv._dss['test']['result']==1) & (coreavg_atk_test._dss['test']['attack_success']==1)).squeeze()
-    f_ori = torch.stack([ph._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
-    f_atk = torch.stack([peepavg_atk_test._phs['test'][layer]['peepholes'].max(dim=1)[0] for layer in target_modules],dim=1)[idx].detach().cpu().numpy()
+    label_ori = torch.ones(len(f_ori))
+    label_atk = torch.zeros(len(f_atk))
 
-    # TODO: CLEAN THOSE Numpy!!!!!!!!!!!
-    label_ori = np.ones(len(f_ori))
-    label_atk = np.zeros(len(f_atk))
-
-    test_data = np.concatenate((f_ori, f_atk), axis=0)
-    test_label = np.concatenate((label_ori, label_atk), axis=0)
-    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label,
-                    test_data=test_data, test_label=test_label)
+    test_data = torch.concatenate((f_ori, f_atk), axis=0)
+    test_label = torch.concatenate((label_ori, label_atk), axis=0)
+    _, y_test = __DMD_score__(train_data=train_data, train_label=train_label, test_data=test_data)
 
     ret['test'][score_name] = y_test
 
