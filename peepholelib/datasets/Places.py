@@ -6,7 +6,7 @@ from peepholelib.datasets.functional.transforms import vgg16_imagenet
 import torch
 from torch.utils.data import random_split
 
-# CIFAR from torchvision
+# Places365 from torchvision
 from torchvision import datasets
 
 class Places(DatasetWrap):
@@ -42,44 +42,32 @@ class Places(DatasetWrap):
         # set torch seed
         torch.manual_seed(seed)
 
-        train_dataset = datasets.__dict__[self.dataset]( 
-                        root = self.path,
-                        split = 'train',
-                        transform = transform,
-                        small = True,
-                        download = True
-                    )
+        _data = datasets.__dict__['Places365'](
+                root = self.path,
+                split = 'val',
+                transform = transform,
+                small = True,
+                download = True
+                )
 
-        val_set = datasets.__dict__[self.dataset]( 
-                        root = self.path,
-                        split = 'val',
-                        transform = None,
-                        small = True,
-                        download = True
-                    )
+        # split to get 10000 samples for val and test
+        _, val_dataset, test_dataset = random_split(
+                _data,
+                [0.45205478, 0.27397261, 0.27397261], # to get exactly 10000 samples
+                generator=torch.Generator().manual_seed(seed)
+                )
                     
-        val_dataset, test_dataset = random_split(
-            val_set,
-            [0.5, 0.5], 
-            generator=torch.Generator().manual_seed(seed)
-        )
-
-        # Apply the transform 
-        if transform != None:
-            val_dataset.dataset.transform = transform
-            test_dataset.dataset.transform = transform
-
         self.__dataset__ = {
-                'train': train_dataset,
-                'val': val_dataset,
-                'test': test_dataset
+                'Places365-val': val_dataset,
+                'Places365-test': test_dataset
                 }
         
-        self._classes = {
-                'Places-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-                'Places-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-                'Places-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
-                }
+        # TODO: implement get_classes()
+        #self._classes = {
+        #        'Places-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+        #        'Places-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+        #        'Places-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+        #        }
 
         return
     
