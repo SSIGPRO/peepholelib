@@ -1,0 +1,32 @@
+# General python stuff
+from pathlib import Path as Path
+import abc  
+
+class DatasetWrap(metaclass=abc.ABCMeta):
+
+    def __init__(self, **kwargs):
+        '''
+        Creates instance of dataset base. For base datasets, `Transform` is mandatory.
+
+        Args:
+        - path (str): Path for dataset. 
+        - seed (int): Random seed for reproducibility.
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
+
+        '''
+        self.path = Path(kwargs.get('path'))
+        self.transform = kwargs.get('transform', None)
+        self.seed = kwargs.get('seed', 42)
+
+        # computed in __load_data__()
+        self.__dataset__ = None # this one saves the dataset as given
+        
+        return
+
+    @abc.abstractmethod
+    def __load_data__(self):
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
+    def get(self, ds_key, idx):
+        raise NotImplementedError()

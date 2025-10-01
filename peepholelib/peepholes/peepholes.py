@@ -38,7 +38,8 @@ class Peepholes:
         Compute peepholes given `corevectors` and `drillers`.
         
         Args:
-        - corevectors (peepholelib.coreVectors.coreVectors): corevectors object containing corevectors and datasets.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.coreVectors): corevectors respective the `datasets`.
         - loaders (list[str]): list of loaders, usually `['train', 'val', 'test']`. If `None` uses all loaders in `corevectors._corevds.keys()`. Defaults to dss `None`.
         - target_modules (list[str]): list of modules to consider as in `model.state_dict`.
         - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
@@ -47,8 +48,9 @@ class Peepholes:
         - verbose (bool): print progress messages
         '''
         self.check_uncontexted()
-
-        cvs = kwargs.get('corevectors')
+        
+        datasets = kwargs.get('datasets')
+        corevectors = kwargs.get('corevectors')
         loaders  = kwargs.get('loaders', None)
         self.target_modules = kwargs.get('target_modules') # list of peep modules
         self._drillers = kwargs.get('drillers')
@@ -57,12 +59,11 @@ class Peepholes:
         n_threads = kwargs.get('n_threads', 1)
         verbose = kwargs.get('verbose', False)
 
-        if loaders == None: loaders = list(cvs._corevds.keys())
+        if loaders == None: loaders = list(corevectors._corevds.keys())
 
         for ds_key in loaders:
-            print(cvs)
-            cvds = cvs._corevds[ds_key]
-            dssds = cvs._dss[ds_key]
+            cvds = corevectors._corevds[ds_key]
+            dssds = datasets._dss[ds_key]
 
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
             file_path = self.path/(self.name+'.'+ds_key)
@@ -116,62 +117,6 @@ class Peepholes:
 
         return 
 
-    def get_scores(self, **kwargs):
-        '''
-        Compute scores (score_max and score_entropy) from precomputed peepholes.
-        '''
-        self.check_uncontexted()
-        
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        n_threads = kwargs['n_threads'] if 'n_threads' in kwargs else 1 
-        bs = kwargs['batch_size'] if 'batch_size' in kwargs else 64 
-
-        if self._phs == None:
-            raise RuntimeError('No core vectors present. Please run get_peepholes() first.')
-
-        for ds_key in self._phs:
-            if verbose: print(f'\n ---- Getting scores for {ds_key}\n')
-            file_path = self.path / (self.name + '.' + ds_key)
-    
-            #-----------------------------------------
-            # Check if peepholes exist before computing scores
-            #-----------------------------------------
-            n_samples = len(self._phs[ds_key])
-
-            for module in self.target_modules:
-                if module not in self._phs[ds_key]:
-                    raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
-                
-                if 'peepholes' not in self._phs[ds_key][module]:
-                    raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
-                    
-                #-----------------------------------------
-                # Check if scores already exist
-                #-----------------------------------------
-                if 'score_max' in self._phs[ds_key][module] and 'score_entropy' in self._phs[ds_key][module]:
-                    if verbose: print(f"Scores already computed for module {module}. Skipping computation.")
-                    continue 
-
-                #-----------------------------------------
-                # Pre-allocate scores
-                #-----------------------------------------
-                if verbose: print('Allocating scores for module:', module)
-                self._phs[ds_key][module].batch_size = torch.Size((n_samples,))
-                self._phs[ds_key][module]['score_max'] = MMT.empty(shape=(n_samples,))
-                self._phs[ds_key][module]['score_entropy'] = MMT.empty(shape=(n_samples,))
-                
-                #-----------------------------------------
-                # Compute scores
-                #-----------------------------------------
-                if verbose: print('\n ---- Computing scores \n')
-                _dl = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x: x)
-                for batch in tqdm(_dl, disable=not verbose, total=len(_dl)):
-                    peepholes = batch[module]['peepholes']
-                    batch[module]['score_max'] = torch.max(peepholes, dim=1).values
-                    batch[module]['score_entropy'] = torch.sum(peepholes * torch.log(peepholes + 1e-12), dim=1)
-    
-        return
-    
     def load_only(self, **kwargs):
         '''
         Load the peepholes 

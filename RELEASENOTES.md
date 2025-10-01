@@ -3,6 +3,9 @@
 ## general
 - update `utils/testing.py` to `utils/samplers.py`
 
+## Datasets
+- Rework `datasets`. Now each dataset is istantiated individually, previous `coreVectors.parse_ds()` is moved to `DatasetBase`
+
 ## Model
 - Rework SVDs. SVD functions for each layer are passed to `get_svds()`.
 - add function `update_output` to `model_wrap`.
@@ -16,6 +19,7 @@
 - `model.svd` implements `channel_wise` SVD for Conv2D layers per default.
 
 ## Corevectors
+- Move `parse_ds` to `datasets.DatasetBase`
 - Add `conv2d_kernel_svd_projection`. Update names of SVD projection functions. 
 - Remove the necessity of saving activations. add `parse_ds()` to get dataset information. If needed, e.g., in the DMD case, activations can be extracted using `get_activations()` as before.
 - Images, Labels, Results, and Outputs were moved to the `corevector._actds` instead of `corevector._cvsds`.
@@ -33,3 +37,6 @@
 
 ## Attack detection
 - Implement [Feature Squeezing](https://arxiv.org/abs/1704.01155) as attack detection method.
+
+## Evaluation
+- Many scores are implemented

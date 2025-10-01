@@ -13,27 +13,27 @@ def plot_conceptogram(**kwargs):
     Plot conceptograms (with network output) for a specific samples.
 
     Args:
-        - path (str): Path to save conceptograms plot.
-        - name (str): Name to pre-pend to files.
-        - corevectors (peepholelib.coreVectors.coreVectors): Loaded corevectors.
-        - peepholes (peepholelib.peepholes.peepholes): Loaded peepholes, conceptograms are computed by appending the peepholes for several modules.
-        - loaders (list[str]): Loaders to take in consideration, usually `['test']`. Defaults to `['test']`.
-        - samples (list[int]): List of indexes to visualize plot.
-        - target_modules (list[str]): List of target modules to consider to create the conceptograms
-        - pref_fn (callable): Prediction function which takes the model's output (`corevectors._dss[<loader>]['output']`) and computes the probability of each class. Defaults to `torch.nn.functional.softmax`.
-        - label_key (str): Key to get labels from `corevectors._dss[<loader>][label_key]`. Defaults to `'label'`.
-        - protoclasses (torch.tensor): Protoclasses (see `peepholelib.utils.scores.conceptogram_protoclass_score()`) for each label. If given, the conceptograms will include the proroclass respective to the prediction. Defaults to `None`. 
-        - verbose (bool): Print progress messages.
+    - path (str): Path to save conceptograms plot.
+    - name (str): Name to pre-pend to files.
+    - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
+    - peepholes (peepholelib.peepholes.peepholes): Loaded peepholes, conceptograms are computed by appending the peepholes for several modules.
+    - loaders (list[str]): Loaders to take in consideration, usually `['test']`. Defaults to `['test']`.
+    - samples (list[int]): List of indexes to visualize plot.
+    - target_modules (list[str]): List of target modules to consider to create the conceptograms
+    - pref_fn (callable): Prediction function which takes the model's output (`corevectors._dss[<loader>]['output']`) and computes the probability of each class. Defaults to `torch.nn.functional.softmax`.
+    - label_key (str): Key to get labels from `corevectors._dss[<loader>][label_key]`. Defaults to `'label'`.
+    - protoclasses (torch.tensor): Protoclasses (see `peepholelib.utils.scores.conceptogram_protoclass_score()`) for each label. If given, the conceptograms will include the proroclass respective to the prediction. Defaults to `None`. 
+    - verbose (bool): Print progress messages.
 
-        Textual Args:
-        - scores (dict(str:dict(str:torch.tensor)))): Scores to add to title(see `peepholelib.utils.scores`) if given. Defaults to `None`.
-        - classes (dict({int: str})): Dictionary containing name of the classes given their number.
-        - ticks (list[str]): List of modules to put ticks. Defaults to `target_modules`.
-        - krows (int): Write the name of `krows` most highlighted classes in the conceptograms.
+    Textual Args:
+    - scores (dict(str:dict(str:torch.tensor)))): Scores to add to title(see `peepholelib.utils.scores`) if given. Defaults to `None`.
+    - classes (dict({int: str})): Dictionary containing name of the classes given their number.
+    - ticks (list[str]): List of modules to put ticks. Defaults to `target_modules`.
+    - krows (int): Write the name of `krows` most highlighted classes in the conceptograms.
     """
     path = kwargs.get('path')
     name = kwargs.get('name')
-    cvs = kwargs.get('corevectors') 
+    dss = kwargs.get('datasets') 
     phs = kwargs.get('peepholes') 
     loaders = kwargs.get('loaders')
     samples = kwargs.get('samples')
@@ -45,7 +45,7 @@ def plot_conceptogram(**kwargs):
 
     # plot text related
     scores = kwargs.get('scores', None)
-    classes = kwargs.get('classes') 
+    classes = kwargs.get('classes', None) 
     ticks = kwargs.get('ticks', target_modules)
     krows = kwargs.get('krows', 3)
 
@@ -54,7 +54,7 @@ def plot_conceptogram(**kwargs):
 
     for ds_key in loaders:
         # getting data from corevectors
-        _dss = cvs._dss[ds_key][samples] 
+        _dss = dss._dss[ds_key][samples] 
         
         conceptos = phs.get_conceptograms(loaders=[ds_key], target_modules=target_modules)[ds_key][samples]
         
@@ -92,10 +92,14 @@ def plot_conceptogram(**kwargs):
             axs[0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
             axs[0].axis('off')
             
-            # title = f'True label: {classes[label]}'
+            if classes != None: 
+                title = f'True label: {classes[label]}\n'
+            else:
+                title = '' 
+
             if scores != None:
                 for score_name in scores[ds_key]:
-                    title = f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
+                    title += f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
 
             axs[0].set_title(title, fontweight='bold')
 

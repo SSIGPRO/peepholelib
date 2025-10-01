@@ -8,8 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 class CoreVectors():
-    from .parse_ds import parse_ds 
-    from .activations import get_activations
+     
     from .get_coreVectors import get_coreVectors
 
     def __init__(self, **kwargs):
@@ -27,8 +26,6 @@ class CoreVectors():
         self.path.mkdir(parents=True, exist_ok=True)
 
         self._model = kwargs['model'] if 'model' in kwargs else None  
-        # computed in parse_ds() and get_activations()
-        self._dss = None 
 
         # computed in get_coreVectors()
         self._corevds = None 
@@ -134,16 +131,13 @@ class CoreVectors():
         verbose = kwargs.get('verbose', False)
 
         self._corevds = {}
-        self._dss = {}
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             
             _cvs_file_paths = self.path/(self.name+'.'+ds_key)
-            _dss_file_paths = self.path/('dss.'+ds_key)
 
-            if verbose: print(f'Loading files {_cvs_file_paths} and {_dss_file_paths} from disk. ')
+            if verbose: print(f'Loading files {_cvs_file_paths} from disk. ')
             self._corevds[ds_key] = PersistentTensorDict.from_h5(_cvs_file_paths, mode=mode)
-            self._dss[ds_key] = PersistentTensorDict.from_h5(_dss_file_paths, mode=mode)
 
             _n_samples = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
@@ -160,13 +154,6 @@ class CoreVectors():
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         verbose = True 
-
-        if self._dss == None:
-            if verbose: print('no dss to close.')
-        else:
-            for ds_key in self._dss:
-                if verbose: print(f'closing {ds_key}')
-                self._dss[ds_key].close()
 
         if self._corevds == None:
             if verbose: print('no corevds to close.')
