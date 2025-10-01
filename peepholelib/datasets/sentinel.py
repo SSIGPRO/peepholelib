@@ -50,7 +50,7 @@ class CustomDS(Dataset):
             print('labels shape  after reshaping: ', labels.shape)
             self.labels = labels[idx]
             print('labels shape  after dropping: ', self.labels.shape)
-            quit()
+            
             #self.labels = self.labels.reshape(-1, window_size, window_size)
             #self.labels = torch.tensor(labels.values, dtype=torch.float32)[idx]
         else: 
@@ -67,8 +67,6 @@ class CustomDS(Dataset):
             return {'data': self.data[idx]}
         else:
             return {'data': self.data[idx], 'label': self.labels[idx]}
-        
-
         
 class SentinelWrap(DatasetWrap):#DatasetBase
 
