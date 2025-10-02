@@ -284,17 +284,14 @@ class Sentinel(parsedDataset.ParsedDataset):
 
                     sentinel['data'] = t
 
-                    print(sentinel['corruption'])
                     sentinel['corruption'] = torch.ones(len(t))*corruption_label
-                    print(sentinel['corruption'])
+                    print('corruption', sentinel['corruption'])
 
-                    print(sentinel['channel'])
                     sentinel['channel'] = torch.ones(len(t))*channel
-                    print(sentinel['channel'])
+                    print('channel', sentinel['channel'])
 
-                    print(sentinel['RW'])
                     sentinel['RW'] = torch.ones(len(t))*(channel//4)
-                    print(sentinel['RW'])
+                    print('RW', sentinel['RW'])
 
                 sentinel_dl = sentinel_dl = DataLoader(
                                 dataset = self._dss[cdsk],
@@ -314,6 +311,99 @@ class Sentinel(parsedDataset.ParsedDataset):
 
             return
         
+
+        def get_corruptions_all_channels(self, **kwargs):
+            '''
+            Generate a corrupted version of the initial dataset using wombats package
+            '''
+            model_wrap = kwargs.get('model')
+            corruptions = kwargs.get('corruptions')
+            verbose = kwargs.get('verbose', False)
+            loaders = kwargs.get('loaders')
+            bs = kwargs.get('bs', 2**11) 
+            n_threads = kwargs.get('n_threads', 8)
+
+            for ds_key in loaders:
+                cdsk = ds_key + '-c' 
+                file_path = self.path/('dss.'+cdsk+'-all-channels') 
+
+                if file_path.exists():
+                    print(f'{file_path} exists. I am not overwritting it. Skipping')
+                    continue
+
+                n_samples = len(self._dss[ds_key])
+                if verbose: print(f' Got {n_samples} samples from {ds_key}')
+
+                data_shape = self._dss[ds_key]['data'][0].shape
+                n_channels = data_shape[0]
+                n_corr = len(corruptions)
+
+                ds_sample = self._dss[ds_key][0]
+                model_input = ds_sample['data'].unsqueeze(0)
+                
+                with torch.no_grad():
+                    _output, latent_space = model_wrap(model_input.to(model_wrap.device))                
+                os = _output.shape[1:]
+                ls = latent_space.shape[1:]
+                if verbose: print(f'output shape{os}')
+                
+                self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples*n_corr], mode = 'w')
+
+                self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples*n_corr,)+data_shape), dtype=torch.float32)
+                self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples*n_corr,)), dtype=torch.int)
+
+                self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples*n_corr,)+os), dtype=torch.float32)
+                self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples*n_corr,)+ls), dtype=torch.float32)
+
+                # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                # This is done so we can use multiple workers with the dataloaders 
+                self._dss[cdsk].close()
+                self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+                
+                sentinel_dl = DataLoader(
+                                dataset = self._dss[cdsk],
+                                batch_size = n_samples,
+                                collate_fn = lambda x:x,
+                                shuffle = False,
+                                num_workers = n_threads
+                            )
+                
+                for i,  (sentinel, (corruption, corrupter)) in tqdm(enumerate(zip(sentinel_dl, corruptions.items()))):
+
+                    if verbose: print(f'corruption {corruption}')
+                    t = self._dss[ds_key]['data'].clone()
+
+                    for channel in range(n_channels):
+
+                        sig = self._dss[ds_key]['data'][...,channel].detach().cpu().numpy()
+
+                        corrupter.fit(sig)
+                        corr_sig = corrupter.distort(sig)
+
+                        t[..., channel] = torch.from_numpy(corr_sig).to(self._dss[ds_key].device)
+
+                    sentinel['data'] = t
+
+                    sentinel['corruption'] = torch.ones(len(t))*i
+                    print(sentinel['corruption'])
+
+                sentinel_dl = DataLoader(
+                                dataset = self._dss[cdsk],
+                                batch_size = bs,
+                                collate_fn = lambda x:x,
+                                shuffle = False,
+                                num_workers = n_threads
+                            )
+                
+                for sentinel in tqdm(sentinel_dl):
+
+                    with torch.no_grad():
+                        y_predicted, latent = model_wrap(sentinel['data'].float().to(model_wrap.device))
+                    
+                        sentinel['output'] = y_predicted
+                        sentinel['latent_space'] = latent 
+
+            return
         
         def load_only(self, **kwargs):
             '''
