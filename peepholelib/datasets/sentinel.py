@@ -236,7 +236,7 @@ class Sentinel(parsedDataset.ParsedDataset):
                 self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples*n_channels*n_corr], mode = 'w')
 
                 self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples*n_channels*n_corr,)+data_shape))
-                self._dss[cdsk]['label'] = MMT.empty(shape=torch.Size((n_samples*n_channels*n_corr,)))
+                self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples*n_channels*n_corr,)))
                 self._dss[cdsk]['RW'] = MMT.empty(shape=torch.Size((n_samples*n_channels*n_corr,)))
                 self._dss[cdsk]['channel'] = MMT.empty(shape=torch.Size((n_samples*n_channels*n_corr,)))
 
@@ -260,7 +260,7 @@ class Sentinel(parsedDataset.ParsedDataset):
 
                         block = slice(write_ptr, write_ptr + n_samples)
                         self._dss[cdsk]['data'][block] = t.cpu()
-                        self._dss[cdsk]['label'][block] = torch.full((n_samples,), i, dtype=torch.long)
+                        self._dss[cdsk]['corruption'][block] = torch.full((n_samples,), i, dtype=torch.long)
                         self._dss[cdsk]['channel'][block] = torch.full((n_samples,), j, dtype=torch.long)
                         self._dss[cdsk]['RW'][block] = torch.full((n_samples,), j//4, dtype=torch.long)
 
