@@ -90,6 +90,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
             data, label = self.parser(cvs=_cvs, dss=_dss)
             data, label = data.to(self.device), label.to(self.device)
             preds = self.predict(data)
+            
             for p, l in zip(preds, label):
                 _empp[int(p), int(l)] += 1
 
@@ -119,8 +120,33 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         if self._empp == None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
         data = self.parser(cvs=cvs)
+
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
+
         lp = cp@self._empp
         lp /= lp.sum(dim=1, keepdim=True)
 
         return lp
+    
+    def peephole_extract_grad_true(self, **kwargs):
+        '''
+        Compute the peephole base on the empirical posterior. 
+        
+        Args:
+        - cvs (torch.tensor): Batch of corevectors, will be parsed with self.parser (see __init__()).
+        - verbose (bool): Print progress messages.
+        
+        '''
+        cvs = kwargs.get('cvs')
+        verbose = kwargs.get('verbose', False) 
+
+        # # check for empiracal posterios `_empp`
+        if self._empp == None:
+            raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
+        data = self.parser(cvs=cvs)
+
+        self._classifier.model_.to(self.device)
+        with torch.enable_grad():
+            pr, _ = self._classifier.model_(data)
+
+        return pr
