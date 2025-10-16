@@ -10,6 +10,7 @@ from tqdm import tqdm
 class CoreVectors():
      
     from .get_coreVectors import get_coreVectors
+    from .clip import get_clip_embeddings
 
     def __init__(self, **kwargs):
         '''

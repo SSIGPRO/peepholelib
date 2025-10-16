@@ -13,7 +13,6 @@ import pickle
 
 # torch stuff
 import torch
-from torch.utils.data import DataLoader
 from torchvision.datasets import ImageNet as IN1K
 
 # peepholelib imports

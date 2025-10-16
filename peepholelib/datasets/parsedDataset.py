@@ -220,7 +220,7 @@ class ParsedDataset():
                 self._dss[ds_key] = ods._dss[ds_key]
                 print(f'appending {ds_key}')
         return
-
+    
     def __enter__(self):
         self._is_contexted = True
         return self
