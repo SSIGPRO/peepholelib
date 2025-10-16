@@ -1,6 +1,11 @@
+# python stuff
+from tqdm import tqdm
+from math import ceil
+
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
+from torch.nn.functional import softmax as sm
 
 def DOCTOR_score(**kwargs):
     '''
@@ -8,31 +13,31 @@ def DOCTOR_score(**kwargs):
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets.
+    - model (peepholelib.models.model_warp.ModelWrap): wrapped model, used to compute the logits.
     - loaders (list[str]): loaders to consider, usually `['train', 'test', 'val']`, if `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
-    - net (torch.nn.Module): model used to compute the logits.
     - temperature (float): temperature factor. Defaults to 1.0.
     - magnitude (float): magnitude of the adversarial perturbation.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-    - bs (int): batch size used to compute the scores.
-    - device (torch.device): device where to perform the computations.
     - n_threads (int): number of workers used in the dataloader. Defaults to 1.
+    - batch_size (int): batch size used to compute the scores.
+    - verbose (bool): print progress messages.
     '''
 
-    dss = kwargsa.get('datasets')
+    dss = kwargs.get('datasets')
+    model = kwargs.get('model')
     loaders = kwargs.get('loaders', None)
     temperature = kwargs.get('temperature', 1.)
     magnitude = kwargs.get('magnitude', 0.)
-    append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
-    model = kwargs.get('net', None)
-    device = kwargs.get('device')
     n_threads = kwargs.get('n_threads', 32)
-    bs = kwargs.get('bs', 128)
+    bs = kwargs.get('batch_size', 128)
+    append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name', 'DOCTOR')
+    verbose = kwargs.get('verbose', False)
 
     # parse arguments
     if loaders == None: loaders = list(dss._dss.keys())
-    score_name = 'DOCTOR'
+
+    device = model.device
 
     # create the return dictionary. 
     if append_scores != None:
@@ -43,10 +48,6 @@ def DOCTOR_score(**kwargs):
     for ds_key in loaders:
         if not ds_key in ret:
             ret[ds_key] = dict()
-
-    net = model._model
-    net.to(device)
-    net.eval()
 
     for ds_key in loaders:
         dssds = dss._dss[ds_key]
@@ -60,7 +61,6 @@ def DOCTOR_score(**kwargs):
         write_ptr = 0
     
         for _dss in tqdm(dl_dss,total=ceil(n_samples/bs)):
-
             inputs = _dss['image'].to(device)
             
             if magnitude == 0:
@@ -69,7 +69,7 @@ def DOCTOR_score(**kwargs):
                 inputs.requires_grad_(True)
                 model._model.zero_grad()
 
-                output = net(inputs)
+                output = model(inputs)
                 scores = torch.sum(sm(output/temperature, dim=1)**2, dim=1)
             
                 log_scores = torch.log(torch.clamp(scores, min=1e-12))
@@ -79,10 +79,9 @@ def DOCTOR_score(**kwargs):
                 new_inputs = new_inputs.clamp(0, 1).detach()
 
                 inputs.requires_grad_(False)
-                net.zero_grad(set_to_none=True)
+                model._model.zero_grad(set_to_none=True)
                 with torch.no_grad():
-
-                    output = net(new_inputs)
+                    output = model(new_inputs)
 
             scores = torch.sum(sm(output/temperature, dim=1)**2, dim=1)
             bsz = scores.shape[0]

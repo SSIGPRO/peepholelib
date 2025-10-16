@@ -45,11 +45,7 @@ def plot_confidence(**kwargs):
 
     fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(5*(len(loaders)), 5))
     
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
-
-    # save AUCs for plotting 
-    aucs_df = pd.DataFrame()
-    drop_df = pd.DataFrame()
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
     for loader_n, ds_key in enumerate(loaders):
         # save OKs and KOs and confidences for plotting
@@ -64,18 +60,17 @@ def plot_confidence(**kwargs):
             s_oks = _scores[results == True]
             s_kos = _scores[results == False]
 
-            # compute AUC for score and model
+            # compute AUC and TPR@95 for score and model
             auc = AUC().update(_scores, results.int()).compute().item()
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
-            aucs_df = aucs_df._append(
-                    pd.DataFrame({
-                        'AUC': [auc],
-                        'score name': [score_name],
-                        'loader': [ds_key]
-                        }),
-                    ignore_index = True,
-                    )
-            
+            sorted_pos, _ = torch.sort(s_oks, descending=True)
+            tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
+            threshold = sorted_pos[tpr95_index]                
+            fpr95 = (s_kos >= threshold).float().mean().item()
+
+            if verbose:
+                print(f'FPR95 for {ds_key} {score_name} split: {fpr95:.4f}')
+                print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
+
             df_okko = df_okko._append(
                     pd.DataFrame({
                         'score value': torch.hstack((s_oks, s_kos)),
@@ -95,9 +90,11 @@ def plot_confidence(**kwargs):
         #--------------------
         # Plotting
         #--------------------
+        if len(loaders) == 1:
+            ax = axs
+        else:
+            ax = axs[loader_n] 
 
-        # plotting OKs and KOs distribution
-        ax = axs[loader_n] 
         p = sb.kdeplot(
                 data = df_okko,
                 ax = ax,

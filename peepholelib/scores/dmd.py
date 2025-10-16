@@ -176,10 +176,10 @@ def DMD_score(**kwargs):
     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
 
-    phs = kwargs.get('peepholes')
+    phs = kwargs['peepholes']
     pos_loader_train = kwargs.get('pos_loader_train', 'val')
     pos_loader_test = kwargs.get('pos_loader_test', 'test')
-    neg_loaders = kwargs.get('neg_loaders')
+    neg_loaders = kwargs['neg_loaders']
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
     score_name = kwargs.get('score_name', 'DMD')
@@ -206,7 +206,7 @@ def DMD_score(**kwargs):
     # it would be better to stack fisrt then get the max
     train_pos = torch.stack([phs._phs[pos_loader_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
     test_pos = torch.stack([phs._phs[pos_loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
-    
+
     nps = len(train_pos) # number of positive samples
     idx = torch.randperm(nps)
 

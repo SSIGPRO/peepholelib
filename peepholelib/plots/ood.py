@@ -1,7 +1,5 @@
 # General pytho stuff
 from pathlib import Path as Path
-from math import ceil
-import numpy as np
 
 # plotting stuff
 from matplotlib import pyplot as plt
@@ -14,7 +12,6 @@ from sklearn.metrics import roc_curve, roc_auc_score, auc
 # torch stuff
 import torch
 from torcheval.metrics import BinaryAUROC as AUC
-from torchmetrics.classification import BinaryROC as ROC
 
 def plot_ood(**kwargs):
     '''
@@ -47,17 +44,17 @@ def plot_ood(**kwargs):
 
     fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:golden yellow']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
     lines = ['--', '-']
 
     # save aucs for plotting 
     aucs_df = pd.DataFrame()
 
     for loader_n, ds_key in enumerate(ood_loaders):
-
         # save in-distribution and out-of-distribution scores for plotting
         df_idood = pd.DataFrame()
         cs_idood, ls_idood = {}, {} 
+
         for score_n, score_name in enumerate(id_loaders.keys()):
             _id_loader = id_loaders[score_name]
             

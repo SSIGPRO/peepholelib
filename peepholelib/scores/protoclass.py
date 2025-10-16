@@ -29,12 +29,12 @@ def conceptogram_protoclass_score(**kwargs):
     proto_key = kwargs.get('proto_key', 'train')
     proto_th = kwargs.get('proto_threshold', 0.9)
     append_scores = kwargs.get('append_scores', None)
-    verbose = kwargs.get('verbose', False)
+    score_name = kwargs.get('score_name', 'Proto-Class')
     proto = kwargs.get('proto', None) #TODO: is this used? remove
+    verbose = kwargs.get('verbose', False)
     
     # parse arguments
     if loaders == None: loaders = list(phs._phs.keys())
-    score_name = 'Proto-Class'
 
     # create the return dictionary. 
     if append_scores != None:
@@ -74,9 +74,8 @@ def conceptogram_protoclass_score(**kwargs):
     # compute protoclass score
     for ds_key in loaders:
         cps = cpss[ds_key]
-        results = dss._dss[ds_key]['result']
         pred = (dss._dss[ds_key]['pred']).int()
-        
+
         scores = (proto[pred]*cps).sum(dim=(1,2))
         norm_proto = proto[pred].norm(dim=(1,2))
         norm_cps = cps.norm(dim=(1,2))

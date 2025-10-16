@@ -31,13 +31,13 @@ def plot_conceptogram(**kwargs):
     - ticks (list[str]): List of modules to put ticks. Defaults to `target_modules`.
     - krows (int): Write the name of `krows` most highlighted classes in the conceptograms.
     """
-    path = kwargs.get('path')
-    name = kwargs.get('name')
-    dss = kwargs.get('datasets') 
-    phs = kwargs.get('peepholes') 
-    loaders = kwargs.get('loaders')
-    samples = kwargs.get('samples')
-    target_modules = kwargs.get('target_modules')
+    path = kwargs['path']
+    name = kwargs['name']
+    dss = kwargs['datasets']
+    phs = kwargs['peepholes'] 
+    loaders = kwargs['loaders']
+    samples = kwargs['samples']
+    target_modules = kwargs['target_modules']
     pred_fn = kwargs.get('pred_fn', partial(softmax, dim=0))
     label_key = kwargs.get('label_key', 'label')
     protoclasses = kwargs.get('protoclasses', None) 

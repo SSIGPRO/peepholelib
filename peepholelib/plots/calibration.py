@@ -42,7 +42,7 @@ def plot_calibration(**kwargs):
 
     fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(5*(len(loaders)), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
     n_bins = ceil(1/calib_bin)
     for loader_n, ds_key in enumerate(loaders):
@@ -91,7 +91,11 @@ def plot_calibration(**kwargs):
         #--------------------
         # Plotting
         #--------------------
-        ax = axs[loader_n]
+        if len(loaders) == 1:
+            ax = axs
+        else:
+            ax = axs[loader_n] 
+
         sb.pointplot(
                 data = df_calib,
                 ax = ax,
