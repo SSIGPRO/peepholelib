@@ -12,14 +12,13 @@ from pathlib import Path
 
 # torch stuff
 import torch
-from torch.utils.data import DataLoader
 from torchvision.datasets import ImageNet as IN1K
 
 # peepholelib imports
-from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_imagenet
+from peepholelib.datasets.datasetWrap import DatasetWrap
+from peepholelib.datasets.functional.transforms import vgg16_imagenet
 
-class ImageNet(DatasetBase):
+class ImageNet(DatasetWrap):
     """
     ImageNet‑1K loader (train & val).
     Expects:
@@ -34,7 +33,7 @@ class ImageNet(DatasetBase):
         print(f"dataset: {self.dataset}")
         return
 
-    def load_data(self, **kwargs):
+    def __load_data__(self, **kwargs):
         '''
         Load and prepare Imagenet data.
         
@@ -48,17 +47,17 @@ class ImageNet(DatasetBase):
 
         transform = kwargs['transform'] if 'transform' in kwargs else vgg16_imagenet
 
-        seed = kwargs['seed']
+        seed = self.seed
         torch.manual_seed(seed)
 
         # datasets
         train_ds = IN1K(
-                root = self.data_path,
+                root = self.path,
                 split = 'train',
                 transform=transform
                 )
         val_ds = IN1K(
-                root = self.data_path,
+                root = self.path,
                 split = 'val',
                 transform=transform
                 )

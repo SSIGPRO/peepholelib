@@ -33,6 +33,7 @@ def conceptogram_protoclass_score(**kwargs):
     proto = kwargs.get('proto', None) #TODO: is this used? remove
     verbose = kwargs.get('verbose', False)
     
+    
     # parse arguments
     if loaders == None: loaders = list(phs._phs.keys())
 
