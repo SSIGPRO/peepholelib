@@ -29,6 +29,8 @@ def plot_conceptogram(**kwargs):
     - scores (dict(str:dict(str:torch.tensor)))): Scores to add to title(see `peepholelib.utils.scores`) if given. Defaults to `None`.
     - classes (dict({int: str})): Dictionary containing name of the classes given their number.
     - ticks (list[str]): List of modules to put ticks. Defaults to `target_modules`.
+    - protoclass_title (str): Title for the protoclass plot.
+    - conceptogram_title (str): Title for the conceptogram plot.
     - krows (int): Write the name of `krows` most highlighted classes in the conceptograms.
     """
     path = kwargs['path']
@@ -48,6 +50,8 @@ def plot_conceptogram(**kwargs):
     classes = kwargs.get('classes', None) 
     ticks = kwargs.get('ticks', target_modules)
     krows = kwargs.get('krows', 3)
+    proto_title = kwargs.get('protoclass_title', 'Protoclass')
+    cp_title = kwargs.get('conceptogram_title', 'Conceptogram')
 
     if len(target_modules) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
@@ -116,7 +120,7 @@ def plot_conceptogram(**kwargs):
                 axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
                 axs[1].set_yticks(proto_tick_positions, proto_tick_labels)
                 axs[1].set_xlabel('Layers')
-                axs[1].set_title('Protoclass')
+                axs[1].set_title(proto_title)
 
             # Plot the conceptogram
             _, idx_topk = torch.topk(_c.sum(dim=0), krows, sorted=True)
@@ -127,7 +131,7 @@ def plot_conceptogram(**kwargs):
             axs[-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
             axs[-2].set_yticks(idx_topk, tick_labels)
             axs[-2].yaxis.tick_right()
-            axs[-2].set_title('Conceptogram')
+            axs[-2].set_title(cp_title)
             axs[-2].set_xlabel('Layers')
 
             # Plot the bar with nn's sofmaxed output
@@ -140,7 +144,6 @@ def plot_conceptogram(**kwargs):
             axs[-1].set_xlabel('Output')
             
             # save conceptogram
-
             plt.savefig(path/f'{name}.{ds_key}.{sample}.png', dpi=300, bbox_inches='tight')
             plt.close()
             if verbose: print(f"Conceptogram saved to {path}")
