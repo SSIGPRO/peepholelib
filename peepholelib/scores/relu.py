@@ -1,3 +1,5 @@
+from time import time
+
 # torch stuff
 import torch
 from torch.nn.functional import softmax as sm
@@ -59,13 +61,18 @@ def RelU_score(**kwargs):
     _scores = torch.diag(outputs@params@outputs.T) 
     s_min = _scores.min()
     s_max = _scores.max()
-
-    for ds_key in loaders:
-        outputs = sm(dss._dss[ds_key]['output']/temperature, dim=-1)
+    
+    t = torch.zeros(len(loaders))
+    for i, ds_key in enumerate(loaders):
+        _o = dss._dss[ds_key]['output']
+        t0 = time()
+        outputs = sm(_o/temperature, dim=-1)
         _params = torch.tril(params, diagonal=-1)
         _params = _params + _params.T
         _params = _params / _params.norm()
         scores = torch.diag(outputs@_params@outputs.T) 
         ret[ds_key][score_name] = 1-((scores - s_min)/(s_max - s_min)).clip(0., 1.)
 
+        t[i] = (time()-t0)/len(outputs)
+    print('relu time: ', t.mean(), t.std())
     return ret

@@ -1,6 +1,7 @@
 # python stuff
 from tqdm import tqdm
 from math import ceil
+from time import time
 
 # torch stuff
 import torch
@@ -49,7 +50,8 @@ def DOCTOR_score(**kwargs):
         if not ds_key in ret:
             ret[ds_key] = dict()
 
-    for ds_key in loaders:
+    t = torch.zeros(len(loaders))
+    for i, ds_key in enumerate(loaders):
         dssds = dss._dss[ds_key]
 
         n_samples = len(dssds)
@@ -59,7 +61,7 @@ def DOCTOR_score(**kwargs):
         dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads, shuffle=False)
         
         write_ptr = 0
-    
+         
         for _dss in tqdm(dl_dss,total=ceil(n_samples/bs)):
             inputs = _dss['image'].to(device)
             
@@ -83,12 +85,16 @@ def DOCTOR_score(**kwargs):
                 with torch.no_grad():
                     output = model(new_inputs)
 
+            t0 = time()
             scores = torch.sum(sm(output/temperature, dim=1)**2, dim=1)
             bsz = scores.shape[0]
 
             ret[ds_key][score_name][write_ptr:write_ptr+bsz] = scores.detach().cpu()
 
             write_ptr += bsz
+
+            t[i] = (time()-t0)/n_samples
                 
+    print('doc time: ', t.mean(), t.std())
     return ret       
 

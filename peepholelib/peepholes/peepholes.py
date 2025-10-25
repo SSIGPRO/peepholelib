@@ -1,3 +1,4 @@
+from time import time
 # python stuff
 from pathlib import Path
 from tqdm import tqdm
@@ -112,8 +113,12 @@ class Peepholes:
 
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
+                t0 = time()
                 for module in modules_to_compute:
-                    phs[module]['peepholes'] = self._drillers[module](cvs=_cvs, dss=_dss)
+                    #phs[module]['peepholes'] = self._drillers[module](cvs=_cvs, dss=_dss)
+                    self._drillers[module](cvs=_cvs, dss=_dss)
+                print('time: ', (time()-t0)/bs)
+                quit()
 
         return 
 

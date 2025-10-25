@@ -1,3 +1,4 @@
+from time import time
 # general python stuff
 from math import floor
 
@@ -154,7 +155,9 @@ def __DMD_score__(**kwargs):
     lr = LogisticRegressionCV(n_jobs=-1,max_iter=5000).fit(train_data, train_label)
 
     y_train = lr.predict_proba(train_data)[:, 1]
+    t0 = time()
     y_test = lr.predict_proba(test_data)[:, 1]
+    print('time: ', (time()-t0)/len(test_data))
 
     return y_train, y_test 
 

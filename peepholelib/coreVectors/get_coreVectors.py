@@ -1,3 +1,5 @@
+from time import time
+
 # General python stuff
 from tqdm import tqdm
 from functools import partial
@@ -142,9 +144,14 @@ def get_coreVectors(self, **kwargs):
                 with torch.no_grad():
                     model(ds_data['image'].to(device))
                     
+                t0 = time()
                 for mk in _modules_to_save:
                     act_data = activations_parser(model._acts)
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk]).cpu()
+                    #cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk]).cpu()
+
+                    reduction_fns[mk](act_data=act_data[mk]).cpu()
+                print('time: ', (time()-t0)/bs)
+                quit()
 
     # reset the model to NOT get activations
     model.set_activations(save_input=False, save_output=False)

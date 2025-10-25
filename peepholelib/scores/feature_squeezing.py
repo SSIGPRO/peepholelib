@@ -1,3 +1,5 @@
+from time import time
+
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
@@ -42,7 +44,8 @@ def feature_squeezing_score(**kwargs):
         if not ds_key in ret:
             ret[ds_key] = dict()
 
-    for ds_key in loaders:
+    t = torch.zeros(len(loaders))
+    for i, ds_key in enumerate(loaders):
         n_samples = len(dss._dss[ds_key])
         dl = DataLoader(
                 dss._dss[ds_key],
@@ -57,11 +60,25 @@ def feature_squeezing_score(**kwargs):
         # TODO: pre-allocate
         # acc results
         ori_list = []
+        t_acc = 0
+        n_acc = 0
+        it = 0
         for data in tqdm(dl):
-            output = detector(data['image'])
+            _i = data['image']
+            t0 = time()
+            output = detector(_i)
             ori_list.append(output.detach().cpu())
+
+            t_acc += time()-t0
+            n_acc += len(_i)
+            it += 1
+            if it==3: break 
 
         scores = torch.cat(ori_list, dim=0)
         ret[ds_key][score_name] = (2-scores)/2
+        print(t_acc, n_acc)
+
+        t[i] = (t_acc)/n_acc
+    print('relu time: ', t.mean(), t.std())
 
     return ret
