@@ -56,6 +56,8 @@ def plot_conceptogram(**kwargs):
     if len(target_modules) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
 
+    has_title = (scores != None) and (classes != None)
+
     for ds_key in loaders:
         # getting data from corevectors
         _dss = dss._dss[ds_key][samples] 
@@ -72,40 +74,32 @@ def plot_conceptogram(**kwargs):
 
             if protoclasses == None:
                 fig = plt.figure(figsize=(5 ,20))
-                gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
-                gss = gs[1].subgridspec(1, 2)
-                gs.tight_layout(fig, pad=1)
-                axs = [
-                        fig.add_subplot(gs[0, 0]),
-                        fig.add_subplot(gss[0,0]),
-                        fig.add_subplot(gss[0,1]),
-                        ]
             else: 
                 fig = plt.figure(figsize=(11 ,20))
-                gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
-                gss = gs[1].subgridspec(1, 3)
-                gs.tight_layout(fig, pad=1)
-                axs = [
-                        fig.add_subplot(gs[0, 0]),
-                        fig.add_subplot(gss[0,0]),
-                        fig.add_subplot(gss[0,1]),
-                        fig.add_subplot(gss[0,2])
-                        ]
+
+            gs = gridspec.GridSpec(2, 1, height_ratios=[0.5,3], wspace=0.5, hspace=0.1, figure=fig)
+            gst = gs[0].subgridspec(1, 1)
+            gsb = gs[1].subgridspec(1, 2+int(protoclasses != None))
+            gs.tight_layout(fig, pad=1)
+            axs = [[fig.add_subplot(axt) for axt in gst], [fig.add_subplot(axb) for axb in gsb]]
 
             # Plot the image
-            axs[0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
-            axs[0].axis('off')
+            axs[0][0].imshow(_d['image'].squeeze(dim=0).permute(1,2,0))
+            axs[0][0].axis('off')
             
-            if classes != None: 
-                title = f'True label: {classes[label]}\n'
-            else:
-                title = '' 
+            if has_title:
+                if classes != None: 
+                    title = f'True label: {classes[label]}\n'
+                else:
+                    title = '' 
 
-            if scores != None:
-                for score_name in scores[ds_key]:
-                    title += f'\n{score_name} score: {scores[ds_key][score_name][sample]:.2f}'
+                if scores != None:
+                    for score_name in scores[ds_key]:
+                        title += f'\n{score_name}: {scores[ds_key][score_name][sample]:.2f}'
 
-            axs[0].set_title(title, fontweight='bold')
+                axs[0][0].axis('off')
+                axs[0][0].text(s=title, x=1.0, y=1.0, va='top', transform=axs[0][0].transAxes, fontweight='bold')
+
 
             # Plot the protoclasses 
             if not protoclasses == None:
@@ -116,32 +110,32 @@ def plot_conceptogram(**kwargs):
                 proto_tick_positions = idx_topk.cpu().tolist()
                 proto_tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, proto_tick_positions))]
 
-                axs[1].imshow(protoclasses[pred].T, aspect='auto', vmin=0.0, vmax=1.0)
-                axs[1].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
-                axs[1].set_yticks(proto_tick_positions, proto_tick_labels)
-                axs[1].set_xlabel('Layers')
-                axs[1].set_title(proto_title)
+                axs[1][-3].imshow(protoclasses[pred].T, aspect='auto', vmin=0.0, vmax=1.0)
+                axs[1][-3].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
+                axs[1][-3].set_yticks(proto_tick_positions, proto_tick_labels)
+                axs[1][-3].set_xlabel('Layers')
+                axs[1][-3].set_title(proto_title)
 
             # Plot the conceptogram
             _, idx_topk = torch.topk(_c.sum(dim=0), krows, sorted=True)
             classes_topk = [classes[i] for i in idx_topk.tolist()]
             tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, idx_topk))]
 
-            axs[-2].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
-            axs[-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
-            axs[-2].set_yticks(idx_topk, tick_labels)
-            axs[-2].yaxis.tick_right()
-            axs[-2].set_title(cp_title)
-            axs[-2].set_xlabel('Layers')
+            axs[1][-2].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
+            axs[1][-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
+            axs[1][-2].set_yticks(idx_topk, tick_labels)
+            axs[1][-2].yaxis.tick_right()
+            axs[1][-2].set_title(cp_title)
+            axs[1][-2].set_xlabel('Layers')
 
             # Plot the bar with nn's sofmaxed output
-            axs[-1].imshow(output.reshape(-1,1), vmin=0.0, vmax=1.0)
-            axs[-1].set_xticks([])
-            axs[-1].set_yticks([pred])
-            axs[-1].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold')
-            axs[-1].yaxis.set_label_position("right")
-            axs[-1].yaxis.tick_right()
-            axs[-1].set_xlabel('Output')
+            axs[1][-1].imshow(output.reshape(-1,1), vmin=0.0, vmax=1.0)
+            axs[1][-1].set_xticks([])
+            axs[1][-1].set_yticks([pred])
+            axs[1][-1].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold')
+            axs[1][-1].yaxis.set_label_position("right")
+            axs[1][-1].yaxis.tick_right()
+            axs[1][-1].set_xlabel('Output')
             
             # save conceptogram
             plt.savefig(path/f'{name}.{ds_key}.{sample}.png', dpi=300, bbox_inches='tight')

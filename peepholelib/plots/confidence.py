@@ -118,8 +118,9 @@ def plot_confidence(**kwargs):
 
         # 1) Color legend: score types (one color per score_name)
         score_names = list(scores[ds_key].keys())  # order matches 'colors'
+        lw = 2.0
         color_handles = [
-            Line2D([0], [0], color=colors[i], lw=2)
+            Line2D([0], [0], color=colors[i], lw=lw)
             for i, _ in enumerate(score_names)
         ]
         color_legend = ax.legend(
@@ -132,15 +133,15 @@ def plot_confidence(**kwargs):
 
         # 2) Linestyle legend: outcome (OK vs KO)
         ls_handles = [
-            Line2D([0], [0], color='black', lw=2, linestyle='-'),  # OK
-            Line2D([0], [0], color='black', lw=2, linestyle='--'),   # KO
+            Line2D([0], [0], color='black', lw=lw, linestyle='-'),  # OK
+            Line2D([0], [0], color='black', lw=lw, linestyle='--'),   # KO
         ]
         ls_legend = ax.legend(
             ls_handles,
             ['correct', 'wrong'],
             title='Classification',
             loc='upper left',
-            bbox_to_anchor=(0, 0.7),
+            bbox_to_anchor=(0.25, 1.0),
             frameon=True,
         )
 
