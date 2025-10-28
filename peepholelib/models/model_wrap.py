@@ -268,19 +268,23 @@ class ModelWrap(metaclass=abc.ABCMeta):
         reduction_fn = kwargs.get('reduction_fn')
         norm_file = kwargs.get('norm_file')
 
-        samples = ds._dss[ds_key]['image'][idxs]
+        samples = ds._dss[ds_key]['image'][idxs].to(device)
         print(samples.shape)
 
         self.set_activations(save_input=True, save_output=True) 
 
         means, stds = torch.load(norm_file, weights_only=False)
 
+        means, stds = means.to(device), stds.to(device)
+
         with torch.no_grad():
             self(samples.to(device))
     
             a = activations_parser(self._acts)
-            c = {target_layer: (reduction_fn(act_data=a[target_layer]).cpu()- means[target_layer])/stds[target_layer]}
-            p = drillers[target_layer](cvs=c)
+            print(a[target_layer].device)
+            c = {target_layer: (reduction_fn(act_data=a[target_layer])- means[target_layer])/stds[target_layer]}
+            print(c[target_layer].device)
+            p = drillers[target_layer](cvs=c).detach().cpu()
 
         return p, c
 
