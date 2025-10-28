@@ -5,6 +5,9 @@ import abc
 # torch stuff
 import torch
 
+# our stuff
+from peepholelib.coreVectors.get_coreVectors import get_in_activations
+
 class Hook:
     def __init__(self, save_input=True, save_output=False):
         self.module = None 
@@ -248,4 +251,37 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._target_modules = _dict
         
         return
+    
+    def oneshot(self, **kwargs):
+        '''
+        Extract peepholes oneshot peepholes from dataset samples
+        '''
+
+        ds = kwargs.get('dss')
+
+        target_layer = kwargs.get('target_layer')
+        ds_key = kwargs.get('ds_key', 'train')
+        idxs = kwargs.get('idxs')
+        drillers = kwargs.get('dirllers')
+        device = kwargs.get('device', self.device)
+        activations_parser = kwargs.get('activations_parser', get_in_activations)
+        reduction_fn = kwargs.get('reduction_fn')
+        norm_file = kwargs.get('norm_file')
+
+        samples = ds._dss[ds_key]['image'][idxs]
+        print(samples.shape)
+
+        self.set_activations(save_input=True, save_output=True) 
+
+        means, stds = torch.load(norm_file, weights_only=False)
+
+        with torch.no_grad():
+            self(samples.to(device))
+    
+            a = activations_parser(self._acts)
+            c = {target_layer: (reduction_fn(act_data=a[target_layer]).cpu()- means[target_layer])/stds[target_layer]}
+            p = drillers[target_layer](cvs=c)
+
+        return p, c
+
 

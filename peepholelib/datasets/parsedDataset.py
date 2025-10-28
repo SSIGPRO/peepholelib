@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 
 # our stuff
 from peepholelib.models.prediction_fns import multilabel_classification
-from peepholelib.coreVectors.get_coreVectors import get_in_activations
 
 class ParsedDataset():
     def __init__(self, **kwargs):
@@ -222,37 +221,6 @@ class ParsedDataset():
                 print(f'appending {ds_key}')
         return
     
-    def oneshot(self, **kwargs):
-        '''
-        Extract peepholes oneshot peepholes from dataset samples
-        '''
-
-        model = kwargs.get('model')
-        target_layer = kwargs.get('target_layer')
-        ds_key = kwargs.get('ds_key', 'train')
-        idxs = kwargs.get('idxs')
-        drillers = kwargs.get('dirllers')
-        device = kwargs.get('device', model.device)
-        activations_parser = kwargs.get('activations_parser', get_in_activations)
-        reduction_fn = kwargs.get('reduction_fn')
-        norm_file = kwargs.get('norm_file')
-
-        samples = self._dss[ds_key]['image'][idxs]
-
-        model.set_activations(save_input=True, save_output=True) 
-
-        means, stds = torch.load(norm_file, weights_only=False)
-        print(means[target_layer].shape)
-
-        with torch.no_grad():
-            model(samples.to(device))
-    
-            a = activations_parser(model._acts)
-            c = {target_layer: (reduction_fn(act_data=a[target_layer]).cpu()- means[target_layer])/stds[target_layer]}
-            p = drillers[target_layer](cvs=c)
-
-        return p, c
-
     def __enter__(self):
         self._is_contexted = True
         return self
