@@ -24,8 +24,7 @@ class PeepholeExtractor(metaclass=abc.ABCMeta):
 
         self.model.set_activations(save_input=True, save_output=True) 
 
-        self.model._model.train().zero_grad()
-
+        self.model._model.eval().zero_grad()
 
     def __call__(self, **kwargs):
 
@@ -52,4 +51,4 @@ class PeepholeExtractor(metaclass=abc.ABCMeta):
 
         p, n = self.drillers[self.target_layer].peephole_extract_grad_true(cvs=c)
         
-        return p, c, n
+        return p, c, n, samples
