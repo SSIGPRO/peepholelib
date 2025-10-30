@@ -50,7 +50,7 @@ def get_clip_embeddings(self, **kwargs):
          if verbose: print('loaded n_samples: ', n_samples)
          self._corevds[ds_key].batch_size = torch.Size((n_samples,)) 
       else:
-         n_samples = len(self._dss[ds_key])
+         n_samples = len(datasets._dss[ds_key])
          self._corevds[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
          if verbose: print('created clip embeddings with n_samples: ', n_samples)
       
