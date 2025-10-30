@@ -113,7 +113,6 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         
         '''
         cvs = kwargs.get('cvs')
-        print(cvs['classifier.3'][0,:53].shape)
         verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`
@@ -122,10 +121,6 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         data = self.parser(cvs=cvs)
 
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
-        self._classifier.model_.to(self.device)
-        with torch.enable_grad():
-            pr, _ = self._classifier.model_(data)
-            predict_proba_manual = torch.softmax(pr, dim=1)
 
         lp = cp@self._empp
         lp /= lp.sum(dim=1, keepdim=True)

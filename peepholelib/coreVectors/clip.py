@@ -19,17 +19,24 @@ def get_clip_embeddings(self, **kwargs):
    - verbose (bool): print progress messages. Defaults to False.
    '''
 
-   self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-   self.clip_model = kwargs.get('clip_model', 'ViT-B/32')
-   self._model, _ = clip.load(self.clip_model, device=self.device)
-   self._embed_shape = self._model.visual.proj.shape
 
+   self.check_uncontexted()
+    
+   datasets = kwargs.get('datasets')
+   loaders = kwargs.get('loaders', None)
+   
    bs = kwargs.get('batch_size', 64) 
-   n_threads = kwargs.get('n_threads', 1)
-   verbose = kwargs.get('verbose', False)
+   n_threads = kwargs.get('n_threads', 1) 
+
+   verbose = kwargs.get('verbose', False) 
+
+   device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+   clip_model = kwargs.get('clip_model', 'ViT-B/32')
+   model, _ = clip.load(clip_model, device=device)
+   embed_shape = model.visual.proj.shape
 
    self._corevds = {}
-   for ds_key in self._dss:
+   for ds_key in datasets._dss:
       #------------------------------------------------
       # pre-allocate clip embeddings
       #------------------------------------------------
@@ -49,16 +56,16 @@ def get_clip_embeddings(self, **kwargs):
       
       if verbose: print(f'\n ---- Getting CLIP embeddings for {ds_key}\n')
 
-      self._corevds[ds_key]['embedding'] = MMT.empty(shape=((n_samples,)+(self._embed_shape[1],)))
+      self._corevds[ds_key]['embedding'] = MMT.empty(shape=((n_samples,)+(embed_shape[1],)))
 
       self._corevds[ds_key].close()
       self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
       
       embeds_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
 
-      ds_dl = DataLoader(self._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
+      ds_dl = DataLoader(datasets._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
 
       for embeds_data, ds_data in tqdm(zip(embeds_dl, ds_dl), disable=not verbose, total=len(embeds_dl)):
 
-            with torch.no_grad():       
-                    embeds_data['embedding'] = self._model.encode_image(ds_data['image'].to(self.device))
+         with torch.no_grad():       
+            embeds_data['embedding'] = model.encode_image(ds_data['image'].to(device))
