@@ -616,7 +616,7 @@ class myCW(AttackBase):
         self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
         self.mode = kwargs.get('mode', 'random')
             
-        targeted = False if self.mode == None else True
+        targeted = False if self.mode == 'random' else True
         
         self.atk = L2Adversary(
                 model = self.model._model,

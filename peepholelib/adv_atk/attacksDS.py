@@ -63,19 +63,26 @@ class AttacksDS(ParsedDataset):
                 file_path = self.path/('dss.'+tdsk) 
 
                 if file_path.exists():
-                    print(f'{file_path} exists. I am not overwritting it. Skipping')
+                    if verbose: print(f'{file_path} exists. I am not overwritting it. Skipping')
                     continue
 
                 n_samples = len(ds._dss[ds_key])
                 if verbose: print(f' Got {n_samples} samples from {ds_key}')
 
                 self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w') 
-
-                img_shape = ds._dss[ds_key]['image'][0].shape
                 
+                img_sample = ds._dss[ds_key]['image'][0:1]
+                img_shape = img_sample.shape[1:]
+                with torch.no_grad():
+                    _res = atk.model(img_sample.to(atk.model.device))
+                    num_classes = _res.shape[1]
+
                 self._dss[tdsk]['image'] = MMT.empty(shape=torch.Size((n_samples,)+img_shape))
                 self._dss[tdsk]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
+                self._dss[tdsk]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
+                self._dss[tdsk]['results'] = MMT.empty(shape=torch.Size((n_samples,)))
                 self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
+                self._dss[tdsk]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
 
                 # Close PTD create with mode 'w' and re-open it with mode 'r+'
                 # This is done so we can use multiple workers with the dataloaders 
@@ -92,7 +99,7 @@ class AttacksDS(ParsedDataset):
                         collate_fn = lambda x:x,
                         shuffle = False
                         ) 
-                                                                    
+
                 dl_dst = DataLoader(
                         self._dss[tdsk],
                         batch_size = bs,
@@ -102,22 +109,26 @@ class AttacksDS(ParsedDataset):
                         )
 
                 for di, dt in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
-
-                    images = di['image'].to(atk.model.device)
+                    ori_images = di['image'].to(atk.model.device)
                     labels = di['label'].int().to(atk.model.device)
-                    attack_images = atk(
-                            images = images,
+                    
+                    atk_images = atk(
+                            images = ori_images,
                             labels = labels
                             )
                     
                     with torch.no_grad():
-                        y_predicted = atk.model(attack_images)
-                    predicted_labels = y_predicted.argmax(axis = 1)
-                    results = predicted_labels != labels
+                        y_pred_ori = atk.model(ori_images.to(atk.model.device))
+                        y_pred_atk = atk.model(atk_images.to(atk.model.device))
+                    pred_labels_ori = y_pred_ori.argmax(axis = 1)
+                    pred_labels_atk = y_pred_atk.argmax(axis = 1)
 
-                    dt['image'] = attack_images
+                    dt['image'] = atk_images
+                    dt['output'] = y_pred_atk
                     dt['label'] = labels
-                    dt['attack_success'] = results                
+                    dt['pred'] = pred_labels_atk
+                    dt['results'] = pred_labels_atk == labels
+                    dt['attack_success'] = torch.logical_and(pred_labels_ori == labels, pred_labels_atk != pred_labels_ori) 
         return
 
     def get(self, ds_key, idx):
