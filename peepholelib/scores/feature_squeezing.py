@@ -11,7 +11,7 @@ def feature_squeezing_score(**kwargs):
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
     - loaders (list[str]): List of loaders in `datasets.keys()` to compute corevectors. If `None` uses `datasets._dss.keys()`. Defaults to `None`.
-    - Detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): Detector used to analyse the input images
+    - detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): Detector used to analyse the input images
     - device (torch.device): device to perform the computations. 
     - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
     - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
@@ -26,14 +26,13 @@ def feature_squeezing_score(**kwargs):
     dss = kwargs.get('datasets')
     loaders = kwargs.get('loaders_ori', None)
     detector = kwargs.get('detector') 
-    device = kwargs.get('device') 
     bs = kwargs.get('batch_size', 64)
     n_threads = kwargs.get('n_threads', 1) 
     append_scores = kwargs.get('append_scores', None)
     score_name = kwargs.get('score_name', 'Feature-Squeezing')
     verbose = kwargs.get('verbose', False)
 
-    if loaders = None: loaders = datasets._dss.keys()
+    if loaders == None: loaders = dss._dss.keys()
     if append_scores != None:
         ret = dict(append_scores)
     else:
@@ -45,20 +44,24 @@ def feature_squeezing_score(**kwargs):
 
     for ds_key in loaders:
         n_samples = len(dss._dss[ds_key])
-        dl = DataLoader(dss._dss[ds_key], batch_size=bs, shuffle=False, num_workers=n_threads)
-        if verbose: print(f'Applying FS to {ds_key}')
+        dl = DataLoader(
+                dss._dss[ds_key],
+                batch_size=bs,
+                shuffle=False,
+                collate_fn = lambda x:x,
+                num_workers=n_threads
+                )
 
-        # TODO: this should be done in evaluation
-        #idx = torch.argwhere((cv._dss[ds_key]['result']==1) & (cva._dss[ds_key]['attack_success']==1))
+        if verbose: print(f'Applying FS to {ds_key}')
         
+        # TODO: pre-allocate
         # acc results
         ori_list = []
         for data in tqdm(dl):
-            inputs = data['image'].to(device)
-            output = detector(inputs)
+            output = detector(data['image'])
             ori_list.append(output.detach().cpu())
 
         scores = torch.cat(ori_list, dim=0)
-        ret[ds_key][score_name] = scores
+        ret[ds_key][score_name] = (2-scores)/2
 
     return ret

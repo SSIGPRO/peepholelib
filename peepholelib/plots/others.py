@@ -212,42 +212,6 @@ def plot_ROC_confidence(**kwargs):
         plt.close()
     return 
 
-def FPR95_confidence(**kwargs):
-    '''
-    Computes the FPR at 95% TPR for the confidence case
-
-    Args:
-    - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
-    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
-    - verbose (bool): print progress messages.
-    '''
-
-    cvs = kwargs.get('corevectors')
-    scores = kwargs.get('scores')
-    loaders = kwargs.get('loaders', None)
-
-    if loaders == None: loaders = list(scores.keys())
-
-    for ds_key in loaders:
-            
-            score = scores[ds_key]
-
-            for name, s in score.items():
-                
-                results = cvs._dss[ds_key]['result'] 
-
-                s_oks = s[results == True]
-                s_kos = s[results == False]
-
-                sorted_pos, _ = torch.sort(s_oks, descending=True)
-                
-                tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
-                threshold = sorted_pos[tpr95_index]                
-                fpr95 = (s_kos >= threshold).float().mean().item()
-                print(f'FPR95 for {ds_key} {name} split: {fpr95:.4f}')
-    return
-
 def FPR95_OOD_AA(**kwargs):
     '''
     Computes the FPR at 95% TPR for both OOD and Adversarial Attacks

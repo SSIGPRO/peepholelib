@@ -4,6 +4,7 @@ from peepholelib.datasets.functional.transforms import vgg16_svhn
 
 # torch stuff
 import torch
+from torch.utils.data import random_split
 
 # SVHN from torchvision
 from torchvision import datasets
@@ -44,44 +45,45 @@ class SVHN(DatasetWrap):
         # set torch seed
         torch.manual_seed(seed)
 
-        # Test dataset is loaded directly
-        test_dataset = datasets.__dict__[self.dataset](
+        # split to get 10000 samples for test
+        _test_data = datasets.__dict__['SVHN'](
             root = self.path,
             split = 'test',
             transform = transform,
             download = True
         )
+
+        _, test_dataset = random_split(
+                _test_data,
+                [0.61585, 0.38415],
+                generator=torch.Generator().manual_seed(seed)
+                )
         
-        # train data will be splitted into training and validation
-        _train_data = datasets.__dict__[self.dataset]( 
+        # split to get 10000 samples for val
+        _train_data = datasets.__dict__['SVHN']( 
             root = self.path,
             split = 'train',
-            transform = None, #transform,
+            transform = transform,
             download = True
         )
         
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
-        )
-
-        # Apply the transform 
-        if transform != None:
-            val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform 
+        _, val_dataset = random_split(
+                _train_data,
+                [0.86349, 0.13651],
+                generator=torch.Generator().manual_seed(seed)
+                )
 
         self.__dataset__ = {
-                'train': train_dataset,
-                'val': val_dataset,
-                'test': test_dataset
+                'SVHN-val': val_dataset,
+                'SVHN-test': test_dataset
                 }
         
-        self._classes = {
-                'SVHN-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-                'SVHN-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-                'SVHN-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
-                }
+        # TODO: implement get_classes()
+        #self._classes = {
+        #        'SVHN-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
+        #        'SVHN-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
+        #        'SVHN-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
+        #        }
 
         return 
     
