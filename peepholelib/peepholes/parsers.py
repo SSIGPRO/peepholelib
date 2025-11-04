@@ -140,6 +140,7 @@ def null_corevectors(**kwargs):
     _cv = cvs[module]
     
     if dss == None:
+        print(_cv)
         return _cv 
     else:
         labels = dss[label_key]

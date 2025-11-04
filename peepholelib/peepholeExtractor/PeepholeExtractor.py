@@ -7,6 +7,7 @@ import torch
 
 # our stuff
 from peepholelib.coreVectors.get_coreVectors import get_in_activations
+from matplotlib import pyplot as plt
 
 class PeepholeExtractor(metaclass=abc.ABCMeta):
 
@@ -33,9 +34,10 @@ class PeepholeExtractor(metaclass=abc.ABCMeta):
         idxs = kwargs.get('idxs')
 
         samples = ds._dss[ds_key]['image'][idxs]
+        plt.imshow(samples.permute(1,2,0).cpu())
+        plt.savefig(f'sample_{idxs}.png')
         if not samples.requires_grad:
             samples = samples.requires_grad_(True)
-        print(samples.shape)
 
         means, stds = torch.load(self.norm_file, weights_only=False)
 
@@ -49,6 +51,6 @@ class PeepholeExtractor(metaclass=abc.ABCMeta):
 
         c = {self.target_layer: (reduced - means[self.target_layer]) / stds[self.target_layer]}
 
-        p, n = self.drillers[self.target_layer].peephole_extract_grad_true(cvs=c)
+        n = self.drillers[self.target_layer].peephole_extract_grad_true(cvs=c) 
         
-        return p, c, n, samples
+        return c, n, samples

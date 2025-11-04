@@ -147,9 +147,5 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         self._classifier.model_.to(self.device)
         with torch.enable_grad():
             pr, _ = self._classifier.model_(data)
-            pred = torch.softmax(pr, dim=1)
 
-        lp = pred@self._empp
-        lp /= lp.sum(dim=1, keepdim=True)
-
-        return lp, pred
+        return pr
