@@ -40,6 +40,7 @@ def auc_atks(**kwargs):
 
             s_atk = scores[ds_key][score_name]
             idx = dss._dss[ds_key][filter_key] == 1
+            s_ori = s_ori[idx]
             s_atk = s_atk[idx]
 
             # computing AUC for each score type
