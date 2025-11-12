@@ -41,7 +41,6 @@ def mahalanobis_distance_score(**kwargs):
     
     if use_sigma: # covariance matrix
         sigma = torch.cov(fit_signal.T)        
-        
         sigma_inv = torch.linalg.pinv(sigma)    
 
     # Mahalanobis distances
