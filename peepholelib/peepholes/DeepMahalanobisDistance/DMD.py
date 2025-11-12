@@ -116,8 +116,6 @@ class DeepMahalanobisDistance(DrillBase):
             output = self.model(data.to(self.device))
         else:
             output = self.parser_act(self.model._acts['out_activations'][self._layer])
-            # output = output.view(output.size(0), output.size(1), -1)
-            # output = torch.mean(output, 2)
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
@@ -126,7 +124,6 @@ class DeepMahalanobisDistance(DrillBase):
             gaussian_score[:,i] = term_gau
 
         if magnitude != 0:
-
             # Input_processing
             sample_pred = gaussian_score.max(1)[1]
             batch_sample_mean = self._means[sample_pred]
@@ -139,9 +136,9 @@ class DeepMahalanobisDistance(DrillBase):
             gradient = (gradient.float() - 0.5) * 2
 
             # TODO: Still think this could be simpler
-            # TODO: this is 3 because the activation are reshaped to have 3 dimensions.
+            # TODO: is this 3 because the activation are reshaped to have 3 dimensions?
             # I suspect this is specific for the models used in the reference code
-            # The std values should probablu reflect the number of dimensions
+            # The std values should probably reflect the number of dimensions
             for i in range(3):
                 gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
         
@@ -155,11 +152,11 @@ class DeepMahalanobisDistance(DrillBase):
             else:
                 output = self.parser_act(self.model._acts['out_activations'][self._layer])
 
-            noise_gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
+            gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
             for i in range(self.nl_model):
                 zero_f = output - self._means[i]
                 term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-                noise_gaussian_score[:, i] = term_gau
+                gaussian_score[:, i] = term_gau
 
-        score = noise_gaussian_score if magnitude != 0 else gaussian_score
+        score = gaussian_score
         return score.detach().cpu()
