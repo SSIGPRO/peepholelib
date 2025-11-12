@@ -44,17 +44,17 @@ def mahalanobis_distance_score(**kwargs):
         
         sigma_inv = torch.linalg.pinv(sigma)    
 
-
     # Mahalanobis distances
     for ds_key in loaders:
         test_signal = dss._dss[ds_key][signal_key].squeeze().flatten(start_dim=1)
         diff = (test_signal - mean) 
+        
+        # if sigma is identity matrix then Mahalanobis is just the norm
         if use_sigma:
             _d = diff.unsqueeze(1)
             dists = (_d@sigma_inv@(_d.transpose(1,2))).squeeze().sqrt()
-        else: # if sigma is identity matrix then Mahalanobis is just the norm
+        else:
             dists = diff.norm(dim=1)
-        print("sigma matrix: ", dists)
 
         ret[ds_key][score_name] = dists
     return ret
