@@ -117,7 +117,6 @@ def fine_tune(**kwargs):
     # training loop
     if verbose: print('training------')
     best_val_loss = float('inf')
-    patience_counter = 0
     old_lr = lr
 
     for epoch in range(initial_epoch, max_epochs):
@@ -176,7 +175,6 @@ def fine_tune(**kwargs):
         
         if loss < best_val_loss:
             best_val_loss = loss
-            patience_counter = 0
             # Save best model
             _d = {
                   'train_losses': train_losses[:epoch+1],
@@ -188,7 +186,6 @@ def fine_tune(**kwargs):
                   'scheduler': scheduler.state_dict() if not scheduler == None else None
                   }
             torch.save(_d, best_model_path/'best_model_config.pt')
-            torch.save(model._model.state_dict(), best_model_path/'best_model.pth')
 
         if verbose: print(f'epoch {epoch} - train loss: {train_losses[epoch]} - val loss: {val_losses[epoch]} - train acc: {train_acc[epoch]} - val acc: {val_acc[epoch]} - time: {time()-t0}')
         
