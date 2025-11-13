@@ -224,78 +224,76 @@ class Sentinel(parsedDataset.ParsedDataset):
             os = _output.shape[1:]
             ls = latent_space.shape[1:]
 
-            perm = torch.randperm(n_samples , generator=g)
-            val_idx  = perm[:n_samples_]
-            test_idx = perm[n_samples_: 2*n_samples_]
+            cdsk = loader+'-c-all'
+            idx = torch.randperm(n_samples , generator=g)[:n_samples_]
 
-            for i, (cdsk, idx) in enumerate(zip([loader+'-val-c-all', loader+'-test-c-all'], [val_idx, test_idx])):
-                if suffix != None:
-                    cdsk += '-'+suffix
+            if suffix != None:
+                cdsk += '-'+suffix
 
-                file_path = self.path/('dss.'+cdsk) 
+            file_path = self.path/('dss.'+cdsk) 
 
-                if file_path.exists():
-                    print(f'{file_path} exists. I am not overwritting it. Skipping')
-                    continue
+            if file_path.exists():
+                print(f'{file_path} exists. I am not overwritting it. Skipping')
+                continue
 
-                self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr], mode = 'w')
+            self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr], mode = 'w')
 
-                self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+data_shape), dtype=torch.float32)
-                self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
-                self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
-                self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+ls), dtype=torch.float32)
-                self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
-                self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
-                for c in range(n_corr):
-                    self._dss[cdsk][f'corruption{c}'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+            self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+data_shape), dtype=torch.float32)
+            self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
+            self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
+            self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+ls), dtype=torch.float32)
+            self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+            self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+            for c in range(n_corr):
+                self._dss[cdsk][f'corruption{c}'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
 
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                self._dss[cdsk].close()
-                self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
-                
-                sentinel_dl = DataLoader(
-                        dataset = self._dss[cdsk],
-                        batch_size = n_samples_,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
-                
-                for i,  (sentinel, (corruption, corrupter)) in enumerate(zip(sentinel_dl, corruptions.items())):
-                    t = self._dss[loader]['data'][idx].clone()
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers with the dataloaders 
+            self._dss[cdsk].close()
+            self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+            
+            sentinel_dl = DataLoader(
+                    dataset = self._dss[cdsk],
+                    batch_size = n_samples_,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
+            
+            for i, (sentinel, (corruption, corrupter)) in enumerate(zip(sentinel_dl, corruptions.items())):
+                t = self._dss[loader]['data'][idx].clone()
 
-                    for channel in range(n_channels):
-                        sig = self._dss[loader]['data'][idx , 0, channel, :].detach().cpu().numpy()
-                        corrupter.fit(sig)
-                        corr_sig = corrupter.distort(sig)
-                        t[:, 0, channel, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
+                for channel in range(n_channels):
+                    sig = self._dss[loader]['data'][idx , 0, channel, :].detach().cpu().numpy()
+                    corrupter.fit(sig)
+                    corr_sig = corrupter.distort(sig)
+                    t[:, 0, channel, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
 
-                    sentinel['data'] = t
-                    sentinel['corruption'] = torch.ones(len(t))*i
-                    sentinel[f'corruption{i}'] = torch.ones(len(t))
+                sentinel['data'] = t
+                sentinel['corruption'] = torch.ones(len(t))*i
+                sentinel[f'corruption{i}'] = torch.ones(len(t))
 
-                sentinel_dl = DataLoader(
-                        dataset = self._dss[cdsk],
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
+            sentinel_dl = DataLoader(
+                    dataset = self._dss[cdsk],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
         
-                for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr/bs)):
-                    with torch.no_grad():
-                        x = sentinel['data'].float().to(model.device)
-                        y_predicted, latent = model(x)
+            for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr/bs)):
+                with torch.no_grad():
+                    x = sentinel['data'].float().to(model.device)
+                    y_predicted, latent = model(x)
 
-                        sentinel['output'] = y_predicted
-                        sentinel['residual'] = y_predicted - x
-                        sentinel['latent_space'] = latent
+                    sentinel['output'] = y_predicted
+                    sentinel['residual'] = y_predicted - x
+                    sentinel['latent_space'] = latent
 
-                        mse = mse_loss(y_predicted, x, reduction='none')  
-                        mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
-                        sentinel['detection'] = (mse_per_sample > thr).long()
-                
+                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
+                    sentinel['detection'] = (mse_per_sample > thr).long()
+            
         return
     
     def get_corruptions_single(self, **kwargs):
@@ -342,81 +340,79 @@ class Sentinel(parsedDataset.ParsedDataset):
             os = _output.shape[1:]
             ls = latent_space.shape[1:]
             
-            perm = torch.randperm(n_samples , generator=g)
-            val_idx  = perm[:n_samples_]
-            test_idx = perm[n_samples_: 2*n_samples_]
+            idx  = torch.randperm(n_samples , generator=g)[:n_samples_]
+            cdsk = loader+'-c-single'
 
-            for i, (cdsk, idx) in enumerate(zip([loader+'-val-c-single', loader+'-test-c-single'], [val_idx, test_idx])):
-                if suffix != None:
-                    cdsk += '-'+suffix
+            if suffix != None:
+                cdsk += '-'+suffix
 
-                file_path = self.path/('dss.'+cdsk) 
+            file_path = self.path/('dss.'+cdsk) 
 
-                if file_path.exists():
-                    print(f'{file_path} exists. I am not overwritting it. Skipping')
-                    continue
+            if file_path.exists():
+                print(f'{file_path} exists. I am not overwritting it. Skipping')
+                continue
 
-                self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr*n_channels], mode = 'w')
+            self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr*n_channels], mode = 'w')
 
-                self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+data_shape), dtype=torch.float32)
-                self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+os), dtype=torch.float32)
-                self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+os), dtype=torch.float32)
-                self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+ls), dtype=torch.float32)
-                self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
-                self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
-                self._dss[cdsk]['RW'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
-                self._dss[cdsk]['channel'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
+            self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+data_shape), dtype=torch.float32)
+            self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+os), dtype=torch.float32)
+            self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+os), dtype=torch.float32)
+            self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)+ls), dtype=torch.float32)
+            self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
+            self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
+            self._dss[cdsk]['RW'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
+            self._dss[cdsk]['channel'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_channels,)), dtype=torch.int)
 
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                self._dss[cdsk].close()
-                self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers with the dataloaders 
+            self._dss[cdsk].close()
+            self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
-                sentinel_dl = DataLoader(
-                                dataset = self._dss[cdsk],
-                                batch_size = n_samples_,
-                                collate_fn = lambda x:x,
-                                shuffle = False,
-                                num_workers = n_threads
-                            )
-                
-                for sentinel, config in zip(sentinel_dl, configs):
-                    ch = config['channel']
-                    corr = config['corruption']
-                    corr_id = config['corr_id']
-                    t = self._dss[loader]['data'][idx].clone()
-                    sig = self._dss[loader]['data'][idx, 0, ch, :].detach().cpu().numpy()
+            sentinel_dl = DataLoader(
+                            dataset = self._dss[cdsk],
+                            batch_size = n_samples_,
+                            collate_fn = lambda x:x,
+                            shuffle = False,
+                            num_workers = n_threads
+                        )
+            
+            for sentinel, config in zip(sentinel_dl, configs):
+                ch = config['channel']
+                corr = config['corruption']
+                corr_id = config['corr_id']
+                t = self._dss[loader]['data'][idx].clone()
+                sig = self._dss[loader]['data'][idx, 0, ch, :].detach().cpu().numpy()
 
-                    corr.fit(sig)
-                    corr_sig = corr.distort(sig) 
+                corr.fit(sig)
+                corr_sig = corr.distort(sig) 
 
-                    t[:, 0, ch, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
+                t[:, 0, ch, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
 
-                    sentinel['data'] = t
-                    sentinel['corruption'] = torch.ones(len(t))*corr_id
-                    sentinel['channel'] = torch.ones(len(t))*ch
-                    sentinel['RW'] = torch.ones(len(t))*(ch//4)
+                sentinel['data'] = t
+                sentinel['corruption'] = torch.ones(len(t))*corr_id
+                sentinel['channel'] = torch.ones(len(t))*ch
+                sentinel['RW'] = torch.ones(len(t))*(ch//4)
 
-                sentinel_dl = DataLoader(
-                        dataset = self._dss[cdsk],
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                    )
+            sentinel_dl = DataLoader(
+                    dataset = self._dss[cdsk],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                )
         
-                for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr*n_channels/bs)):
-                    with torch.no_grad():
-                        x = sentinel['data'].float().to(model.device)
-                        y_predicted, latent = model(x)
+            for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr*n_channels/bs)):
+                with torch.no_grad():
+                    x = sentinel['data'].float().to(model.device)
+                    y_predicted, latent = model(x)
 
-                        sentinel['output'] = y_predicted
-                        sentinel['residual'] = y_predicted - x
-                        sentinel['latent_space'] = latent
+                    sentinel['output'] = y_predicted
+                    sentinel['residual'] = y_predicted - x
+                    sentinel['latent_space'] = latent
 
-                        mse = mse_loss(y_predicted, x, reduction='none')  
-                        mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
-                        sentinel['detection'] = (mse_per_sample > thr).long()
+                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
+                    sentinel['detection'] = (mse_per_sample > thr).long()
 
         return
             
@@ -473,87 +469,84 @@ class Sentinel(parsedDataset.ParsedDataset):
             os = _output.shape[1:]
             ls = latent_space.shape[1:]
 
-            perm = torch.randperm(n_samples, generator=g)
-            val_idx  = perm[:n_samples_]
-            test_idx = perm[n_samples_: 2*n_samples_]
+            idx  = torch.randperm(n_samples, generator=g)[:n_samples_]
+            cdsk = loader+'-c-RW' 
+            if suffix != None:
+                cdsk += '-'+suffix
 
-            for i, (cdsk, idx) in enumerate(zip([loader+'-val-c-RW', loader+'-test-c-RW'], [val_idx, test_idx])):
-                if suffix != None:
-                    cdsk += '-'+suffix
+            file_path = self.path/('dss.'+cdsk) 
 
-                file_path = self.path/('dss.'+cdsk) 
+            if file_path.exists():
+                print(f'{file_path} exists. I am not overwritting it. Skipping')
+                continue
 
-                if file_path.exists():
-                    print(f'{file_path} exists. I am not overwritting it. Skipping')
-                    continue
+            self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr*n_rw], mode = 'w')
 
-                self._dss[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr*n_rw], mode = 'w')
+            self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+data_shape), dtype=torch.float32)
+            self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+os), dtype=torch.float32)
+            self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+os), dtype=torch.float32)
+            self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+ls), dtype=torch.float32)
+            self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)                    
+            self._dss[cdsk]['RW'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            self._dss[cdsk]['RW0'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            self._dss[cdsk]['RW1'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            self._dss[cdsk]['RW2'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            self._dss[cdsk]['RW3'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
+            
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers with the dataloaders 
+            self._dss[cdsk].close()
+            self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
-                self._dss[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+data_shape), dtype=torch.float32)
-                self._dss[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+os), dtype=torch.float32)
-                self._dss[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+os), dtype=torch.float32)
-                self._dss[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)+ls), dtype=torch.float32)
-                self._dss[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                self._dss[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)                    
-                self._dss[cdsk]['RW'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                self._dss[cdsk]['RW0'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                self._dss[cdsk]['RW1'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                self._dss[cdsk]['RW2'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                self._dss[cdsk]['RW3'] = MMT.empty(shape=torch.Size((n_samples_*n_corr*n_rw,)), dtype=torch.int)
-                
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                self._dss[cdsk].close()
-                self._dss[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+            sentinel_dl = DataLoader(
+                    dataset = self._dss[cdsk],
+                    batch_size = n_samples_,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
+            
+            for sentinel, config in zip(sentinel_dl, configs):
+                group = config['group_id']
+                chs = config['channels']
+                corr = config['corruption']
+                corr_id = config['corr_id']
 
-                sentinel_dl = DataLoader(
-                        dataset = self._dss[cdsk],
-                        batch_size = n_samples_,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
-                
-                for sentinel, config in zip(sentinel_dl, configs):
-                    group = config['group_id']
-                    chs = config['channels']
-                    corr = config['corruption']
-                    corr_id = config['corr_id']
+                t = self._dss[loader]['data'][idx].clone()
 
-                    t = self._dss[loader]['data'][idx].clone()
+                for c in chs:
+                    sig = self._dss[loader]['data'][idx, 0, c, :].detach().cpu().numpy()
+                    corr.fit(sig)
+                    corr_sig = corr.distort(sig) 
+                    t[:, 0, c, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
 
-                    for c in chs:
-                        sig = self._dss[loader]['data'][idx, 0, c, :].detach().cpu().numpy()
-                        corr.fit(sig)
-                        corr_sig = corr.distort(sig) 
-                        t[:, 0, c, :] = torch.from_numpy(corr_sig).to(self._dss[loader].device)
+                    sentinel['data'] = t
 
-                        sentinel['data'] = t
+                sentinel['corruption'] = torch.ones(len(t))*corr_id
+                sentinel['RW'] = torch.ones(len(t))*group
+                sentinel[f'RW{group}'] = torch.ones(len(t))
 
-                    sentinel['corruption'] = torch.ones(len(t))*corr_id
-                    sentinel['RW'] = torch.ones(len(t))*group
-                    sentinel[f'RW{group}'] = torch.ones(len(t))
-
-                sentinel_dl = DataLoader(
-                        dataset = self._dss[cdsk],
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
+            sentinel_dl = DataLoader(
+                    dataset = self._dss[cdsk],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
         
-                for sentinel in tqdm(sentinel_dl):
-                    with torch.no_grad():
-                        x = sentinel['data'].float().to(model.device)
-                        y_predicted, latent = model(x)
+            for sentinel in tqdm(sentinel_dl):
+                with torch.no_grad():
+                    x = sentinel['data'].float().to(model.device)
+                    y_predicted, latent = model(x)
 
-                        sentinel['output'] = y_predicted
-                        sentinel['residual'] = y_predicted - x
-                        sentinel['latent_space'] = latent
+                    sentinel['output'] = y_predicted
+                    sentinel['residual'] = y_predicted - x
+                    sentinel['latent_space'] = latent
 
-                        mse = mse_loss(y_predicted, x, reduction='none')  
-                        mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
-                        sentinel['detection'] = (mse_per_sample > thr).long()
+                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
+                    sentinel['detection'] = (mse_per_sample > thr).long()
             
         return   
     
