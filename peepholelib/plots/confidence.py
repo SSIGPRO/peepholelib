@@ -160,3 +160,82 @@ def plot_confidence(**kwargs):
     plt.savefig((path/f'confidence.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
     return 
+
+def one_thr_for_all(**kwargs):
+
+    '''
+    Unique evaluation for all cases together to see what happens
+
+    Args:
+    - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
+    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
+    - path ('str'): Path to save plots.
+    - max_score (float): Max score for the accuracy plot, within '[0., 1.]'.
+    - loaders_renames (list[str}): list of names to overwrite the loaders' names in the plots. 
+    - verbose (bool): print progress messages.
+    '''
+
+    dss = kwargs.get('datasets')
+    scores = kwargs.get('scores')
+    scores_ids = kwargs.get('scores_ids', scores.keys())
+    id_loader = kwargs.get('id_loader')
+    c_loaders = kwargs.get('c_loaders')
+    ood_loaders = kwargs.get('ood_loaders')
+    atk_loaders = kwargs.get(atk_loaders)
+    path = kwargs.get('path', None)
+    verbose = kwargs.get('verbose', False)
+
+    # parse arguments
+    if path == None: 
+        path = Path.cwd()
+    else:
+        path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    thrs = {}
+    for score_name in scores_ids:
+        _scores = scores[id_loader][score_name]
+        results = dss._dss[id_loader]['result']
+
+        s_oks = _scores[results == True]
+
+        sorted_pos, _ = torch.sort(s_oks, descending=True)
+        tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
+        thrs[score_name] = sorted_pos[tpr95_index] 
+
+    for cl in c_loaders:
+
+        for score_name in scores_ids:
+ 
+            s_kos = scores[cl][score_name][results == True]### here should be a random permutation of the elements so that we have the same amount
+               
+            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+
+            if verbose:
+                print(f'FPR95 for {cl} {score_name} split: {fpr95:.4f}')
+
+    for ol in ood_loaders:
+
+        for score_name in scores_ids:
+            
+            s_kos = scores[ol][results == True]### here should be a random permutation of the elements so that we have the same amount
+            
+            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+
+            if verbose:
+                print(f'FPR95 for {ol} {score_name} split: {fpr95:.4f}')
+
+    for al in atk_loaders:
+
+        for score_name in enumerate(scores_ids):
+
+            atk_success = dss._dss[al]['attack_success']
+            s_kos = scores[al][atk_success == True]### here should be a random permutation of the elements so that we have the same amount
+              
+            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+
+            if verbose:
+                print(f'FPR95 for {al} {score_name} split: {fpr95:.4f}')
+
+
