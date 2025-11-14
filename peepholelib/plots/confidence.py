@@ -182,16 +182,16 @@ def one_thr_for_all(**kwargs):
     id_loader = kwargs.get('id_loader')
     c_loaders = kwargs.get('c_loaders')
     ood_loaders = kwargs.get('ood_loaders')
-    atk_loaders = kwargs.get(atk_loaders)
+    atk_loaders = kwargs.get('atk_loaders')
     path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
 
-    # parse arguments
-    if path == None: 
-        path = Path.cwd()
-    else:
-        path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
+    # # parse arguments
+    # if path == None: 
+    #     path = Path.cwd()
+    # else:
+    #     path = Path(path)
+    # path.mkdir(parents=True, exist_ok=True)
 
     thrs = {}
     for score_name in scores_ids:
@@ -204,38 +204,44 @@ def one_thr_for_all(**kwargs):
         tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
         thrs[score_name] = sorted_pos[tpr95_index] 
 
+    print('-----------\n CORRUPTION \n-----------')
+
     for cl in c_loaders:
 
         for score_name in scores_ids:
  
-            s_kos = scores[cl][score_name][results == True]### here should be a random permutation of the elements so that we have the same amount
+            s_kos = scores[cl][score_name]### here should be a random permutation of the elements so that we have the same amount
                
             fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {cl} {score_name} split: {fpr95:.4f}')
+                print(f'FPR95 for {cl} {score_name} split: {fpr95:.2f}')
+
+    print('-----------\n OOD \n-----------')
 
     for ol in ood_loaders:
 
         for score_name in scores_ids:
             
-            s_kos = scores[ol][results == True]### here should be a random permutation of the elements so that we have the same amount
+            s_kos = scores[ol][score_name]### here should be a random permutation of the elements so that we have the same amount
             
             fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {ol} {score_name} split: {fpr95:.4f}')
+                print(f'FPR95 for {ol} {score_name} split: {fpr95:.2f}')
+
+    print('-----------\n ATTACKS \n-----------')
 
     for al in atk_loaders:
 
-        for score_name in enumerate(scores_ids):
+        for score_name in scores_ids:
 
             atk_success = dss._dss[al]['attack_success']
-            s_kos = scores[al][atk_success == True]### here should be a random permutation of the elements so that we have the same amount
+            s_kos = scores[al][score_name][atk_success == True]### here should be a random permutation of the elements so that we have the same amount
               
             fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {al} {score_name} split: {fpr95:.4f}')
+                print(f'FPR95 for {al} {score_name} split: {fpr95:.2f}')
 
 

@@ -373,10 +373,10 @@ def DMD_score_conf(**kwargs):
     phs = kwargs['peepholes']
     ds = kwargs['dataset']
     loader_train = kwargs.get('loader_train', 'train')
-    loader_test = kwargs.get('loader_test', 'test')
+    test_loaders = kwargs.get('test_loaders')
     target_modules = kwargs.get('target_modules', None)
     append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'DMD')
+    score_name = kwargs.get('score_name', 'DMD-in')
 
     # parse arguments
     if target_modules == None: target_modules = list(phs._phs[loader_train].keys())
@@ -407,14 +407,16 @@ def DMD_score_conf(**kwargs):
     train_data = torch.vstack((train_pos, train_neg))
     print(train_data.shape)
     train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
-    test_data = torch.stack([phs._phs[loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
 
-    _, y_test = __DMD_score__(
-                train_data = train_data,
-                train_label = train_label,
-                test_data = test_data,
-                )
+    for loader_test in test_loaders:
+        test_data = torch.stack([phs._phs[loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+
+        _, y_test = __DMD_score__(
+                    train_data = train_data,
+                    train_label = train_label,
+                    test_data = test_data,
+                    )
     
-    ret[loader_test][score_name] = torch.tensor(y_test)
+        ret[loader_test][score_name] = torch.tensor(y_test)
 
     return ret
