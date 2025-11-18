@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sb
 import pandas as pd
+import numpy as np
 
 # torch stuff
 import torch
@@ -183,7 +184,6 @@ def one_thr_for_all(**kwargs):
     c_loaders = kwargs.get('c_loaders')
     ood_loaders = kwargs.get('ood_loaders')
     atk_loaders = kwargs.get('atk_loaders')
-    path = kwargs.get('path', None)
     verbose = kwargs.get('verbose', False)
 
     # # parse arguments
@@ -194,41 +194,54 @@ def one_thr_for_all(**kwargs):
     # path.mkdir(parents=True, exist_ok=True)
 
     thrs = {}
+    fpr95 = {}
+
     for score_name in scores_ids:
+
+        if not score_name in fpr95:
+                fpr95[score_name] = {}
+
         _scores = scores[id_loader][score_name]
         results = dss._dss[id_loader]['result']
 
         s_oks = _scores[results == True]
+        s_kos = _scores[results == False]
 
         sorted_pos, _ = torch.sort(s_oks, descending=True)
         tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
         thrs[score_name] = sorted_pos[tpr95_index] 
+        fpr95[score_name][id_loader] = (s_kos >= thrs[score_name]).float().mean().item()
 
     print('-----------\n CORRUPTION \n-----------')
 
     for cl in c_loaders:
 
         for score_name in scores_ids:
+
+            if not score_name in fpr95:
+                fpr95[score_name] = {}
  
-            s_kos = scores[cl][score_name]### here should be a random permutation of the elements so that we have the same amount
-               
-            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+            s_kos = scores[cl][score_name]               
+            fpr95[score_name][cl] = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {cl} {score_name} split: {fpr95:.2f}')
+                print(f'FPR95 for {cl} {score_name} split: {fpr95[score_name][cl]:.2f}')
 
     print('-----------\n OOD \n-----------')
 
     for ol in ood_loaders:
 
         for score_name in scores_ids:
+
+            if not score_name in fpr95:
+                fpr95[score_name] = {}
             
-            s_kos = scores[ol][score_name]### here should be a random permutation of the elements so that we have the same amount
+            s_kos = scores[ol][score_name]
             
-            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+            fpr95[score_name][ol] = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {ol} {score_name} split: {fpr95:.2f}')
+                print(f'FPR95 for {ol} {score_name} split: {fpr95[score_name][ol]:.2f}')
 
     print('-----------\n ATTACKS \n-----------')
 
@@ -236,12 +249,69 @@ def one_thr_for_all(**kwargs):
 
         for score_name in scores_ids:
 
+            if not score_name in fpr95:
+                fpr95[score_name] = {}
+
             atk_success = dss._dss[al]['attack_success']
-            s_kos = scores[al][score_name][atk_success == True]### here should be a random permutation of the elements so that we have the same amount
+
+            s_kos = scores[al][score_name][atk_success == True]
               
-            fpr95 = (s_kos >= thrs[score_name]).float().mean().item()
+            fpr95[score_name][al] = (s_kos >= thrs[score_name]).float().mean().item()
 
             if verbose:
-                print(f'FPR95 for {al} {score_name} split: {fpr95:.2f}')
+                print(f'FPR95 for {al} {score_name} split: {fpr95[score_name][al]:.2f}')
+
+    for score_name, v in fpr95.items(): 
+
+        print(f'--------\n {score_name} \n--------')
+        
+        vals = np.array(list(v.values()), dtype=float)
+
+        print(f"overall FPR@95 = {vals.mean():.4f}")
+
+        excluded_key = "CIFAR100-test"
+
+        vals = np.array(
+            [val for k, val in v.items() if k != excluded_key],
+            dtype=float
+        )
+
+        print(f"Overall exlcluded ID FPR@95 = {vals.mean():.4f}")
+
+        selected_keys = [
+            'CIFAR100-C-test-c0',
+            'CIFAR100-C-test-c1',
+            'CIFAR100-C-test-c2',
+            'CIFAR100-C-test-c3',
+            'CIFAR100-C-test-c4',
+        ]
+
+        vals = np.array([v[k] for k in selected_keys], dtype=float)
+
+        print(f"corruptions FPR@95 = {vals.mean():.4f}")
+
+        selected_keys = [
+            'SVHN-test',
+            'Places365-test',
+        ]
+
+        vals = np.array([v[k] for k in selected_keys], dtype=float)
+
+        print(f"OOD FPR@95 = {vals.mean():.4f}")
+
+        selected_keys = [
+            'BIM-CIFAR100-test',
+            'CW-CIFAR100-test',
+            'DF-CIFAR100-test',
+            'PGD-CIFAR100-test',
+        ]
+
+        vals = np.array([v[k] for k in selected_keys], dtype=float)
+
+        print(f"Attacks FPR@95 = {vals.mean():.4f}")
+
+        
+
+    
 
 
