@@ -6,7 +6,7 @@ from math import floor, ceil
 from tqdm import tqdm
 
 # tensordict
-from peepholelib.datasets import parsedDataset
+from peepholelib.datasets.parsedDataset import ParsedDataset
 from peepholelib.datasets.datasetWrap import DatasetWrap
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
@@ -39,8 +39,14 @@ class CustomDS(Dataset):
             
             self.labels = labels[idx.squeeze(dim=1)]
         else: 
-            raise RuntimeError('Dude, wtf?!')
-        
+            raise RuntimeError('Labels should be None or a dataframe')
+
+        if type(self.labels) != NoneType:
+            idx = (self.labels == 1).any(axis=(1, 2)).logical_not()
+            self.data = self.data[idx]
+            self.labels = self.labels[idx]
+
+        # filter samples with label == 1
         self.len = self.data.shape[0]
         
         return
@@ -57,7 +63,6 @@ class CustomDS(Dataset):
 class SentinelWrap(DatasetWrap):#DatasetBase
 
     def __init__(self, **kwargs):
-        
         self.path = kwargs.get('path')
         self.train_val_split = kwargs.get('train_val_split', 0.2)
         
@@ -73,22 +78,22 @@ class SentinelWrap(DatasetWrap):#DatasetBase
         test_file = Path(self.path)/'test_data.pkl'
         label_file = Path(self.path)/'test_labels.pkl'
 
-        data_train_std = pd.read_pickle(train_file.as_posix())
-        data_test_std = pd.read_pickle(test_file.as_posix())
+        data_train = pd.read_pickle(train_file.as_posix())
+        data_test = pd.read_pickle(test_file.as_posix())
         test_labels = pd.read_pickle(label_file.as_posix())
 
         torch.manual_seed(seed)
         self.__dataset__ = {}
         
         # split train into train and val
-        ds_train = CustomDS(data=data_train_std, labels=None, ws=ws)
+        ds_train = CustomDS(data=data_train, labels=None, ws=ws)
         self.__dataset__['train'] , self.__dataset__['val'] = torch.utils.data.random_split(
                 ds_train,
                 [1-self.train_val_split, self.train_val_split],
                 generator = torch.Generator().manual_seed(seed)
         )
 
-        self.__dataset__['test'] = CustomDS(data=data_test_std, labels=test_labels, ws=ws)
+        self.__dataset__['test'] = CustomDS(data=data_test, labels=test_labels, ws=ws)
 
         return
 
@@ -108,84 +113,109 @@ class SentinelWrap(DatasetWrap):#DatasetBase
         
         return [self._dss[ds_key][idx]]
     
-class Sentinel(parsedDataset.ParsedDataset):
-        
+class Sentinel(ParsedDataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         return
-
+    
     @classmethod
-    def parse_ds(cls, **kwargs):
-        model = kwargs.get('model')
-        verbose = kwargs.get('verbose')
-        parsed_path = Path(kwargs.get('parsed_path'))
-        sentinel_wrap = kwargs.get('sentinel_wrap')
+    def create_ds(cls, **kwargs):
+        path = Path(kwargs['path'])
+        sentinel_wrap = kwargs['sentinel_wrap']
         bs = kwargs.get('batch_size', 2**11)
+        verbose = kwargs.get('verbose', False)
         
-        parsed_path.mkdir(parents=True, exist_ok=True)
-        cls_inst = cls(path = parsed_path)
+        path.mkdir(parents=True, exist_ok=True)
+        cls_inst = cls(path = path)
         cls_inst._dss = {}
         
         for ds_key in sentinel_wrap.__dataset__:
-            
             file_path = cls_inst.path/('dss.'+ds_key)
             n_samples = len(sentinel_wrap.__dataset__[ds_key])
-            
-            # dataset sample for dry run
-            ds_sample = sentinel_wrap.__dataset__[ds_key][0:1]
-            model_input = ds_sample['data']
-            
-            with torch.no_grad():
-                _output, latent_space = model(model_input.to(model.device))
-                _output = _output
-                latent_space = latent_space
-                     
-            os = _output.shape[1:]
-            ls = latent_space.shape[1:]
             
             # check if PTD exists 
             if file_path.exists():
                 if verbose: print(f'File {file_path} exists. Loading from disk.')
                 cls_inst._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-   
+
             else:
-                if verbose: print('Creating dataset with n_samples: ', n_samples)
+                if verbose: print(f'Creating {ds_key} dataset with n_samples: ', n_samples)
                 cls_inst._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+                
+                # get sample to get shapes
+                sample = sentinel_wrap.__dataset__[ds_key][0]
+                for key in sample.keys():
+                    if verbose: print(f'allocating {key} with shape {sample[key].shape}')
+                    cls_inst._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+sample[key].shape), dtype=torch.float32)
         
-                # allocate disk space
-                cls_inst._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
-                cls_inst._dss[ds_key]['residual'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
-                cls_inst._dss[ds_key]['latent_space'] = MMT.empty(shape=torch.Size((n_samples,)+ls), dtype=torch.float32)
-
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                cls_inst._dss[ds_key].close()
-                cls_inst._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-
                 # create Dataloader of input dataset
-                sentinel_origin = DataLoader(
+                ds_in = DataLoader(
                     dataset = sentinel_wrap.__dataset__[ds_key],
                     batch_size = bs
                 )
-
-                sentinel_destination = DataLoader(
+                                                                                                                                        
+                ds_t = DataLoader(
                     cls_inst._dss[ds_key],
                     collate_fn = lambda x:x, 
                     batch_size = bs
                 )
-
-                for data_in, data_t in tqdm(zip(sentinel_origin, sentinel_destination), disable=not verbose, total=ceil(n_samples/bs)):
+                                                                                                                                        
+                for data_in, data_t in tqdm(zip(ds_in, ds_t), disable=not verbose, total=ceil(n_samples/bs)):
                     for key in data_in.keys():
                         data_t[key] = data_in[key]
+        return
 
-                    #compute predictions which is the out of decoder
+    # overwrite the parse_ds() from peepholelib.datasets.parsedDataset.ParsedDataset
+    def parse_ds(self, **kwargs):
+        self.check_uncontexted()
+
+        model = kwargs['model']
+        loaders = kwargs.get('loaders', None)
+        bs = kwargs.get('batch_size', 2**11)
+        verbose = kwargs.get('verbose', False)
+        
+        if loaders == None:
+            loaders = self._dss.keys()
+
+        for ds_key in loaders:
+            file_path = self.path/('dss.'+ds_key)
+            n_samples = len(self._dss[ds_key])
+            
+            # dataset sample for dry run
+            sample = self._dss[ds_key][0:1]['data'].to(model.device)
+            with torch.no_grad():
+                _out, _ls = model(sample)
+                     
+            os = _out.shape[1:]
+            ls = _ls.shape[1:]
+            print('Aloc shapes: ', os, ls)
+
+            # need to fix the batch size - workaround  
+            self._dss[ds_key].batch_size = torch.Size((n_samples,))
+            # allocate disk space
+            self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
+            self._dss[ds_key]['residual'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
+            self._dss[ds_key]['latent_space'] = MMT.empty(shape=torch.Size((n_samples,)+ls), dtype=torch.float32)
+
+            dl = DataLoader(
+                self._dss[ds_key],
+                collate_fn = lambda x:x, 
+                batch_size = bs
+            )
+
+            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs)):
+                #compute predictions which is the out of decoder
+                with torch.no_grad():
+                    x = data['data'].float().to(model.device)
                     with torch.no_grad():
-                        x = data_in['data'].float().to(model.device)
-                        y_predicted, latent = model(x)
-                        
-                        data_t['output'] = y_predicted
-                        data_t['residual'] = y_predicted - x 
-                        data_t['latent_space'] = latent           
+                        y, ls = model(x)
+                    
+                    print('pred shapes: ', y.shape, ls.shape)
+                    print('data shapes: ', data['output'].shape, data['residual'].shape, data['latent_space'].shape)
+                    
+                    data['output'] = y
+                    data['residual'] = y - x 
+                    data['latent_space'] = ls           
         
         return
     
@@ -193,6 +223,8 @@ class Sentinel(parsedDataset.ParsedDataset):
         '''
         Generate a corrupted version of the initial dataset using wombats package
         '''
+        self.check_uncontexted()
+
         model = kwargs.get('model')
         corruptions = kwargs.get('corruptions')
         verbose = kwargs.get('verbose', False)
@@ -218,11 +250,9 @@ class Sentinel(parsedDataset.ParsedDataset):
             model_input = ds_sample['data']
 
             with torch.no_grad():
-                _output, latent_space = model(model_input.to(model.device)) 
-                _output = _output
-                latent_space = latent_space               
-            os = _output.shape[1:]
-            ls = latent_space.shape[1:]
+                _out, _ls = model(model_input.to(model.device)) 
+            os = _out.shape[1:]
+            ls = _ls.shape[1:]
 
             cdsk = loader+'-c-all'
             idx = torch.randperm(n_samples , generator=g)[:n_samples_]
@@ -284,13 +314,14 @@ class Sentinel(parsedDataset.ParsedDataset):
             for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr/bs)):
                 with torch.no_grad():
                     x = sentinel['data'].float().to(model.device)
-                    y_predicted, latent = model(x)
+                    with torch.no_grad():
+                        y, ls = model(x)
 
-                    sentinel['output'] = y_predicted
-                    sentinel['residual'] = y_predicted - x
-                    sentinel['latent_space'] = latent
+                    sentinel['output'] = y
+                    sentinel['residual'] = y - x
+                    sentinel['latent_space'] = ls
 
-                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse = mse_loss(y, x, reduction='none')  
                     mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
                     sentinel['detection'] = (mse_per_sample > thr).long()
             
@@ -300,6 +331,8 @@ class Sentinel(parsedDataset.ParsedDataset):
         '''
         Generate a corrupted version of the initial dataset using wombats package
         '''
+        self.check_uncontexted()
+
         model = kwargs.get('model')
         corruptions = kwargs.get('corruptions')
         verbose = kwargs.get('verbose', False)
@@ -330,15 +363,12 @@ class Sentinel(parsedDataset.ParsedDataset):
                         'corr_id': corr_id
                     })
 
-            ds_sample = self._dss[loader][0:1]
-            model_input = ds_sample['data']
-
+            # dry run to get shapes
+            sample = self._dss[loader][0:1]['data'].to(model.device)
             with torch.no_grad():
-                _output, latent_space = model(model_input.to(model.device)) 
-                _output = _output
-                latent_space = latent_space               
-            os = _output.shape[1:]
-            ls = latent_space.shape[1:]
+                _out, _ls = model(sample) 
+            os = _out.shape[1:]
+            ls = _ls.shape[1:]
             
             idx  = torch.randperm(n_samples , generator=g)[:n_samples_]
             cdsk = loader+'-c-single'
@@ -404,13 +434,14 @@ class Sentinel(parsedDataset.ParsedDataset):
             for sentinel in tqdm(sentinel_dl, disable=not verbose, total=ceil(n_samples_*n_corr*n_channels/bs)):
                 with torch.no_grad():
                     x = sentinel['data'].float().to(model.device)
-                    y_predicted, latent = model(x)
+                    with torch.no_grad():
+                        y, ls = model(x)
 
-                    sentinel['output'] = y_predicted
-                    sentinel['residual'] = y_predicted - x
-                    sentinel['latent_space'] = latent
+                    sentinel['output'] = y
+                    sentinel['residual'] = y - x
+                    sentinel['latent_space'] = ls
 
-                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse = mse_loss(y, x, reduction='none')  
                     mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
                     sentinel['detection'] = (mse_per_sample > thr).long()
 
@@ -420,6 +451,8 @@ class Sentinel(parsedDataset.ParsedDataset):
         '''
         Generate a corrupted version of the initial dataset using wombats package
         '''
+        self.check_uncontexted()
+
         model = kwargs.get('model')
         corruptions = kwargs.get('corruptions')
         verbose = kwargs.get('verbose', False)
@@ -458,16 +491,12 @@ class Sentinel(parsedDataset.ParsedDataset):
                     for g_id, ch_group in groups
                 ]
             
-            ds_sample = self._dss[loader][0:1]
-            model_input = ds_sample['data']
-
+            # dry run to get shapes
+            sample = self._dss[loader][0:1]['data'].to(model.device)
             with torch.no_grad():
-                _output, latent_space = model(model_input.to(model.device)) 
-                _output = _output
-                latent_space = latent_space 
-
-            os = _output.shape[1:]
-            ls = latent_space.shape[1:]
+                _out, _ls = model(sample) 
+            os = _out.shape[1:]
+            ls = _ls.shape[1:]
 
             idx  = torch.randperm(n_samples, generator=g)[:n_samples_]
             cdsk = loader+'-c-RW' 
@@ -538,13 +567,14 @@ class Sentinel(parsedDataset.ParsedDataset):
             for sentinel in tqdm(sentinel_dl):
                 with torch.no_grad():
                     x = sentinel['data'].float().to(model.device)
-                    y_predicted, latent = model(x)
+                    with torch.no_grad():
+                        y, ls = model(x)
 
-                    sentinel['output'] = y_predicted
-                    sentinel['residual'] = y_predicted - x
-                    sentinel['latent_space'] = latent
+                    sentinel['output'] = y
+                    sentinel['residual'] = y - x
+                    sentinel['latent_space'] = ls
 
-                    mse = mse_loss(y_predicted, x, reduction='none')  
+                    mse = mse_loss(y, x, reduction='none')  
                     mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
                     sentinel['detection'] = (mse_per_sample > thr).long()
             
