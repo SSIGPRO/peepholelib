@@ -71,6 +71,7 @@ class SentinelWrap(DatasetWrap):#DatasetBase
     def __load_data__(self, **kwargs):
         ws = kwargs.get('window_size', 16) 
         seed = kwargs.get('seed', 42)
+        n_samples = kwargs.get('n_samples', None)
         verbose = kwargs.get('verbose', False)
 
         # load data and the labels
@@ -94,6 +95,14 @@ class SentinelWrap(DatasetWrap):#DatasetBase
         )
 
         self.__dataset__['test'] = CustomDS(data=data_test, labels=test_labels, ws=ws)
+        
+        if n_samples != None:
+            for ds_key in n_samples.keys():
+                if n_samples[ds_key] != None:
+                    self.__dataset__[ds_key] = torch.utils.data.Subset(
+                            self.__dataset__[ds_key],
+                            range(n_samples[ds_key])
+                            ) 
 
         return
 
@@ -163,6 +172,9 @@ class Sentinel(ParsedDataset):
                 for data_in, data_t in tqdm(zip(ds_in, ds_t), disable=not verbose, total=ceil(n_samples/bs)):
                     for key in data_in.keys():
                         data_t[key] = data_in[key]
+            
+            # close the PTD
+            cls_inst._dss[ds_key].close()
         return
 
     # overwrite the parse_ds() from peepholelib.datasets.parsedDataset.ParsedDataset
@@ -188,7 +200,10 @@ class Sentinel(ParsedDataset):
                      
             os = _out.shape[1:]
             ls = _ls.shape[1:]
-            print('Aloc shapes: ', os, ls)
+
+            # check and skip if the values are already there
+            if ('output' in self._dss[ds_key]) and ('residual' in self._dss[ds_key]) and ('latent_space' in self._dss[ds_key]):
+                continue
 
             # need to fix the batch size - workaround  
             self._dss[ds_key].batch_size = torch.Size((n_samples,))
@@ -209,9 +224,6 @@ class Sentinel(ParsedDataset):
                     x = data['data'].float().to(model.device)
                     with torch.no_grad():
                         y, ls = model(x)
-                    
-                    print('pred shapes: ', y.shape, ls.shape)
-                    print('data shapes: ', data['output'].shape, data['residual'].shape, data['latent_space'].shape)
                     
                     data['output'] = y
                     data['residual'] = y - x 
