@@ -9,6 +9,7 @@
 
 # general python stuff
 from pathlib import Path
+import pickle
 
 # torch stuff
 import torch
@@ -68,6 +69,15 @@ class ImageNet(DatasetWrap):
         self._classes = {i: c for i, c in enumerate(train_ds.classes)}
 
         return
+    
+    ## TODO: test this method
+    @classmethod
+    def get_classes(cls, **kwargs):
+        meta_path = kwargs['meta_path']
+        with open(meta_path, 'rb') as f:
+            meta = pickle.load(f, encoding='latin1')
+        labels = {i: name for i, name in enumerate(meta['fine_label_names'])}
+        return labels 
     
     def get(self, ds_key, idx):
         '''
