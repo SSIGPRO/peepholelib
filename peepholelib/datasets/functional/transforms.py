@@ -1,20 +1,6 @@
 import torch
 from torchvision import transforms
 
-means = {
-        'cifar10': torch.tensor([0.424, 0.415, 0.384]),
-        'cifar100': torch.tensor([0.438, 0.418, 0.377]),
-        'imagenet': torch.tensor([0.485, 0.456, 0.406]),
-        'svhn': torch.tensor([0.438, 0.444, 0.473])
-        }
-
-stds = {
-        'cifar10': torch.tensor([0.283, 0.278, 0.284]),
-        'cifar100': torch.tensor([0.300, 0.287, 0.294]),
-        'imagenet': torch.tensor([0.229, 0.224, 0.225]),
-        'svhn': torch.tensor([0.198, 0.201, 0.197]),
-        }
-
 #-----------------------------
 # VGG16 on CIFAR100 
 #-----------------------------
