@@ -5,6 +5,38 @@ import abc
 # torch stuff
 import torch
 
+import torch.nn as nn
+from collections import OrderedDict
+from torch import Tensor
+
+means = {
+        'cifar10': torch.tensor([0.424, 0.415, 0.384]),
+        'cifar100': torch.tensor([0.438, 0.418, 0.377]),
+        'imagenet': torch.tensor([0.485, 0.456, 0.406]),
+        'svhn': torch.tensor([0.438, 0.444, 0.473])
+        }
+
+stds = {
+        'cifar10': torch.tensor([0.283, 0.278, 0.284]),
+        'cifar100': torch.tensor([0.300, 0.287, 0.294]),
+        'imagenet': torch.tensor([0.229, 0.224, 0.225]),
+        'svhn': torch.tensor([0.198, 0.201, 0.197]),
+        }
+
+class ImageNormalizer(nn.Module):
+
+    def __init__(self, mean, std):
+        super(ImageNormalizer, self).__init__()
+
+        self.register_buffer('mean', mean.view(1, 3, 1, 1))
+        self.register_buffer('std', std.view(1, 3, 1, 1))
+
+    def forward(self, input: Tensor) -> Tensor:
+        return (input - self.mean) / self.std
+
+    def __repr__(self):
+        return f'ImageNormalizer(mean={self.mean.squeeze()}, std={self.std.squeeze()})'  # type: ignore
+
 class Hook:
     def __init__(self, save_input=True, save_output=False):
         self.module = None 
@@ -207,6 +239,23 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._model.load_state_dict(_state_dict) 
         
         return
+    
+    def normalize_model(self, **kwargs):
+        '''
+        Wrap the model with an ImageNormalizer layer at the beginning.
+        Args:
+        - mean (torch.tensor): mean for each channel
+        - std (torch.tensor): std for each channel
+        '''
+
+        mean = kwargs['mean'].to(self.device)
+        std = kwargs['std'].to(self.device)
+        layers = OrderedDict([('normalize', ImageNormalizer(mean, std)),
+                            ('model', self._model)])
+        
+        self._model = nn.Sequential(layers)
+
+        return 
     
     def get_module(self, **kwargs):
         '''

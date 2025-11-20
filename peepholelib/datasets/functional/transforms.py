@@ -22,7 +22,6 @@ stds = {
 vgg16_cifar100 = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['cifar100'], std=stds['cifar100'])
 ])
 
 vgg16_cifar100_augumentations = transforms.Compose([
@@ -37,7 +36,6 @@ vgg16_cifar100_augumentations = transforms.Compose([
 vgg16_cifar10 = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['cifar10'], std=stds['cifar10'])
     ])
 
 vgg16_cifar10_augumentations = transforms.Compose([
@@ -52,7 +50,6 @@ vgg16_cifar10_augumentations = transforms.Compose([
 vgg16_imagenet = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['imagenet'], std=stds['imagenet'])
 ])
 
 vgg16_imagenet_augmentations = transforms.Compose([
@@ -67,7 +64,6 @@ vgg16_imagenet_augmentations = transforms.Compose([
 vgg16_svhn = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['svhn'], std=stds['svhn'])
 ])
 
 vgg16_svhn_augumentations = transforms.Compose([
@@ -84,12 +80,27 @@ vit_b_16_cifar100 = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['cifar100'], std=stds['cifar100'])
 ])
 
 vit_b_16_cifar100_augumentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vit_b_16_cifar100
+    ])
+
+#-----------------------------
+# ViT on ImageNet
+#-----------------------------
+
+vit_b_16_imagenet = transforms.Compose([
+    # uses interpolation=InterpolationMode.BILINEAR by default 
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor(),
+])
+
+vit_b_16_imagenet_augumentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET), 
+    vit_b_16_imagenet
     ])
 
 #-----------------------------
@@ -100,7 +111,6 @@ vit_b_16_svhn = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['svhn'], std=stds['svhn'])
 ])
 
 vit_b_16_svhn_augumentations = transforms.Compose([
@@ -116,7 +126,6 @@ mobilenet_v2 = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
     transforms.ToTensor(),
-    transforms.Normalize(mean=means['cifar100'], std=stds['cifar100']),
     ]) 
 
 mobilenet_v2_cifar10_augumentations = transforms.Compose([
