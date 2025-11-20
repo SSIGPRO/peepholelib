@@ -10,18 +10,20 @@ from collections import OrderedDict
 from torch import Tensor
 
 means = {
-        'cifar10': torch.tensor([0.424, 0.415, 0.384]),
-        'cifar100': torch.tensor([0.438, 0.418, 0.377]),
-        'imagenet': torch.tensor([0.485, 0.456, 0.406]),
-        'svhn': torch.tensor([0.438, 0.444, 0.473])
+        'CIFAR10': torch.tensor([0.424, 0.415, 0.384]),
+        'CIFAR100': torch.tensor([0.438, 0.418, 0.377]),
+        'ImageNet': torch.tensor([0.485, 0.456, 0.406]),
+        'SVHN': torch.tensor([0.438, 0.444, 0.473])
         }
 
 stds = {
-        'cifar10': torch.tensor([0.283, 0.278, 0.284]),
-        'cifar100': torch.tensor([0.300, 0.287, 0.294]),
-        'imagenet': torch.tensor([0.229, 0.224, 0.225]),
-        'svhn': torch.tensor([0.198, 0.201, 0.197]),
+        'CIFAR10': torch.tensor([0.283, 0.278, 0.284]),
+        'CIFAR100': torch.tensor([0.300, 0.287, 0.294]),
+        'ImageNet': torch.tensor([0.229, 0.224, 0.225]),
+        'SVHN': torch.tensor([0.198, 0.201, 0.197]),
         }
+
+'''Inspired by https://github.com/RobustBench/robustbench/blob/master/robustbench/model_zoo/architectures/utils_architectures.py'''
 
 class ImageNormalizer(nn.Module):
 
@@ -35,7 +37,7 @@ class ImageNormalizer(nn.Module):
         return (input - self.mean) / self.std
 
     def __repr__(self):
-        return f'ImageNormalizer(mean={self.mean.squeeze()}, std={self.std.squeeze()})'  # type: ignore
+        return f'ImageNormalizer(mean={self.mean.squeeze()}, std={self.std.squeeze()})'  
 
 class Hook:
     def __init__(self, save_input=True, save_output=False):
@@ -248,8 +250,10 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - std (torch.tensor): std for each channel
         '''
 
-        mean = kwargs['mean'].to(self.device)
-        std = kwargs['std'].to(self.device)
+        dss = kwargs['dataset']
+
+        mean = means[dss].to(self.device)
+        std = stds[dss].to(self.device)
         layers = OrderedDict([('normalize', ImageNormalizer(mean, std)),
                             ('model', self._model)])
         
