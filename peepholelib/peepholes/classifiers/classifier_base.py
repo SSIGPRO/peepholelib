@@ -71,8 +71,8 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         - verbose (Bool): Print progress messages. 
         '''
         
-        dss = kwargs.get('datasets')
-        cvs = kwargs.get('corevectors')
+        dss = kwargs['datasets']
+        cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         bs = kwargs.get('batch_size', 64)
         verbose = kwargs.get('verbose', False)
@@ -112,7 +112,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         - verbose (bool): Print progress messages.
         
         '''
-        cvs = kwargs.get('cvs')
+        cvs = kwargs['cvs']
         verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`

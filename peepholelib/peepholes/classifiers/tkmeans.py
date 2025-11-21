@@ -42,7 +42,7 @@ class KMeans(ClassifierBase): # quella buona
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
         - verbose (Bool): Print progress messages. 
         '''
-        _cvs = kwargs.get('corevectors')
+        _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         verbose = kwargs.get('verbose', False)
 
