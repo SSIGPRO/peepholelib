@@ -230,7 +230,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
     
     def normalize_model(self, **kwargs):
         '''
-        Wrap the model with an ImageNormalizer layer at the beginning.
+        Wrap the model with an InputNormalizer layer at the beginning.
         Args:
         - mean (torch.tensor): mean for each channel
         - std (torch.tensor): std for each channel

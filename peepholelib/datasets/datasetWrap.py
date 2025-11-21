@@ -16,7 +16,7 @@ class DatasetWrap(metaclass=abc.ABCMeta):
         '''
         self.path = Path(kwargs.get('path'))
         self.seed = kwargs.get('seed', 42)
-        self.transform = kwargs.get('transform')
+        self.transform = kwargs['transform']
         
         return
 
