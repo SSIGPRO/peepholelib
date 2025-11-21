@@ -1,7 +1,11 @@
 # torch stuff
+from math import ceil
+import numpy as np
 import torch
 from torch.utils.data import DataLoader 
 from tensordict import TensorDict, PersistentTensorDict
+from tensordict import MemoryMappedTensor as MMT
+from torch.nn.functional import mse_loss 
 
 # generic python stuff
 from pathlib import Path
@@ -29,6 +33,7 @@ class CoreVectors():
 
         # computed in get_coreVectors()
         self._corevds = None 
+
 
         # set in normalize_corevectors() 
         self._norm_mean = None 
@@ -111,7 +116,7 @@ class CoreVectors():
         self._norm_std = stds
 
         return
-
+    
     def load_only(self, **kwargs):
         '''
         Load already computed corevectors.
@@ -124,7 +129,7 @@ class CoreVectors():
         '''
         self.check_uncontexted()
 
-        loaders = kwargs.get('loaders')
+        loaders = kwargs['loaders']
         mode = kwargs.get('mode', 'r')
         norm_file = kwargs.get('norm_file', None)
         if norm_file != None: norm_file = Path(norm_file)
@@ -168,4 +173,147 @@ class CoreVectors():
     def check_uncontexted(self):
         if not self._is_contexted:
             raise RuntimeError('Function should be called within context manager')
+        return
+
+
+    def get_corruptions_all(self, **kwargs):
+        '''
+        Generate a corrupted version of the initial dataset using wombats package
+        '''
+        self.check_uncontexted()
+
+        model = kwargs['model']
+        corruptions = kwargs['corruptions']
+        verbose = kwargs.get('verbose', False)
+        loaders = kwargs['loaders']
+        bs = kwargs.get('bs', 2**11) 
+        n_threads = kwargs.get('n_threads', 8)
+        n_samples_ = kwargs['n_samples']
+        suffix = kwargs.get('suffix', None)
+        thr = kwargs['thr']
+        seed = kwargs.get('seed', 42)
+        
+        g = torch.Generator(device='cpu').manual_seed(seed)
+        for loader in loaders:
+            layers = list(self._corevds[loader].values())
+
+
+            # Stack along sensor dimension
+            # Result: (N, num_layers, 10)
+            stacked = torch.stack(layers, dim=1)
+            n_samples = len(self._corevds[loader])
+            if verbose: print(f' Got {n_samples} samples from {loader}')
+            data_shape = self._corevds[loader].shape
+            
+                
+            n_channels = data_shape[1]
+            #print(f'n_channels{n_channels}')
+            n_corr = len(corruptions)
+
+            '''ds_sample = self._corevds[loader][_layer]
+            print(f'ds_sample{ds_sample}')
+            model_input = ds_sample[0]'''
+            #model_input =  model_input.view(-1, 1, 5, 2)
+            model_input = stacked[0]           # (num_layers=8, 10)
+            model_input = model_input.unsqueeze(0).unsqueeze(0)
+            pad = torch.zeros((1,1,2,10))  # 2 missing sensors
+            model_input_padded = torch.cat([model_input, pad], dim=2)  # now shape (1,1,10,10
+            #print(f'model_input_padded.shape{model_input_padded.shape}')
+            #quit()
+            with torch.no_grad():
+                _out, _ls = model(model_input_padded.to(model.device)) 
+            os = _out.shape[1:]
+            ls = _ls.shape[1:]
+
+            cdsk = loader+'-cv-c-all'
+            idx = torch.randperm(n_samples , generator=g)[:n_samples_]
+
+            if suffix != None:
+                cdsk += '-'+suffix
+
+            file_path = self.path/('dss.'+cdsk) 
+
+            if file_path.exists():
+                print(f'{file_path} exists. I am not overwritting it. Skipping')
+                continue
+
+            self._corevds[cdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples_*n_corr], mode = 'w')
+            for _layer, tensor in self._corevds[loader].items():
+
+                self._corevds[cdsk][_layer] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+data_shape), dtype=torch.float32)
+            self._corevds[cdsk]['data'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+data_shape), dtype=torch.float32)
+            self._corevds[cdsk]['output'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
+            self._corevds[cdsk]['residual'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+os), dtype=torch.float32)
+            self._corevds[cdsk]['latent_space'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)+ls), dtype=torch.float32)
+            self._corevds[cdsk]['corruption'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+            self._corevds[cdsk]['detection'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+            for c in range(n_corr):
+                self._corevds[cdsk][f'corruption{c}'] = MMT.empty(shape=torch.Size((n_samples_*n_corr,)), dtype=torch.int)
+
+            # Close PTD create with mode 'w' and re-open it with mode 'r+'
+            # This is done so we can use multiple workers with the dataloaders 
+            #print(self._corevds[cdsk].keys())
+            self._corevds[cdsk].close()
+            self._corevds[cdsk] = PersistentTensorDict.from_h5(file_path, mode='r+')
+            
+            corevector_dl = DataLoader(
+                    dataset = self._corevds[cdsk],
+                    batch_size = n_samples_,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
+            
+            for _layer, tensor in self._corevds[loader].items():
+                  
+                for i, (corevector, (corruption, corrupter)) in enumerate(zip(corevector_dl, corruptions.items())):
+                    t = self._corevds[loader][_layer][idx].clone()
+
+                    for channel in range(n_channels):
+                        sig = self._corevds[loader][_layer][idx].detach().cpu().numpy()
+                        #print(f'sig.shape{sig.shape}')
+                        #quit()
+                        #print("sig type:", type(sig))
+                        #print("sig shape:", sig.shape)
+                        #print("sig ndim:", sig.ndim)
+                        corrupter.fit(sig)
+                        #print("Q shape:", corrupter.Q.shape if hasattr(corrupter, "Q") else "no Q")
+                        #print("Rb_theta shape:", corrupter.Rb_theta.shape if hasattr(corrupter, "Rb_theta") else "no Rb_theta")
+                        #print(vars(corrupter))
+
+                        corr_sig = corrupter.distort(sig)
+                        t[:, :] = torch.from_numpy(corr_sig).to(self._corevds[loader].device)
+                    #print(type(corevector))
+                    #print(type(corevector['data']))
+                    #print(f'corevector[data].shape{corevector['data'].shape}')
+                    #print(f't.shape{t.shape}')
+                    t_expanded = t.unsqueeze(1).expand(-1, 211314, -1)  # shape: [1000, 211314, 10]
+                    corevector['data'] = t_expanded
+                    #corevector['data'] = t
+                    corevector['corruption'] = torch.ones(len(t))*i
+                    corevector[f'corruption{i}'] = torch.ones(len(t))
+
+            corevector_dl = DataLoader(
+                    dataset = self._corevds[cdsk],
+                    batch_size = bs,
+                    collate_fn = lambda x:x,
+                    shuffle = False,
+                    num_workers = n_threads
+                    )
+        
+            for corevector in tqdm(corevector_dl, disable=not verbose, total=ceil(n_samples_*n_corr/bs)):
+                with torch.no_grad():
+                    x = corevector[_layer].to(model.device)
+                    with torch.no_grad():
+                        x =  x.unsqueeze(1) #[5000, 1, 211314, 10]
+                        y, ls = model(x)
+                        #print(f'y.shape{y.shape}\nls.shape{ls.shape}')
+                    corevector['output'] = y
+                    corevector['residual'] = y - x
+                    corevector['latent_space'] = ls
+
+                    mse = mse_loss(y, x, reduction='none')  
+                    mse_per_sample = mse.view(mse.size(0), -1).mean(dim=1)
+                    corevector['detection'] = (mse_per_sample > thr).long()
+            
         return

@@ -34,6 +34,8 @@ def linear_svd_projection(**kwargs):
     acts_flat = act_data.flatten(start_dim=1)
     ones = torch.ones(n_act, 1, device=device)
     _acts = torch.hstack((acts_flat, ones))
+    print(f'reduct_m{reduct_m.shape}\n_acts.T{_acts.T.shape}')
+    
     cvs = (reduct_m@_acts.T).T
 
     return cvs
