@@ -9,26 +9,12 @@ import torch.nn as nn
 from collections import OrderedDict
 from torch import Tensor
 
-means = {
-        'CIFAR10': torch.tensor([0.424, 0.415, 0.384]).view(1,3,1,1),
-        'CIFAR100': torch.tensor([0.438, 0.418, 0.377]).view(1,3,1,1),
-        'ImageNet': torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1),
-        'SVHN': torch.tensor([0.438, 0.444, 0.473]).view(1,3,1,1)
-        }
-
-stds = {
-        'CIFAR10': torch.tensor([0.283, 0.278, 0.284]).view(1,3,1,1),
-        'CIFAR100': torch.tensor([0.300, 0.287, 0.294]).view(1,3,1,1),
-        'ImageNet': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1),
-        'SVHN': torch.tensor([0.198, 0.201, 0.197]).view(1,3,1,1),
-        }
-
 '''Inspired by https://github.com/RobustBench/robustbench/blob/master/robustbench/model_zoo/architectures/utils_architectures.py'''
 
-class ImageNormalizer(nn.Module):
+class InputNormalizer(nn.Module):
 
     def __init__(self, mean, std):
-        super(ImageNormalizer, self).__init__()
+        super(InputNormalizer, self).__init__()
 
         self.register_buffer('mean', mean)
         self.register_buffer('std', std)
@@ -250,12 +236,13 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - std (torch.tensor): std for each channel
         '''
 
-        dss = kwargs['dataset']
+        mean = kwargs['mean']
+        std = kwargs['std']
 
-        mean = means[dss].to(self.device)
-        std = stds[dss].to(self.device)
+        mean = mean.to(self.device)
+        std = std.to(self.device)
         
-        layers = OrderedDict([('normalizer', ImageNormalizer(mean, std)), ('model', self._model)])
+        layers = OrderedDict([('normalizer', InputNormalizer(mean, std)), ('model', self._model)])
         
         self._model = nn.Sequential(layers)
 
