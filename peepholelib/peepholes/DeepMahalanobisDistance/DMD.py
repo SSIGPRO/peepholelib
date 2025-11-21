@@ -19,7 +19,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.model = kwargs['model']
         self._layer = kwargs['layer']
         self.magnitude = kwargs['magnitude']
-        self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
+        self.googlstd_transform = torch.tensor(kwargs['std_transform'], device=self.device)
         self.parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
         self.save_input = kwargs['save_input'] if 'save_input' in kwargs else False
         self.save_output = kwargs['save_output'] if 'save_output' in kwargs else True
@@ -70,14 +70,22 @@ class DeepMahalanobisDistance(DrillBase):
         # parsing for simplification
         dss = _dss._dss[loader]
         cvs = _cvs._corevds[loader][drill_key]
+        #TODO i had to make cvs with dimension 512 in order to perform this computation
+        # check if the output isoutput layerwise oroutput of model
+        #print(f'cvs.shape{cvs.shape}')# ->[500,100] before
+        #quit()
 
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
         labels = dss[label_key].int()
-        self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
+        #self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
+        #Elma-> 
+        self._means = torch.zeros(self.nl_model, list_features.shape[1], device=self.device) 
         
+        #print(f'self.means{self._means.shape}\nself.nl_model{self.nl_model}\nlist_features{list_features.shape}')
+        #quit()
         for i in range(self.nl_model):
             self._means[i] = list_features[labels == i].mean(dim=0).to(self.device)
             list_features[labels == i] -= self._means[i]
@@ -120,6 +128,8 @@ class DeepMahalanobisDistance(DrillBase):
             output = self.parser_act(self.model._acts['out_activations'][self._layer])
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
+        #print(f'output.shape{output.shape}\nself.means.shape{self._means.shape}')
+        #quit()
         for i in range(self.nl_model):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
@@ -142,8 +152,21 @@ class DeepMahalanobisDistance(DrillBase):
             # I suspect this is specific for the models used in the reference code
             # The std values should probably reflect the number of dimensions
             for i in range(3):
+                #print(f'gradient.shape{gradient.shape}')
+                #print(f'i{i}')
+                #print(f'std.shape{std.shape}')
+                #print(f'std[i]{std[i]}')
+                #quit()
+                #------Breaking Hete------------
                 gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
-        
+                #do it 
+                '''
+                idx = torch.tensor([i], dtype = torch.long, device = self.device)#.to(self.device)
+                slice_ = gradient.index_select(1,idx)
+                slice_ = slice_.squeeze(1)
+                slice_i = slice_ / std[i]
+                gradient.index_copy_(1, idx,slice_i.unsqueeze(1))
+                '''
             tempInputs = torch.add(data.data, gradient, alpha=-magnitude)
 
             with torch.no_grad():

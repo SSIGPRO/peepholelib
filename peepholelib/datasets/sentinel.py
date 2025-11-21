@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path as Path
+sys.path.insert(0, (Path.home()/'repos/peepholelib').as_posix())
 # general python stuff
 import pandas as pd
 from pathlib import Path
@@ -153,7 +156,8 @@ class Sentinel(ParsedDataset):
                 cls_inst._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
                 
                 # get sample to get shapes
-                sample = sentinel_wrap.__dataset__[ds_key][0]
+                sample = sentinel_wrap.__dataset__[ds_key]#[0]
+            
                 for key in sample.keys():
                     if verbose: print(f'allocating {key} with shape {sample[key].shape}')
                     cls_inst._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+sample[key].shape), dtype=torch.float32)
@@ -173,15 +177,14 @@ class Sentinel(ParsedDataset):
                 for data_in, data_t in tqdm(zip(ds_in, ds_t), disable=not verbose, total=ceil(n_samples/bs)):
                     for key in data_in.keys():
                         data_t[key] = data_in[key]
-            
+
             # close the PTD
             cls_inst._dss[ds_key].close()
         return
-
     # overwrite the parse_ds() from peepholelib.datasets.parsedDataset.ParsedDataset
-    def parse_ds(self, **kwargs):
+    def parse_ds(self, **kwargs):        
         self.check_uncontexted()
-
+    
         model = kwargs['model']
         loaders = kwargs.get('loaders', None)
         bs = kwargs.get('batch_size', 2**11)
@@ -193,43 +196,73 @@ class Sentinel(ParsedDataset):
         for ds_key in loaders:
             file_path = self.path/('dss.'+ds_key)
             n_samples = len(self._dss[ds_key])
+            #print(self._dss[ds_key].keys())
             
             # dataset sample for dry run
-            sample = self._dss[ds_key][0:1]['data'].to(model.device)
+            print(f'sample{self._dss[ds_key].keys()}')
+            # was ->sample = self._dss[ds_key]['data'][0:1].to(model.device)
+            #sample = self._dss[ds_key]['data'][:,0,:,:,:].to(model.device)
+            sample = self._dss[ds_key]['data'][0:1].to(model.device)
+
+            #sample_ = self._dss[ds_key]['data'][0:1].to(model.device)
+            print(f'sample.shape{sample.shape}')
+            
+            #print(f'sample_.shape{sample_.shape}')
+            #print(f'sample{self._dss[ds_key].keys()}')
+            
             with torch.no_grad():
+                #print(sample.shape)
                 _out, _ls = model(sample)
-                     
             os = _out.shape[1:]
             ls = _ls.shape[1:]
-
+            
+            '''
             # check and skip if the values are already there
-            if ('output' in self._dss[ds_key]) and ('residual' in self._dss[ds_key]) and ('latent_space' in self._dss[ds_key]):
-                continue
+            if ('output' not in self._dss[ds_key]):
+                self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,) + os), dtype=torch.float32)
+            
+            if ('residual' not in self._dss[ds_key]):
+                self._dss[ds_key]['residual'] = MMT.empty(shape=torch.Size((n_samples,) + os), dtype=torch.float32)
+            
+            if ('latent_space' not in self._dss[ds_key]):
+                self._dss[ds_key]['latent_space'] = MMT.empty(shape=torch.Size((n_samples,) + ls), dtype=torch.float32)
+            
+            '''
+            #----------------this was before but was getting error from HDF5file--------------
 
+            if ('output' not in self._dss[ds_key]) and ('residual' not in self._dss[ds_key]) and ('latent_space' not in self._dss[ds_key]):
+                continue
+            
             # need to fix the batch size - workaround  
             self._dss[ds_key].batch_size = torch.Size((n_samples,))
+            
             # allocate disk space
             self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
             self._dss[ds_key]['residual'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
             self._dss[ds_key]['latent_space'] = MMT.empty(shape=torch.Size((n_samples,)+ls), dtype=torch.float32)
-
+            
             dl = DataLoader(
                 self._dss[ds_key],
                 collate_fn = lambda x:x, 
                 batch_size = bs
             )
-
+            
             for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs)):
                 #compute predictions which is the out of decoder
                 with torch.no_grad():
+                    #x = data['data'][:,0,:,:,:].float().to(model.device) used for corrupted file
                     x = data['data'].float().to(model.device)
+                    
                     with torch.no_grad():
                         y, ls = model(x)
+                    #print(f'y.shape{y.shape}')
+                    #print(f'data[output].shape{data['output'].shape}')
                     
                     data['output'] = y
                     data['residual'] = y - x 
                     data['latent_space'] = ls           
-        
+            
+                    
         return
     
     def get_corruptions_all(self, **kwargs):
@@ -244,7 +277,7 @@ class Sentinel(ParsedDataset):
         loaders = kwargs.get('loaders')
         bs = kwargs.get('bs', 2**11) 
         n_threads = kwargs.get('n_threads', 8)
-        n_samples_ = kwargs.get('n_samples')
+        n_samples_ = kwargs.get('n_samples', 500)
         suffix = kwargs.get('suffix', None)
         thr = kwargs.get('thr')
         seed = kwargs.get('seed', 42)
@@ -255,7 +288,7 @@ class Sentinel(ParsedDataset):
             n_samples = len(self._dss[loader])
             if verbose: print(f' Got {n_samples} samples from {loader}')
 
-            data_shape = self._dss[loader]['data'][0].shape
+            data_shape = self._dss[loader]['data'].shape
             n_channels = data_shape[1]
             n_corr = len(corruptions)
 

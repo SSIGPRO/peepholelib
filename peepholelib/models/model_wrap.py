@@ -67,6 +67,7 @@ class Hook:
 class ModelWrap(metaclass=abc.ABCMeta):
 
     from .get_svds import get_svds
+    from .get_pcas import get_pcas
 
     def __init__(self, **kwargs):
         # device for NN
@@ -205,7 +206,6 @@ class ModelWrap(metaclass=abc.ABCMeta):
         Args:
         - name (str): name of file
         - path (pathlib.Path|str): folder path for file
-        - sd_key (str): String for the model's state dict in the checkpoint. Defaults to `'state_dict'` 
         - verbose (bool): If True, print checkpoint information.
         
         Returns:
@@ -214,14 +214,13 @@ class ModelWrap(metaclass=abc.ABCMeta):
         # kwargs
         _path = Path(kwargs['path'])
         _name = kwargs['name']
-        sd_key = kwargs.get('sd_key', 'state_dict')
-        verbose = kwargs.get('verbose', False)
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         file = _path/_name
         
         # take the checkpoint and the state_dict from the saved file
         _checkpoint = torch.load(file, map_location=self.device)
-        if sd_key in _checkpoint:
-            _state_dict = _checkpoint[sd_key]
+        if 'state_dict' in _checkpoint:
+            _state_dict = _checkpoint['state_dict']
         else:
             _state_dict = _checkpoint  # Assume the entire model's state dictionary is stored directly
                     

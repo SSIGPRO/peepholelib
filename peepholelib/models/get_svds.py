@@ -23,7 +23,7 @@ def get_svds(self, **kwargs):
         _svds = TensorDict.load_memmap(file_path)
     else: 
         _svds = TensorDict()
-
+    
     _modules_to_compute = []
     for mk in target_modules:
         if mk in _svds.keys():
@@ -33,10 +33,13 @@ def get_svds(self, **kwargs):
    
     # Turn on activation saving
     self.set_activations(save_input=True, save_output=False)
-    
+    print(f'sample_in.shape{sample_in.shape}')
     # Dry run to get shapes
     with torch.no_grad():
-        _in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
+        #_in = sample_in.reshape((1,)+sample_in.shape).to(self.device)
+        _in = sample_in.to(self.device)
+        #print(_in.shape)
+        #quit()
         self(_in)
 
     for mk in _modules_to_compute:
