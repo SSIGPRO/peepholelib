@@ -110,7 +110,7 @@ def plot_conceptogram(**kwargs):
                 proto_tick_positions = idx_topk.cpu().tolist()
                 proto_tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, proto_tick_positions))]
 
-                axs[1][-3].imshow(protoclasses[pred].T, aspect='auto', vmin=0.0, vmax=1.0)
+                axs[1][-3].imshow(1-protoclasses[pred].T, aspect='auto', vmin=0.0, vmax=1.0, cmap='bone')
                 axs[1][-3].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
                 axs[1][-3].set_yticks(proto_tick_positions, proto_tick_labels)
                 axs[1][-3].set_xlabel('Layers')
@@ -121,7 +121,7 @@ def plot_conceptogram(**kwargs):
             classes_topk = [classes[i] for i in idx_topk.tolist()]
             tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, idx_topk))]
 
-            axs[1][-2].imshow(_c.T, aspect='auto', vmin=0.0, vmax=1.0)
+            axs[1][-2].imshow(1-_c.T, aspect='auto', vmin=0.0, vmax=1.0, cmap='bone')
             axs[1][-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
             axs[1][-2].set_yticks(idx_topk, tick_labels)
             axs[1][-2].yaxis.tick_right()
@@ -129,7 +129,7 @@ def plot_conceptogram(**kwargs):
             axs[1][-2].set_xlabel('Layers')
 
             # Plot the bar with nn's sofmaxed output
-            axs[1][-1].imshow(output.reshape(-1,1), vmin=0.0, vmax=1.0)
+            axs[1][-1].imshow(1-output.reshape(-1,1), vmin=0.0, vmax=1.0, cmap='bone')
             axs[1][-1].set_xticks([])
             axs[1][-1].set_yticks([pred])
             axs[1][-1].set_yticklabels([f'{classes[pred]} {conf*100:.2f}%'], fontweight='bold')
@@ -140,5 +140,6 @@ def plot_conceptogram(**kwargs):
             # save conceptogram
             plt.savefig(path/f'{name}.{ds_key}.{sample}.png', dpi=300, bbox_inches='tight')
             plt.close()
+            
             if verbose: print(f"Conceptogram saved to {path}")
     return

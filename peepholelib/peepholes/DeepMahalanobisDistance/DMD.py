@@ -21,6 +21,8 @@ class DeepMahalanobisDistance(DrillBase):
         self.magnitude = kwargs['magnitude']
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
         self.parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
+        self.save_input = kwargs['save_input'] if 'save_input' in kwargs else False
+        self.save_output = kwargs['save_output'] if 'save_output' in kwargs else True
 
         # computed in fit()
         self._means = {} 
@@ -36,7 +38,7 @@ class DeepMahalanobisDistance(DrillBase):
 
         # set model to save output activations
         # TODO: a bit ugly to leave this setted, should set both to False after finishing the peepholes computation
-        self.model.set_activations(save_input=False, save_output=True)
+        self.model.set_activations(save_input=self.save_input, save_output=self.save_output)
         return
     
     def load(self, **kwargs):
