@@ -70,6 +70,7 @@ def get_coreVectors(self, **kwargs):
         # pre-allocate corevectors
         #------------------------------------------------
         if verbose: print(f'\n ---- Getting core vectors for {ds_key}\n')
+        print(f'\n ---- Getting core vectors for {ds_key}\n')
         file_path = self.path/(self.name+'.'+ds_key)
 
         if file_path.exists():
