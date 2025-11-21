@@ -80,7 +80,7 @@ def plot_calibration(**kwargs):
                     ignore_index = True,
                     )
         
-        # # add perfect calibration
+        # add perfect calibration
         x = torch.linspace(0, 1, n_bins+1)[:-1]
         df_perf_calib = pd.DataFrame({
             'x': x,
@@ -119,10 +119,6 @@ def plot_calibration(**kwargs):
                 alpha = 0.75,
                 legend = loader_n == len(loaders)-1,
                 )
-        
-        leg = ax.get_legend()
-        if leg is not None:
-            leg.set_title(None)
 
         ax.set_xlabel('Confidence')
         ax.set_ylabel('Accuracy (%)')
