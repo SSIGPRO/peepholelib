@@ -122,8 +122,8 @@ def plot_conceptogram(**kwargs):
             tick_labels = [f'{i+1}°: {cls} ({cls_pos})' for i, (cls, cls_pos) in enumerate(zip(classes_topk, idx_topk))]
 
             axs[1][-2].imshow(1-_c.T, aspect='auto', vmin=0.0, vmax=1.0, cmap='bone')
-            axs[1][-2].set_xticks([])#(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
-            axs[1][-2].set_yticks([])#(idx_topk, tick_labels)
+            axs[1][-2].set_xticks(ticks=range(len(ticks)), labels=ticks, rotation=90, fontsize=8)
+            axs[1][-2].set_yticks(idx_topk, tick_labels)
             axs[1][-2].yaxis.tick_right()
             axs[1][-2].set_title(cp_title)
             axs[1][-2].set_xlabel('Layers')
