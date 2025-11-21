@@ -254,7 +254,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         mean = means[dss].to(self.device)
         std = stds[dss].to(self.device)
-        layers = OrderedDict([('normalize', ImageNormalizer(mean, std)),
+        layers = OrderedDict([('normalizer', ImageNormalizer(mean, std)),
                             ('model', self._model)])
         
         self._model = nn.Sequential(layers)
