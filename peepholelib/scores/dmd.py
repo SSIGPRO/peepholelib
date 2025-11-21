@@ -11,67 +11,8 @@ from torch.utils.data import DataLoader
 # peepholelib stuff
 from peepholelib.coreVectors.dimReduction.avgPooling import ChannelWiseMean_conv
 
-# def DMD_base(**kwargs):
-#     '''
-#     Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
-#     - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-#     - layer (str): string indicating the layer used for the score computation
-#     - id
-#     - driller (peepholelib.peepholes.DeepMahalnobisDistance.DMD): istance of the classifier used to compute the score
-#     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-#     - verbose (bool): print progress messages.
-
-#     Returns
-#     - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-#     '''
-
-#     id_loader = kwargs.get('id_loader', 'test')
-#     ood_loaders = kwargs.get('ood_loaders')
-#     device = kwargs.get('device')
-#     layer = kwargs.get('layer')
-#     cvs = kwargs.get('coreavg')
-#     driller = kwargs.get('driller')
-#     append_scores = kwargs.get('append_scores', None)
-
-#     score_name = 'DMD-B'
-
-#     data_ori = cvs._corevds[id_loader][layer].to(device)
-#     num_classes = driller.nl_model
-#     num_samples = data_ori.shape[0]
-
-#     # create the return dictionary. 
-#     if append_scores != None:
-#         ret = dict(append_scores)
-#     else: ret = {}
-
-#     if not id_loader in ret: ret[id_loader] = dict()
-
-#     for ds_key in ood_loaders:
-#         if not ds_key in ret:
-#             ret[ds_key] = dict()
-
-#     # computation
-#     class_scores = torch.zeros((num_samples, num_classes))
-#     for c in range(num_classes):
-#         tensor = data_ori - driller._means[c].view(1, -1)
-#         class_scores[:, c] = -torch.matmul(
-#             torch.matmul(tensor, driller._precision), tensor.t()).diag()
-
-#     ret[id_loader][score_name] = torch.max(class_scores, dim=1)[0]
-
-#     for ood in ood_loaders:
-#         data_ood = cvs._corevds[ood][layer].to(device)
-
-#         class_scores = torch.zeros((num_samples, num_classes))
-#         for c in range(num_classes):
-#             tensor = data_ood - driller._means[c].view(1, -1)
-#             class_scores[:, c] = -torch.matmul(torch.matmul(tensor, driller._precision), tensor.t()).diag()
-
-#         ret[ood][score_name] = torch.max(class_scores, dim=1)[0]
-    
-#     return ret
   
-def DMD_base_confidence(**kwargs):
+def DMD_base(**kwargs):
     '''
     Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
     - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
@@ -93,7 +34,6 @@ def DMD_base_confidence(**kwargs):
     bs = kwargs.get('bs', 256)
     n_threads = kwargs.get('n_threads', 1)
     act_direction = kwargs.get('act_direction')
-    # parser_act = kwargs.get('parser_act', ChannelWiseMean_conv)
 
     score_name = 'DMD-B'
 
