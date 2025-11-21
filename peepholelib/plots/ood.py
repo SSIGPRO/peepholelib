@@ -223,9 +223,6 @@ def plot_ood(**kwargs):
     ax.set_ylabel('AUC')
     ax.set_xlabel('Loader')
     ax.legend_.remove()
-    # leg = ax.get_legend()
-    # if leg is not None:
-    #     leg.set_title(None)
 
     plt.tight_layout()
     plt.savefig(path / f'auc_only{suffix}.png', dpi=300, bbox_inches='tight')

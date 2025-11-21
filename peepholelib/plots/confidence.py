@@ -186,13 +186,6 @@ def one_thr_for_all(**kwargs):
     atk_loaders = kwargs.get('atk_loaders')
     verbose = kwargs.get('verbose', False)
 
-    # # parse arguments
-    # if path == None: 
-    #     path = Path.cwd()
-    # else:
-    #     path = Path(path)
-    # path.mkdir(parents=True, exist_ok=True)
-
     thrs = {}
     fpr95 = {}
 
@@ -269,44 +262,22 @@ def one_thr_for_all(**kwargs):
 
         print(f"overall FPR@95 = {vals.mean():.4f}")
 
-        excluded_key = "CIFAR100-test"
-
         vals = np.array(
-            [val for k, val in v.items() if k != excluded_key],
+            [val for k, val in v.items() if k != id_loader],
             dtype=float
         )
 
         print(f"Overall exlcluded ID FPR@95 = {vals.mean():.4f}")
 
-        selected_keys = [
-            'CIFAR100-C-test-c0',
-            'CIFAR100-C-test-c1',
-            'CIFAR100-C-test-c2',
-            'CIFAR100-C-test-c3',
-            'CIFAR100-C-test-c4',
-        ]
-
-        vals = np.array([v[k] for k in selected_keys], dtype=float)
+        vals = np.array([v[k] for k in c_loaders], dtype=float)
 
         print(f"corruptions FPR@95 = {vals.mean():.4f}")
 
-        selected_keys = [
-            'SVHN-test',
-            'Places365-test',
-        ]
-
-        vals = np.array([v[k] for k in selected_keys], dtype=float)
+        vals = np.array([v[k] for k in ood_loaders], dtype=float)
 
         print(f"OOD FPR@95 = {vals.mean():.4f}")
 
-        selected_keys = [
-            'BIM-CIFAR100-test',
-            'CW-CIFAR100-test',
-            'DF-CIFAR100-test',
-            'PGD-CIFAR100-test',
-        ]
-
-        vals = np.array([v[k] for k in selected_keys], dtype=float)
+        vals = np.array([v[k] for k in atk_loaders], dtype=float)
 
         print(f"Attacks FPR@95 = {vals.mean():.4f}")
 
