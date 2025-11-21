@@ -14,9 +14,9 @@ class DatasetWrap(metaclass=abc.ABCMeta):
         - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
 
         '''
-        self.path = Path(kwargs.get('path'))
-        self.transform = kwargs.get('transform', None)
+        self.path = Path(kwargs['path'])
         self.seed = kwargs.get('seed', 42)
+        self.transform = kwargs['transform']
         
         return
 

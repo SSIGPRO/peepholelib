@@ -5,6 +5,26 @@ import abc
 # torch stuff
 import torch
 
+import torch.nn as nn
+from collections import OrderedDict
+from torch import Tensor
+
+'''Inspired by https://github.com/RobustBench/robustbench/blob/master/robustbench/model_zoo/architectures/utils_architectures.py'''
+
+class InputNormalizer(nn.Module):
+
+    def __init__(self, mean, std):
+        super(InputNormalizer, self).__init__()
+
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
+
+    def forward(self, input: Tensor) -> Tensor:
+        return (input - self.mean) / self.std
+
+    def __repr__(self):
+        return f'InputNormalizer(mean={self.mean}, std={self.std})'  
+
 class Hook:
     def __init__(self, save_input=True, save_output=False):
         self.module = None 
@@ -207,6 +227,26 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._model.load_state_dict(_state_dict) 
         
         return
+    
+    def normalize_model(self, **kwargs):
+        '''
+        Wrap the model with an InputNormalizer layer at the beginning.
+        Args:
+        - mean (torch.tensor): mean for each channel
+        - std (torch.tensor): std for each channel
+        '''
+
+        mean = kwargs['mean']
+        std = kwargs['std']
+
+        mean = mean.to(self.device)
+        std = std.to(self.device)
+        
+        layers = OrderedDict([('normalizer', InputNormalizer(mean, std)), ('model', self._model)])
+        
+        self._model = nn.Sequential(layers)
+
+        return 
     
     def get_module(self, **kwargs):
         '''
