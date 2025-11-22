@@ -99,9 +99,10 @@ class SentinelWrap(DatasetWrap):#DatasetBase
         if n_samples != None:
             for ds_key in n_samples.keys():
                 if n_samples[ds_key] != None:
-                    self.__dataset__[ds_key] = torch.utils.data.Subset(
+                    perc = n_samples[ds_key]/len(self.__dataset__[ds_key])
+                    self.__dataset__[ds_key], _ = torch.utils.data.random_split(
                             self.__dataset__[ds_key],
-                            range(n_samples[ds_key])
+                            [perc, 1-perc]
                             ) 
 
         return
