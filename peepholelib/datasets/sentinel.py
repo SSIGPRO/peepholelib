@@ -64,37 +64,36 @@ class SentinelWrap(DatasetWrap):#DatasetBase
 
     def __init__(self, **kwargs):
         self.path = kwargs.get('path')
-        self.train_val_split = kwargs.get('train_val_split', 0.2)
-        
         return
 
     def __load_data__(self, **kwargs):
         ws = kwargs.get('window_size', 16) 
         seed = kwargs.get('seed', 42)
         n_samples = kwargs.get('n_samples', None)
+        split = kwargs.get('split', 0.33)
         verbose = kwargs.get('verbose', False)
 
         # load data and the labels
         train_file = Path(self.path)/'train_data.pkl'
-        test_file = Path(self.path)/'test_data.pkl'
-        label_file = Path(self.path)/'test_labels.pkl'
+        #test_file = Path(self.path)/'test_data.pkl'
+        #label_file = Path(self.path)/'test_labels.pkl'
 
         data_train = pd.read_pickle(train_file.as_posix())
-        data_test = pd.read_pickle(test_file.as_posix())
-        test_labels = pd.read_pickle(label_file.as_posix())
+        #data_test = pd.read_pickle(test_file.as_posix())
+        #test_labels = pd.read_pickle(label_file.as_posix())
 
         torch.manual_seed(seed)
         self.__dataset__ = {}
         
         # split train into train and val
         ds_train = CustomDS(data=data_train, labels=None, ws=ws)
-        self.__dataset__['train'] , self.__dataset__['val'] = torch.utils.data.random_split(
+        self.__dataset__['train'], self.__dataset__['val'], self.__dataset__['test'] = torch.utils.data.random_split(
                 ds_train,
-                [1-self.train_val_split, self.train_val_split],
+                [1 - 2*split, split, split],
                 generator = torch.Generator().manual_seed(seed)
         )
 
-        self.__dataset__['test'] = CustomDS(data=data_test, labels=test_labels, ws=ws)
+        #self.__dataset__['test'] = CustomDS(data=data_test, labels=test_labels, ws=ws)
         
         if n_samples != None:
             for ds_key in n_samples.keys():
