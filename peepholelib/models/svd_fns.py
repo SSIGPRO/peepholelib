@@ -6,7 +6,7 @@ import torch
 from math import *
 
 # our stuff
-from peepholelib.models.utils import c2s
+from peepholelib.models.utils import c2s, ct2s
 
 def linear_svd(**kwargs):
     layer = kwargs['layer']
@@ -25,7 +25,10 @@ def conv2d_toeplitz_svd(**kwargs):
     channel_wise = kwargs['channel_wise'] if 'channel_wise' in kwargs else True
     device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-    W_ = c2s(in_shape, layer, channel_wise=channel_wise, device=device) 
+    if isinstance(layer, torch.nn.Conv2d):
+        W_ = c2s(in_shape, layer, channel_wise=channel_wise, device=device) 
+    elif isinstance(layer, torch.nn.ConvTranspose2d):
+        W_ = ct2s(in_shape, layer, channel_wise=channel_wise, device=device) 
     
     # same as `if channel_wise:`
     if isinstance(W_, list):

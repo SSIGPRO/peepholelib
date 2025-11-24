@@ -49,11 +49,11 @@ class Peepholes:
         '''
         self.check_uncontexted()
         
-        datasets = kwargs.get('datasets')
-        corevectors = kwargs.get('corevectors')
+        datasets = kwargs['datasets']
+        corevectors = kwargs['corevectors']
         loaders  = kwargs.get('loaders', None)
-        self.target_modules = kwargs.get('target_modules') # list of peep modules
-        self._drillers = kwargs.get('drillers')
+        self.target_modules = kwargs['target_modules'] # list of peep modules
+        self._drillers = kwargs['drillers']
 
         bs = kwargs.get('batch_size', 64)
         n_threads = kwargs.get('n_threads', 1)
