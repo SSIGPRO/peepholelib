@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sb
 import pandas as pd
-import numpy as np
 
 # torch stuff
 import torch
@@ -258,27 +257,22 @@ def one_thr_for_all(**kwargs):
 
         print(f'--------\n {score_name} \n--------')
         
-        vals = np.array(list(v.values()), dtype=float)
-
+        vals = torch.tensor(list(v.values()), dtype=torch.float32)
         print(f"overall FPR@95 = {vals.mean():.4f}")
 
-        vals = np.array(
+        vals = torch.tensor(
             [val for k, val in v.items() if k != id_loader],
-            dtype=float
+            dtype=torch.float32
         )
+        print(f"Overall excluded ID FPR@95 = {vals.mean():.4f}")
 
-        print(f"Overall exlcluded ID FPR@95 = {vals.mean():.4f}")
-
-        vals = np.array([v[k] for k in c_loaders], dtype=float)
-
+        vals = torch.tensor([v[k] for k in c_loaders], dtype=torch.float32)
         print(f"corruptions FPR@95 = {vals.mean():.4f}")
 
-        vals = np.array([v[k] for k in ood_loaders], dtype=float)
-
+        vals = torch.tensor([v[k] for k in ood_loaders], dtype=torch.float32)
         print(f"OOD FPR@95 = {vals.mean():.4f}")
 
-        vals = np.array([v[k] for k in atk_loaders], dtype=float)
-
+        vals = torch.tensor([v[k] for k in atk_loaders], dtype=torch.float32)
         print(f"Attacks FPR@95 = {vals.mean():.4f}")
 
         

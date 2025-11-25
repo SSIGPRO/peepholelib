@@ -1,7 +1,6 @@
 # general python stuff
 from math import floor
 from sklearn.linear_model import LogisticRegressionCV
-import numpy as np
 from tqdm import tqdm
 
 # torch stuff
@@ -294,21 +293,50 @@ def DMD_score(**kwargs):
 
 
 def DMD_score_conf(**kwargs):
-    '''
-    Compute the DMD score by training a linear regressor on two portions of the datasets. It considers on sample as positive samples, and many as negative ones, training one regressor for each negative loader.
-    Since the score of the positive samples change for each negative loader used in training, the scores of the positive samples are saved with the keys of the negative loaders used for training. It is confusing, and we need a beeter way to structure these scores.
+
+    """
+    Compute DMD-based confidence scores by training a linear regressor on a balanced subset of positive and negative samples from a given training loader, and then applying it to one or more test loaders.
+
+    For the training loader, samples are split into:
+        - positives: ds._dss[loader_train]['result'] == 1
+        - negatives: ds._dss[loader_train]['result'] == 0
+
+    A subset of positives is randomly selected to match the number of negatives (class balancing). For each sample and each target module, the maximum activation over peepholes is used as feature. A linear regressor
+    (__DMD_score__) is then trained on these features and labels.
+
+    The trained regressor is applied to all loaders in `test_loaders`, and the resulting scores are stored in a nested dictionary:
+        ret[loader_name][score_name] = torch.tensor(scores)
+
+    If an existing `append_scores` dictionary is provided, the new scores are added to (and overwrite keys in) that dictionary.
 
     Args:
-    - peepholes (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
-    - loader_train (str): loader to consider as positive samples for training. Typically in-distribution for OOD or original samples for attacks.
-    - loader_test (str): loader to consider as positive samples for testing.
-    - target_modules (list[str]): list if target modules, as keys from the model `state_dict`. If 'None' uses all modules in 'peepholes._phs[pos_loader_train]'.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
+        peepholes (peepholelib.peepholes.Peepholes):
+            Peepholes object from which features (peepholes) are extracted.
+        dataset (peepholelib.datasets.DatasetWrap):
+            Dataset wrapper that provides labels in `dataset._dss`.
+        loader_train (str, optional):
+            Name of the loader used to define positive/negative training
+            samples. Defaults to 'train'.
+        test_loaders (Iterable[str]):
+            Iterable of loader names on which to compute test scores.
+        target_modules (list[str], optional):
+            List of target module keys from the model `state_dict`. If None,
+            all modules found in `peepholes._phs[loader_train]` are used.
+        append_scores (dict, optional):
+            Existing scores dictionary to which the new scores are appended.
+            If provided, entries with the same keys are overwritten.
+        score_name (str, optional):
+            Name under which to store the scores for each loader. Defaults to
+            'DMD-in'.
+        verbose (bool, optional):
+            If True, allows printing of progress messages (currently unused).
 
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
+    Returns:
+        dict[str, dict[str, torch.Tensor]]:
+            Nested dictionary of scores, where the first key is the loader
+            name and the second key is `score_name`. Each value is a tensor
+            of scores for the corresponding loader.
+    """
 
     phs = kwargs['peepholes']
     ds = kwargs['dataset']
@@ -335,17 +363,13 @@ def DMD_score_conf(**kwargs):
     idx_pos = torch.argwhere(ds._dss[loader_train]['result']==1)
 
     perm = torch.randperm(len(idx_pos))[:len(idx_neg)]
-    print(idx_pos, perm)
-    print(len(idx_neg), len(perm))
 
     idx_pos = idx_pos[perm]
     
     train_pos = torch.stack([phs._phs[loader_train][layer]['peepholes'].max(dim=1)[0][idx_pos] for layer in target_modules], dim=1).squeeze(dim=2)
-    print(train_pos.shape)
     train_neg = torch.stack([phs._phs[loader_train][layer]['peepholes'].max(dim=1)[0][idx_neg] for layer in target_modules], dim=1).squeeze(dim=2)
     
     train_data = torch.vstack((train_pos, train_neg))
-    print(train_data.shape)
     train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
 
     for loader_test in test_loaders:
