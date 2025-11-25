@@ -44,7 +44,7 @@ def plot_ood(**kwargs):
 
     fig, axs = plt.subplots(1, len(ood_loaders)+1, sharex='none', sharey='none', figsize=(5*(len(ood_loaders)+1), 5))
 
-    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon', 'xkcd:azure' ]
     lines = ['--', '-']
 
     # save aucs for plotting 
@@ -190,5 +190,41 @@ def plot_ood(**kwargs):
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
 
     plt.savefig((path/f'in_out_distribution{suffix}.png').as_posix(), dpi=300, bbox_inches='tight')
+    plt.close()
+
+    plt.figure(figsize=(5, 5))
+    ax = plt.gca()
+
+    # same palette length as number of score types
+    n_scores = aucs_df['score name'].nunique()
+    colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange',
+              'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray',
+              'xkcd:cinnamon', 'xkcd:azure'][:n_scores]
+
+    sb.pointplot(
+        data=aucs_df,
+        ax=ax,
+        x='loader',
+        y='AUC',
+        hue='score name',
+        markersize=8,
+        palette=colors,
+        alpha=0.75,
+        legend=True
+    )
+
+    if loaders_renames is not None:
+        ax.set_xticks(range(len(loaders_renames)))
+        ax.set_xticklabels(labels=loaders_renames, rotation=45, ha='right')
+    else:
+        ax.set_xticklabels(labels=ax.get_xticklabels(), rotation=45, ha='right')
+
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+    ax.set_ylabel('AUC')
+    ax.set_xlabel('Loader')
+    ax.legend_.remove()
+
+    plt.tight_layout()
+    plt.savefig(path / f'auc_only{suffix}.png', dpi=300, bbox_inches='tight')
     plt.close()
     return 
