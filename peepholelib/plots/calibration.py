@@ -11,6 +11,14 @@ import pandas as pd
 # torch stuff
 import torch
 
+import matplotlib
+matplotlib.use("pgf")
+matplotlib.rcParams.update({
+    "pgf.texsystem": "pdflatex",  # or "lualatex" / "xelatex"
+    "text.usetex": True,
+    "font.family": "serif",
+})
+
 def plot_calibration(**kwargs):
     '''
     Plot calibration curves.
@@ -75,7 +83,8 @@ def plot_calibration(**kwargs):
             df_calib = df_calib._append(
                     pd.DataFrame({
                         'accuracy': s_acc,
-                        'score type': [score_name+f': ECE={ece:.2f}' for i in range(n_bins)]
+                        # 'score type': [score_name+f': ECE={ece:.2f}' for i in range(n_bins)]
+                        'score type': [score_name+f': {ece:.2f}' for i in range(n_bins)]
                         }),
                     ignore_index = True,
                     )
@@ -115,16 +124,99 @@ def plot_calibration(**kwargs):
                 y = 'y',
                 markersize = 0,
                 hue = 'score type',
+                linestyles=["--"],
                 palette = ['xkcd:red'],
-                alpha = 0.75,
-                legend = loader_n == len(loaders)-1,
+                alpha = 0.6,
+                # legend = loader_n == len(loaders)-1,
                 )
+        
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
 
-        ax.set_xlabel('Confidence')
-        ax.set_ylabel('Accuracy (%)')
-        ax.title.set_text(f'{ds_key}')
+        ax.set_xlabel('Confidence', fontsize=18,)
+        ax.set_ylabel('Accuracy (%)', fontsize=18,)
+        ax.tick_params(axis='x', labelsize=14)
+        ax.tick_params(axis='y', labelsize=14)
+        # ax.title.set_text(f'{ds_key}')
         ax.grid(True)
+
+        handles, labels = ax.get_legend_handles_labels()
+        labels = [lab.replace("DMD-in", "DMD-a") for lab in labels]
+        labels = [lab.replace("DMD-B", "DMD-b") for lab in labels]
+        keys = list(scores[ds_key].keys())
+
+        custom_order = [k for k in keys if k not in ['DMD-in', 'DMD-B']]
+        # labels = list(labels)
+
+        # optional: remove duplicates (Seaborn often repeats them)
+        # by_label = dict(zip(labels, handles))
+        # handles = list(by_label.values())
+        # labels  = list(by_label.keys())
+        
+        custom_order.append("DMD-b")
+        custom_order.append("DMD-a")
+        custom_order.append("Perfect Calibration")
+
+        def sort_key(label):
+            for i, name in enumerate(custom_order):
+                if label.startswith(name):
+                    return i
+            return len(custom_order)
+
+        handles_labels = sorted(zip(handles, labels), key=lambda x: sort_key(x[1]))
+        handles, labels = zip(*handles_labels)
+        handles = list(handles)
+        labels  = list(labels)
+
+        # optional: make labels "table-like" with monospace alignment
+        # labels currently look like "LACS: 0.03", "MSP: 0.12", ...
+        methods, scores_str = [], []
+        for lab in labels:
+            if ": " in lab:
+                m, s = lab.split(": ")
+                methods.append(m)
+                scores_str.append(s)
+            else:
+                methods.append(lab)
+                scores_str.append("")
+
+        labels = [f"{m:<8} {s:>5}" for m, s in zip(methods, scores_str)]
+
+        ax.set_xlabel('Confidence', fontsize=18)
+        ax.set_ylabel('Accuracy (%)', fontsize=18)
+        ax.grid(True)
+
+        ax.legend(
+                handles,
+                labels,
+                title="ECE Scores",
+                loc="upper center",
+                bbox_to_anchor=(0.5, 1.32),   # move legend above axes
+                ncol=4,                       # <-- split into 4 columns
+                # mode="expand",                # makes columns spread nicely
+                prop={"family": "monospace"},
+                fontsize=24,
+                title_fontsize=18,
+                # borderpad=1.0,
+                # labelspacing=0.6
+            )
+
+        # ax.legend(
+        #     handles,
+        #     labels,
+        #     title="ECE Scores",
+        #     loc="center left",
+        #     bbox_to_anchor=(1.05, 0.5),
+        #     prop={"family": "monospace"},  
+        #     fontsize=50,
+        #     title_fontsize=20,    
+        #     # markerscale=1.8,      # bigger symbols
+        #     #handlelength=3,       # longer line segments
+        #     borderpad=1.2,        # padding inside the box
+        #     labelspacing=0.8, 
+        # )
     
     plt.savefig((path/f'calibration.png').as_posix(), dpi=300, bbox_inches='tight')
+    plt.savefig((path / "calibration.pgf").as_posix())
     plt.close()
     return 

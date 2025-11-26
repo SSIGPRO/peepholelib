@@ -221,7 +221,7 @@ def plot_ood(**kwargs):
 
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
     ax.set_ylabel('AUC')
-    ax.set_xlabel('Loader')
+    ax.set_xlabel('Corruption Level')
     ax.legend_.remove()
 
     plt.tight_layout()
