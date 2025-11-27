@@ -275,6 +275,8 @@ def one_thr_for_all(**kwargs):
         vals = torch.tensor([v[k] for k in atk_loaders], dtype=torch.float32)
         print(f"Attacks FPR@95 = {vals.mean():.4f}")
 
+    return fpr95
+
         
 
     

@@ -11,12 +11,22 @@ import pandas as pd
 # torch stuff
 import torch
 
+<<<<<<< Updated upstream
 import matplotlib
 matplotlib.use("pgf")
 matplotlib.rcParams.update({
     "pgf.texsystem": "pdflatex",  # or "lualatex" / "xelatex"
     "text.usetex": True,
     "font.family": "serif",
+=======
+import matplotlib as mpl
+
+mpl.use("pgf")
+mpl.rcParams.update({
+    "pgf.texsystem": "pdflatex",   # or xelatex/lualatex
+    "text.usetex": True,
+    "pgf.rcfonts": False,
+>>>>>>> Stashed changes
 })
 
 def plot_calibration(**kwargs):
@@ -52,7 +62,8 @@ def plot_calibration(**kwargs):
 
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
-    n_bins = ceil(1/calib_bin)
+    n_bins = ceil(1/calib_bin)-1
+    
     for loader_n, ds_key in enumerate(loaders):
 
         df_calib = pd.DataFrame()
@@ -90,11 +101,12 @@ def plot_calibration(**kwargs):
                     )
         
         # add perfect calibration
-        x = torch.linspace(0, 1, n_bins+1)[:-1]
+        x = torch.linspace(0, 1, n_bins+1)
+        
         df_perf_calib = pd.DataFrame({
             'x': x,
             'y': x, 
-            'score type': ['Perfect Calibration' for i in range(n_bins)]
+            'score type': ['Perfect Calibration' for i in range(n_bins+1)]
             })
 
         #--------------------
@@ -104,18 +116,6 @@ def plot_calibration(**kwargs):
             ax = axs
         else:
             ax = axs[loader_n] 
-
-        sb.pointplot(
-                data = df_calib,
-                ax = ax,
-                x = x.repeat(len(scores[ds_key].keys())),
-                y = 'accuracy',
-                hue = 'score type',
-                palette = colors[0:len(scores[loaders[-1]])],
-                alpha = 0.75,
-                markersize = 8,
-                legend = True
-                )
 
         sb.pointplot(
                 data = df_perf_calib,
@@ -133,6 +133,7 @@ def plot_calibration(**kwargs):
         if ax.get_legend() is not None:
             ax.get_legend().remove()
 
+<<<<<<< Updated upstream
         ax.set_xlabel('Confidence', fontsize=18,)
         ax.set_ylabel('Accuracy (%)', fontsize=18,)
         ax.tick_params(axis='x', labelsize=14)
@@ -218,5 +219,28 @@ def plot_calibration(**kwargs):
     
     plt.savefig((path/f'calibration.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.savefig((path / "calibration.pgf").as_posix())
+=======
+        sb.pointplot(
+                data = df_calib,
+                ax = ax,
+                x = x.repeat(len(scores[ds_key].keys())),
+                y = 'accuracy',
+                hue = 'score type',
+                palette = colors[0:len(scores[loaders[-1]])],
+                alpha = 0.75,
+                markersize = 8,
+                legend = True
+                )
+
+        ax.set_xlabel('Confidence')
+        ax.set_ylabel('Accuracy (%)')
+        ax.title.set_text(f'{ds_key}')
+        ax.grid(True)
+        labels = [float(label.get_text()) for label in ax.get_xticklabels()]
+        ax.set_xticklabels([f'{label:.2f}' for label in labels])
+    
+    plt.savefig((path/f'calibration.png').as_posix(), dpi=300, bbox_inches='tight')
+    plt.savefig((path/f'calibration.pgf').as_posix(), dpi=300, bbox_inches='tight')
+>>>>>>> Stashed changes
     plt.close()
     return 
