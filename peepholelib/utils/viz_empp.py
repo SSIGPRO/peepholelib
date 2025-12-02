@@ -148,7 +148,7 @@ def compare_relative_coverage_all_clusters(**kwargs):
     all_results = {}
 
     # Loop over all cluster settings
-    for n_clusters, drillers in sorted(all_drillers.items()):
+    for n_clusters, drillers in all_drillers.items():
 
         if not drillers:
             print(f"No drillers found for n_clusters={n_clusters}")
@@ -166,19 +166,21 @@ def compare_relative_coverage_all_clusters(**kwargs):
         all_results[n_clusters] = relative_scores
 
     # Collect full module list across all configs
-    all_modules = sorted({
-        m for res in all_results.values() for m in res.keys()
-    })
 
+    all_modules = []
+    for res in all_results.values():
+        for m in res.keys():
+            if m not in all_modules:
+                all_modules.append(m)
     # Plot results
     if plot:
         plt.figure(figsize=(12, 6))
-        for n_clusters, scores in sorted(all_results.items()):
+        for n_clusters, scores in all_results.items():
             yvals = [scores.get(m, 0.0) for m in all_modules]
             plt.plot(all_modules, yvals, marker='o', label=f"{n_clusters} clusters")
 
         plt.xticks(rotation=45, ha='right')
-        plt.ylabel("Relative Coverage (ClusterCov / n_clusters)")
+        plt.ylabel("Relative Coverage (AvgCov / n_clusters)")
         plt.xlabel("Module")
         plt.title(f"Relative Coverage Across Cluster Configurations (≥ {threshold})")
         plt.grid(True)
