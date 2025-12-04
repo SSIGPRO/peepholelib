@@ -156,8 +156,8 @@ class Sentinel(ParsedDataset):
                 cls_inst._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
                 
                 # get sample to get shapes
-                sample = sentinel_wrap.__dataset__[ds_key]#[0]
-            
+                sample = sentinel_wrap.__dataset__[ds_key][0]
+                
                 for key in sample.keys():
                     if verbose: print(f'allocating {key} with shape {sample[key].shape}')
                     cls_inst._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+sample[key].shape), dtype=torch.float32)
@@ -200,12 +200,10 @@ class Sentinel(ParsedDataset):
             
             # dataset sample for dry run
             print(f'sample{self._dss[ds_key].keys()}')
-            # was ->sample = self._dss[ds_key]['data'][0:1].to(model.device)
-            #sample = self._dss[ds_key]['data'][:,0,:,:,:].to(model.device)
             sample = self._dss[ds_key]['data'][0:1].to(model.device)
 
             #sample_ = self._dss[ds_key]['data'][0:1].to(model.device)
-            print(f'sample.shape{sample.shape}')
+            #print(f'sample.shape{sample.shape}')
             
             #print(f'sample_.shape{sample_.shape}')
             #print(f'sample{self._dss[ds_key].keys()}')
@@ -338,6 +336,7 @@ class Sentinel(ParsedDataset):
             
             for i, (sentinel, (corruption, corrupter)) in enumerate(zip(sentinel_dl, corruptions.items())):
                 t = self._dss[loader]['data'][idx].clone()
+                
 
                 for channel in range(n_channels):
                     sig = self._dss[loader]['data'][idx , 0, channel, :].detach().cpu().numpy()

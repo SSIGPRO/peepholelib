@@ -96,7 +96,7 @@ def get_coreVectors(self, **kwargs):
         else:
             # from a model with a dry run
             with torch.no_grad():
-                model(datasets._dss[ds_key][input_key][0].to(device))
+                model(datasets._dss[ds_key][input_key].to(device))
                 _act0 = activations_parser(model._acts)
 
         for mk in model._target_modules.keys(): 
@@ -142,7 +142,7 @@ def get_coreVectors(self, **kwargs):
 
             for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
                 with torch.no_grad():
-                    model(ds_data[input_key][0].to(device))
+                    model(ds_data[input_key].to(device))
                     
                 for mk in _modules_to_save:
                     act_data = activations_parser(model._acts)
