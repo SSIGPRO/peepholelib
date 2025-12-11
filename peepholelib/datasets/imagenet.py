@@ -18,7 +18,7 @@ from torchvision.datasets import ImageNet as IN1K
 
 # peepholelib imports
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.transforms import vgg16_imagenet
+from peepholelib.datasets.functional.transforms import vgg16_imagenet
 
 class ImageNet(DatasetWrap):
     def __init__(self, **kwargs):
