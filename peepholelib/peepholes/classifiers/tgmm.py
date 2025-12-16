@@ -29,7 +29,7 @@ class GMM(ClassifierBase): # quella buona
                     )
                 )
 
-        self._clas_path = self.path/(self.name+'.GMM'+self._suffix)
+        self._clas_path = self.path/self.name
         self._empp_file = self._clas_path/f'empp_{self.label_key}.pt'
         return
 
@@ -46,7 +46,7 @@ class GMM(ClassifierBase): # quella buona
         loader = kwargs.get('loader', 'train')
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
-        cvs = _cvs._corevds[loader]
+        cvs = _cvs._corevds[loader][self.target_module]
 
         if verbose: print('\n ---- GMM classifier\n')
 
@@ -75,9 +75,8 @@ class GMM(ClassifierBase): # quella buona
         '''
         
         data = kwargs['data']
-
+        print('Prob: ', data)
         probs = self._classifier.predict_proba(data)
-
         return probs   
     
     def predict(self, data):
@@ -86,7 +85,6 @@ class GMM(ClassifierBase): # quella buona
     def save(self, **kwargs):
         self._clas_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self._clas_path)
-        
         super().save()
         
         return

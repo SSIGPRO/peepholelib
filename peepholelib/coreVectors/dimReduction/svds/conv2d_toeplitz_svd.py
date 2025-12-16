@@ -1,11 +1,131 @@
 # General python stuff
 from warnings import warn
+from pathlib import Path
+from math import *
 
 # torch stuff
 import torch
-from math import *
+from torch.nn.modules.utils import _reverse_repeat_tuple
+from torch.nn.functional import pad
 
-def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, warns=True):
+# Our stuff
+from ..dim_reduction_base import DimReductionBase as DRB 
+
+class Conv2dToeplitzSVD(DRB):
+    def __init__(self, **kwargs):
+        DRB.__init__(self, **kwargs)
+        path = Path(kwargs['path'])
+        layer = kwargs['layer']
+        model = kwargs['model']
+        q = kwargs.get('rank', 300)
+        sample_in = kwargs.get('sample_in')
+        verbose = kwargs.get('verbose', False)
+                                                      
+        # create folder
+        path.mkdir(parents=True, exist_ok=True)
+        file_path = path/layer
+
+        # get ref for the layer
+        _layer = model._target_modules[layer]
+        device = model.device
+
+        if file_path.exists():
+            if verbose: print(f'File {file_path} exists. Loading from disk.')
+            self._svd = torch.load(file_path)
+        else: 
+            # Turn on activation saving
+            model.set_activations(save_input=True, save_output=False)
+            
+            # Dry run to get shapes
+            with torch.no_grad():
+                _in = sample_in.reshape((1,)+sample_in.shape).to(device)
+                model(_in)
+            in_shape = model._acts['in_activations'][layer].shape[1:]
+            
+            # computation
+            if isinstance(_layer, torch.nn.Conv2d):
+                W = c2s(in_shape, _layer, device=device) 
+            elif isinstance(_layer, torch.nn.ConvTranspose2d):
+                W = ct2s(in_shape, _layer, device=device) 
+            else:
+                raise RuntimeError("Only Conv2D and ConvTranspose2d are suported") 
+            
+            U, s, Vh = torch.svd_lowrank(W, q=q)
+            self._svd = {
+                    'U': U,
+                    's': s,
+                    'Vh': Vh.T
+                    }
+
+            # Turn off activation saving
+            model.set_activations(save_input=False, save_output=False)
+
+            if verbose: print(f'saving {file_path}')
+            torch.save(self._svd, file_path)
+        
+        # save variables used in the projection a.k.a. "__call__()"
+        self.bias = _layer.bias
+        self.reduct_m = self._svd['Vh'].detach().to(device)
+        
+        self.pad_mode = _layer.padding_mode if _layer.padding_mode != 'zeros' else 'constant'
+        self.padding = _reverse_repeat_tuple(_layer.padding, 2) 
+
+        return
+            
+    def __call__(self, **kwargs):
+        '''
+        Applies the the Toeplitz SVD projection to `torch.Conv2d` activations. The output has shape `[ns, q]`, where `ns` is the number of samples in the batch and `q` the SVD rank.
+
+        Args:
+        - act_data (torch.tensor): batched input activations
+        
+        Returns:
+        - cvs (torch.tensor) = batched projected activations
+        '''
+        act_data = kwargs['act_data'] 
+        n_act = act_data.shape[0]
+        acts_pad = pad(act_data, pad=self.padding, mode=self.pad_mode)
+        acts_flat = acts_pad.flatten(start_dim=1)
+
+        if self.bias is None:
+            _acts = acts_flat
+        else:
+            ones = torch.ones(n_act, 1, device=acts_flat.device)
+            _acts = torch.hstack((acts_flat, ones))
+        
+        cvs = (self.reduct_m@_acts.T).T
+
+        return cvs
+    
+    def parser(self, **kwargs):
+        """
+        Trims corevectors obtained with `coreVectors.dimReduction.svds.conv2d_toeplitz_svd.Conv2dToeplitzSVD.
+        Input shape is `[ns, q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
+        Output shape is `[ns, cv_dim]`, trimmed corevectors
+
+        Args:
+            cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
+            dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
+            cv_dim (int): desired dimension of corevector
+            label_key (str): key to get labels from
+
+        Returns:
+            tcvs (torch.tensor): Trimmed corevectors and correspective labels
+            labels (torch.tensor): Labels from datasate for the samples. Only returned if `dss` is given
+        """
+
+        cvs = kwargs['cvs']
+        cv_dim = kwargs['cv_dim']
+        dss = kwargs.get('dss', None)
+        label_key = kwargs.get('label_key', 'label') 
+
+        # trim corevectors on the last dimension
+        tcvs = cvs[...,0:cv_dim]
+
+        ret = tcvs if dss == None else (tcvs, dss[label_key])
+        return ret 
+
+def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     if not isinstance(layer, torch.nn.Conv2d):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
 
@@ -79,34 +199,17 @@ def c2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, war
                         cols[idx, -1] = Cin * Hin * Win  
                         data[idx, -1] = bias[cout]
 
-    if not channel_wise:
-        shape_out = torch.Size((Cout*output_size, Cin*input_size + (0 if bias is None else 1)))
-        crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
+    shape_out = torch.Size((Cout*output_size, Cin*input_size + (0 if bias is None else 1)))
+    crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
 
-        cols = cols.flatten()
-        data = data.flatten()
-        
-        csr_mat = torch.sparse_csr_tensor(crow, cols, data, size=shape_out, device=device)
+    cols = cols.flatten()
+    data = data.flatten()
+    
+    csr_mat = torch.sparse_csr_tensor(crow, cols, data, size=shape_out, device=device)
 
-        ret = csr_mat
-    else:
-        csrs = []
-        shape_out = torch.Size((output_size, Cin*input_size + (0 if bias is None else 1)))
-        crow = (torch.linspace(0, shape_out[0], shape_out[0]+1)*(kernel_size*Cin + (0 if bias is None else 1))).int()
+    return csr_mat 
 
-        for cout in range(Cout):
-            hl, hh = cout*output_size, (cout+1)*output_size
-            _cols = cols[hl:hh, :] 
-            _data = data[hl:hh, :] 
-            _cols = _cols.flatten()
-            _data = _data.flatten()
-
-            csrs.append(torch.sparse_csr_tensor(crow, _cols, _data, size=shape_out, device=device))
-
-        ret = csrs
-    return ret 
-
-def ct2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, warns=True):
+def ct2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     if not isinstance(layer, torch.nn.ConvTranspose2d):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D or torch.nn.ConvTranspose2d')
 
@@ -118,8 +221,8 @@ def ct2s(input_shape, layer, channel_wise=False, device='cpu', verbose=False, wa
     dilation = layer.dilation
     output_padding = layer.output_padding
 
-    if padding != (0,0) or dilation != (1,1) or groups!=1 or channel_wise == True:
-        raise RuntimeError('This functions does not account for padding, dilation, groups, and channelwise if you extendent it, please send us a PR ;).')
+    if padding != (0,0) or dilation != (1,1) or groups!=1:
+        raise RuntimeError('This functions does not account for padding, dilation, and groups. If you extendent it, please send us a PR ;).')
     
     kernel = weight
     Wk = weight.shape[3]

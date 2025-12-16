@@ -87,8 +87,7 @@ class Peepholes:
                     # Pre-allocate peepholes
                     #------------------------
                     if verbose: print('allocating peepholes for module: ', module)
-                    self._phs[ds_key][module] = TensorDict(batch_size=n_samples)
-                    self._phs[ds_key][module]['peepholes'] = MMT.empty(shape=(n_samples, self._drillers[module].nl_model))
+                    self._phs[ds_key][module] = MMT.empty(shape=(n_samples, self._drillers[module].nl_model))
                     modules_to_compute.append(module)
                 else:
                     if verbose: print(f'Peepholes for {module} already present. Skipping.')
@@ -113,7 +112,7 @@ class Peepholes:
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
-                    phs[module]['peepholes'] = self._drillers[module](cvs=_cvs, dss=_dss)
+                    phs[module] = self._drillers[module](cvs=_cvs[module], dss=_dss)
 
         return 
 
@@ -172,10 +171,7 @@ class Peepholes:
                 if module not in self._phs[ds_key]:
                     raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
 
-                if 'peepholes' not in self._phs[ds_key][module]:
-                    raise ValueError(f"Peepholes do not exist in module {module}. Please run get_peepholes() first.")
-
-            _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer]['peepholes'] for layer in target_modules], dim=1)
+            _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer] for layer in target_modules], dim=1)
 
         return _conceptograms
 

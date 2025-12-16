@@ -8,17 +8,14 @@ import torch
 from torch.utils.data import DataLoader
 from peepholelib.peepholes.drill_base import DrillBase
 
-def null_parser(**kwargs):
-    data = kwargs['data']
-    return data['data'], data['label'] 
-    
 class ClassifierBase(DrillBase, metaclass=abc.ABCMeta): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
         # number of classes in classifier a.k.a. number of clusters
         self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None# computed in fit()
-        self.label_key = kwargs['label_key']
+        self.label_key = kwargs.get('label_key', 'label')
+        self.parser = kwargs['parser']
 
         self._classifier = None
 
@@ -31,9 +28,6 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         # defined in __init__(), used in save() and load()
         self._clas_path = None
         self._empp_file = None
-        
-        # used in save() or load()
-        self._suffix += f'.nl_class={self.nl_class}'
 
         return
     
@@ -87,8 +81,9 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         # iterate over _fit_data
         if verbose: print('Computing empirical posterior')
         for _dss, _cvs in tqdm(zip(dss_dl, cvs_dl), disable=not verbose):
-            data, label = self.parser(cvs=_cvs, dss=_dss)
+            data, label = self.parser(cvs=_cvs[self.target_module], dss=_dss)
             data, label = data.to(self.device), label.to(self.device)
+
             preds = self.predict(data)
             for p, l in zip(preds, label):
                 _empp[int(p), int(l)] += 1
@@ -97,9 +92,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         _empp /= _empp.sum(dim=1, keepdim=True)
 
         # replace NaN with 0
-        _empp = torch.nan_to_num(_empp)
-
-        self._empp = _empp.to(self.device)
+        self._empp = torch.nan_to_num(_empp).to(self.device)
         
         return 
     
@@ -113,6 +106,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         
         '''
         cvs = kwargs['cvs']
+        print('CLA BASE: ', cvs)
         verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`

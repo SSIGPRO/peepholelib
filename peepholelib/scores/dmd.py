@@ -7,10 +7,6 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 
-# peepholelib stuff
-from peepholelib.coreVectors.dimReduction.avgPooling import ChannelWiseMean_conv
-
-  
 def DMD_base(**kwargs):
     '''
     Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
@@ -257,8 +253,8 @@ def DMD_score(**kwargs):
     #-----------
 
     # it would be better to stack fisrt then get the max
-    train_pos = torch.stack([phs._phs[pos_loader_train][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
-    test_pos = torch.stack([phs._phs[pos_loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+    train_pos = torch.stack([phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+    test_pos = torch.stack([phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
     nps = len(train_pos) # number of positive samples
 
@@ -269,7 +265,7 @@ def DMD_score(**kwargs):
         # get nspnl samples for each negative loader
         train_neg = []
         for i, nl in enumerate(neg_train_loaders):
-            _train_neg = torch.stack([phs._phs[nl][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+            _train_neg = torch.stack([phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
             idx = torch.randperm(len(_train_neg))
             train_neg.append(_train_neg[idx[i*nspnl:(i+1)*nspnl]])
         train_neg = torch.vstack(train_neg)
@@ -278,7 +274,7 @@ def DMD_score(**kwargs):
         train_data = torch.vstack((train_pos, train_neg))
         train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
         # test data
-        test_neg = torch.stack([phs._phs[neg_test_key][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_neg = torch.stack([phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
         test_data = torch.vstack((test_pos, test_neg))
 
         _, y_test = __DMD_score__(
