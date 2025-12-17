@@ -41,29 +41,6 @@ from PIL import Image
 import torch
 import os
 
-def _norm(s):
-    s = s.lower().replace("+", " ")
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-def _matches_query(query: str, label_str: str, mode: str = "token"):
-    """
-    mode:
-      - "substring": query must appear as substring in any synonym
-      - "token": all query tokens must appear in synonym tokens (more precise)
-    """
-    q = _norm(query)
-    if not q:
-        return False
-    q_tokens = set(q.split())
-
-    # label_str may contain comma-separated synonyms
-    syns = [_norm(x) for x in label_str.split(",")]
-    syns = [s for s in syns if s]
-
-    return any(q_tokens.issubset(set(s.split())) for s in syns)
-
 class CustomDS(Dataset):
     def __init__(self, path, reference_ds=None , train=True, train_ratio=0.8, seed=42, transform=None):
         """
@@ -121,6 +98,60 @@ class CustomDS(Dataset):
                     all_samples.append((os.path.join(class_dir, fname), cid - 1))
         
         # ---- Reference ds classes names ----
+
+        self.dict_mapping = {
+            0: [351, 352, 353],
+            1: [294, 295, 297],
+            2: [148],
+            3: [337],
+            4: [251],
+            5: [283],
+            # 6 no match
+            7: [235],
+            8: [147],
+            9: [284],
+            10: [361],
+            #11 no match
+            12: [292],
+            13: [344],
+            14: [288,289],
+            # 15 no match
+            16: [381],
+            17: [147],
+            18: [385, 386],
+            19: [366],
+            20: [345, 346],
+            21: [277, 278, 279, 280],
+            22: [349],
+            # 23 no match
+            24: [367],
+            25: [333],
+            26: [335],
+            # 27 no match
+            28: [330, 331, 332],
+            # 29 no match
+            # 30 no match
+            31: [269, 270, 271, 272],
+            32: [151],
+            # 33 no match
+            34: [356],
+            35: [360],
+            36: [346],
+            37: [340],
+            38: [388],
+            # 39 no match 
+            # 40 no match
+            41: [341],
+            42: [291],
+            43: [673],
+            44: [296], 
+            45: [231, 232],
+            # 46 no match
+            # 47 no match
+            # 48 no match
+            # 49 no match
+
+        }
         if self.reference_ds is not None:
 
             with open(self.reference_ds, "r") as f:
@@ -130,27 +161,6 @@ class CustomDS(Dataset):
 
             self.M = torch.zeros((len(self.id_to_class.keys()), len(self.reference_classes.keys())), dtype=torch.uint8)
 
-            for i, awa_name in self.id_to_class.items():
-
-                i -= 1
-
-                hit_cols = set()
-                for idx in range(1000):
-                    _, label_str = self.reference_classes[idx]
-                    if any(_matches_query(q, label_str) for q in awa_name):
-                        hit_cols.add(idx)
-
-                if hit_cols:
-                    self.M[i, list(hit_cols)] = 1
-
-            rows_has_one = self.M.sum(dim=1) > 0
-
-            if not rows_has_one.all(): 
-                print("Some AwA classes have no match:")
-
-                for i, row in enumerate(rows_has_one):
-                    if not row:
-                        print(f'{self.id_to_class[i+1]}')
             
 
         # ---- Deterministic train/test split ----
