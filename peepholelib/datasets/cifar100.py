@@ -14,6 +14,28 @@ from torch.utils.data import random_split
 from torchvision import datasets
 
 class CIFAR100Custom(CIFAR100):
+
+    def __init__(self, **kwargs):
+        CIFAR100.__init__(self, **kwargs)
+        self.fine_to_coarse = {
+            0: [4, 30, 55, 72, 95],
+            1: [32, 1, 67, 73, 91],
+            2: [54, 62, 70, 82, 92],
+            3: [18, 72, 16, 28, 61],
+            4: [7, 45, 53, 57, 83],
+            5: [65, 39, 40, 86, 87],
+            6: [52, 20, 25, 84, 94],
+            7: [35, 50, 67, 73, 24],
+            8: [93, 53, 43, 88, 97],
+            9: [12, 17, 37, 68, 76],
+            10: [23, 33, 49, 60, 71],
+            11: [15, 19, 21, 31, 38],
+            12: [34, 63, 64, 66, 75],
+            13: [26, 45, 77, 79, 99],
+            14
+
+        }
+
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
