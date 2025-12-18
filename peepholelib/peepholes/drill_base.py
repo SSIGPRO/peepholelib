@@ -15,6 +15,10 @@ class DrillBase(metaclass=abc.ABCMeta):
 
         self.device = kwargs.get('device', 'cpu')
 
+        # computed in fit()
+        self._classifier = None
+        self._cvs = None 
+
         return
     
     @abc.abstractmethod

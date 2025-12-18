@@ -9,6 +9,3 @@ class DimReductionBase(metaclass=abc.ABCMeta):
     def __call__(self, **kwargs):
         raise NotImplementedError()
 
-    @abc.abstractmethod
-    def parser(self, **kwargs):
-        raise NotImplementedError()

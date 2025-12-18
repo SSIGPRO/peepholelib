@@ -1,5 +1,6 @@
 # General python stuff
 from pathlib import Path as Path
+import abc  
 
 # torch stuff
 import torch
@@ -18,17 +19,11 @@ class InputNormalizer(nn.Module):
         self.register_buffer('mean', mean)
         self.register_buffer('std', std)
 
-    def forward(self, x: Tensor) -> Tensor:
-        return (x - self.mean) / self.std
+    def forward(self, input: Tensor) -> Tensor:
+        return (input - self.mean) / self.std
 
     def __repr__(self):
         return f'InputNormalizer(mean={self.mean}, std={self.std})'  
-
-def get_in_activations(x):
-    return x['in_activations']
-
-def get_out_activations(x):
-    return x['out_activations']
 
 class Hook:
     def __init__(self, save_input=True, save_output=False):
@@ -69,25 +64,20 @@ class Hook:
     def __str__(self):
         return f"\nInputs shape: {self.i_act.shape}\nOutputs shape: {self.o_act.shape}\n"
 
-class ModelWrap(nn.Module):
+class ModelWrap(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
-        super().__init__()
         # check and set model
         self._model = kwargs['model']
-        tm = kwargs.get('target_modules', None)
-        self.device = kwargs.get('device', 'cpu')
-
-        self.normalizer = nn.Identity()
-
         assert(issubclass(type(self._model), torch.nn.Module))
-
-        # impose requirse_grad = False for all parameters
-        self.set_requires_grad(requires_grad=False, layer_names=None)
 
         # set target modules
         self._target_modules = None
+        tm = kwargs.get('target_modules', None)
         if tm != None:
             self.set_target_modules(target_modules=tm) 
+
+        # device for NN
+        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # send model to device
         self._model = self._model.to(self.device)
@@ -131,17 +121,18 @@ class ModelWrap(nn.Module):
             _hooks = {}
             for key in self._target_modules:
                 if verbose: print('Adding hook to module: ', key)
-
+                                                                       
                 module = self._target_modules[key]
                 hook = Hook(save_input=self._si, save_output=self._so)
                 handle = hook.register(module)
+                                                                       
                 _hooks[key] = hook
             
             self._hooks = _hooks
 
         return
 
-    def forward(self, x):
+    def __call__(self, x):
         '''
         Forwards the input through the model, and save activations if they are setted (see 'set_activations()') in self._acts.
         
@@ -150,8 +141,6 @@ class ModelWrap(nn.Module):
         Returns:
             res (torch.tensor): the model output
         '''
-
-        x = self.normalizer(x)
         res = self._model(x)
 
         # get activations in a dict (similar to corevectors structure)
@@ -169,104 +158,53 @@ class ModelWrap(nn.Module):
 
         return res 
     
-    def set_requires_grad(self, **kwargs):
-        """
-        Set requires_grad for model parameters.
-        
-        Args:
-            requires_grad: Whether to enable gradients
-            layer_names: Optional list of layer names to target. If None, affects all parameters.
-        """
-        layer_names = kwargs.get('layer_names', None)
-        requires_grad = kwargs.get('requires_grad', True) 
-        
-        if layer_names is None:
-            # Affect all parameters
-            for param in self._model.parameters():
-                param.requires_grad_(requires_grad)
-        else:
-            # Affect only specified layers
-            for name, param in self._model.named_parameters():
-                if any(layer_name in name for layer_name in layer_names):
-                    param.requires_grad_(requires_grad)
-        return
-
-    def get_trainable_parameters(self, **kwargs):
-        layers_to_train = kwargs.get('layers_to_train', None)
-        verbose = kwargs.get('verbose', False)
-        
-        if layers_to_train is not None:
-            
-            if verbose: print(f'Freezing all layers except: {layers_to_train}')
-            self.set_requires_grad(requires_grad = True, layer_names = layers_to_train)
-
-            trainable_params = [
-                    p for name, p in self._model.named_parameters() if p.requires_grad and any(layer_name in name for layer_name in layers_to_train)
-                    ]
-        else:
-            self.set_requires_grad(requires_grad = True, layer_names = None)
-            trainable_params = [p for p in self._model.parameters() if p.requires_grad]
-            if verbose: print(f'No layers to freeze. Training all layers')
-
-        if verbose:
-            total_params = sum(p.numel() for p in self._model.parameters())
-            trainable_count = sum(p.numel() for p in trainable_params)
-            print(f'Trainable parameters: {trainable_count:,} / {total_params:,} ({100*trainable_count/total_params:.2f}%)')
-            
-        return trainable_params
-
-    def _set_submodule(self, **kwargs):
-
-        name = kwargs['name']
-        new_mod = kwargs['new_mod']
-
-        model = self._model
-
-        if name is None:
-            raise RuntimeError("No module name to replace.")
-        if "." in name:
-            parent_name, child_name = name.rsplit(".", 1)
-            parent = self._model.get_submodule(parent_name)
-        else:
-            parent, child_name = model, name
-        parent._modules[child_name] = new_mod
-
-        return
-
     def update_output(self, **kwargs):
-        n_classes = kwargs["to_n_classes"]
-        output_layer = kwargs["output_layer"]  
+        '''
+        Update the model output to one with size `to_n_classes`. This is done by substituting the model's output by, or appending a, new `torch.nn.Linear` layer accoding to `overwrite`.
+        The last layer is assumed to be `torch.nn.Linear` within a `torch.nn.Sequential` module.
 
-        model = self._model
-  
-        layer = model.get_submodule(output_layer)
-        if not isinstance(layer, nn.Linear):
-            raise TypeError(f"{output_layer} is not nn.Linear")
-        new_layer = nn.Linear(layer.in_features, n_classes, bias=(layer.bias is not None), device=self.device)
-        self._set_submodule(name=output_layer, new_mod=new_layer)
-        return model
-    
-    def append_classifier(self, **kwargs):
-        n_classes = kwargs["to_n_classes"]
-        output_layer = kwargs["output_layer"]
+        Args:
+        - output_layer (str): The output layer of the model as per the state dict key
+        - to_n_classes (int): Number of output features of the new output layers 
+        - overwrite (bool): If True, the last layer will be substituted by a new (randomly initialize) layer with the same `in_features` and `out_features = to_n_classes`. If False a new `torch.nn.Linear(out_features, to_n_classes)` layer will be appended after the `output_layer` layer. 
+        
+        Returns:
+        - a thumbs up
+        '''
 
-        model = self._model
+        out_layer = kwargs['output_layer']
+        n_classes = kwargs['to_n_classes']
+        overwrite = kwargs['overwrite'] if  'overwrite' in kwargs else False
+        
+        keys = out_layer.split(".")[:-1]
+        temp = self._model
+        for p in keys:
+            #check that string part is actually a key in temp._modules
+            if p not in temp._modules.keys():
+                raise RuntimeError(f'seems like {p} is not in the NN, are you sure the output_layer is correct?') 
+            temp = temp._modules[p]
 
-        layer = model.get_submodule(output_layer)
-        if isinstance(layer, nn.Linear):
-            out_size = layer.out_features
-            new_head = nn.Linear(out_size, n_classes, bias=(layer.bias is not None), device=self.device)
-            new_layer = nn.Sequential(layer, new_head)
-            self._set_submodule(name=output_layer, new_mod=new_layer)
-            return model
+        if not isinstance(temp, torch.nn.Sequential):
+            raise RuntimeError('Last module should be torch.nn.Sequential(). If you update the logic to handle any type of network, please submitt a PR.')
 
-        if isinstance(layer, nn.Sequential) and len(layer) > 0 and isinstance(layer[-1], nn.Linear):
-            out_size = layer[-1].out_features
-            new_head = nn.Linear(out_size, n_classes, bias=(layer[-1].bias is not None), device=self.device)
-            layer.append(new_head)
-            return model
+        if not isinstance(temp[-1], torch.nn.Linear):
+            raise RuntimeError('Last layer is not a linear layer. I will not change it.')
+        
+        if overwrite:
+            in_size = temp[-1].in_features
+            new_layer = torch.nn.Linear(in_size, n_classes, device=self.device)
+            temp[-1] = new_layer
+            
+            # update target modules
+            if self._target_modules != None:
+                if out_layer in self._target_modules:
+                    self._target_modules[out_layer] = new_layer
 
-        raise TypeError(f"{output_layer} is not nn.Linear or nn.Sequential ending with nn.Linear")
+        else:
+            out_size = temp[-1].out_features 
+            temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
+
+        return
 
     def load_checkpoint(self, **kwargs):
         '''
@@ -287,7 +225,7 @@ class ModelWrap(nn.Module):
         file = _path/_name
         
         # take the checkpoint and the state_dict from the saved file
-        _checkpoint = torch.load(file, map_location=self.device, weights_only=True)
+        _checkpoint = torch.load(file, map_location=self.device)
         if sd_key in _checkpoint:
             _state_dict = _checkpoint[sd_key]
         else:
@@ -298,19 +236,48 @@ class ModelWrap(nn.Module):
         
         return
     
-    def set_normalizer(self, **kwargs):
+    def normalize_model(self, **kwargs):
         '''
-        Set a normalizer (see `peepholelib.models.model_wrap.InputNormalizer`) applied before the model in forward().
+        Wrap the model with an InputNormalizer layer at the beginning.
         Args:
         - mean (torch.tensor): mean for each channel
         - std (torch.tensor): std for each channel
         '''
+
         mean = kwargs['mean']
         std = kwargs['std']
 
-        self.normalizer = InputNormalizer(mean, std).to(self.device)
-        return
+        mean = mean.to(self.device)
+        std = std.to(self.device)
+        
+        layers = OrderedDict([('normalizer', InputNormalizer(mean, std)), ('model', self._model)])
+        
+        self._model = nn.Sequential(layers)
+
+        return 
     
+    def __get_module(self, **kwargs):
+        '''
+        Get the module of the neural network corresponding to the string passed as input
+        
+        Args:
+        - key (str): name of the module we are searching for
+        
+        Returns:
+        - temp: torch module
+        '''
+        temp = self._model
+        module_name = kwargs['key']
+        keys = module_name.split(".")
+
+        for p in keys:
+            #check that string part is actually a key in temp._modules
+            if p not in temp._modules.keys():
+                return None
+            temp = temp._modules[p]
+            
+        return temp
+
     def set_target_modules(self, **kwargs):
         '''
         Set the variable target_modules as a dictionary: the keys are the name of the modules (string) from the state_dict, the values are modules 
@@ -321,24 +288,12 @@ class ModelWrap(nn.Module):
         key_list = kwargs['target_modules']
         
         _dict = {}
-        for module_name in key_list:
-            try:
-                _dict[module_name] = self._model.get_submodule(module_name)
-            except AttributeError:
-                continue
+        for _str in key_list:
+            _m = self.__get_module(key=_str)
+            if _m != None:
+                _dict[_str] = _m 
 
         self._target_modules = _dict
         
         return
 
-    def to(self, device):
-        self.device = device
-        self._model.to(self.device)
-        self.normalizer.to(self.device)
-        return
-
-    def cpu(self):
-        self.device = torch.device('cpu')
-        self._model.to(self.device)
-        self.normalizer.to(self.device)
-        return

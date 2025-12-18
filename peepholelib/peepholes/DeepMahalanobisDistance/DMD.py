@@ -3,14 +3,10 @@ import abc
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-
 # torch stuff
 import torch
 from peepholelib.peepholes.drill_base import DrillBase
 from sklearn import covariance
-
-# pur stuff
-from peepholelib.models.model_wrap import get_out_activations
 
 def get_images(**kwargs):
     """
@@ -33,7 +29,6 @@ class DeepMahalanobisDistance(DrillBase):
         self.magnitude = kwargs['magnitude']
         self.reducer = kwargs['reducer']
         self.ds_parser = kwargs.get('ds_parser', get_images)
-        self.act_parser = kwargs.get('act_parser', get_out_activations)
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
         self.save_input = kwargs.get('save_input', False)
         self.save_output = kwargs.get('save_output', True)
@@ -42,7 +37,8 @@ class DeepMahalanobisDistance(DrillBase):
         self._means = {} 
         self._precision = {}
 
-        self.cv_parser = self.reducer.parser
+        # set in fit()
+        self._cvs = None 
 
         # used in save() or load()
         self.dmd_folder = self.path/self.name
@@ -55,14 +51,10 @@ class DeepMahalanobisDistance(DrillBase):
         return
     
     def load(self, **kwargs):
-        # return true or false if DMD is fitted or not
-        if self.mean_path.exists() and self.precision_path.exists():
-            self._means = torch.load(self.mean_path).to(self.device)
-            self._precision = torch.load(self.precision_path).to(self.device)
-            ok = True
-        else:
-            ok = False
-        return ok 
+        self._means = torch.load(self.mean_path).to(self.device)
+        self._precision = torch.load(self.precision_path).to(self.device)
+    
+        return 
 
     def save(self, **kwargs):
         self.dmd_folder.mkdir(parents=True, exist_ok=True)
@@ -78,19 +70,19 @@ class DeepMahalanobisDistance(DrillBase):
                 precision: list of precisions
         """
 
-        _dss = kwargs['datasets']
+        _dss = kwargs['dataset']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader')
         label_key = kwargs.get('label_key', 'label')
         
         # parsing for simplification
         dss = _dss._dss[loader]
-        cvs = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module])
+        cvs = _cvs._corevds[loader][self.target_module]
 
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
-        labels = dss[:][label_key].int()
+        labels = dss[label_key].int()
         self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.to(self.device) # create a copy of cvs to device
         
@@ -117,6 +109,7 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         dss = kwargs['dss']
+        parser_act = self.reducer
 
         # get input image and set gradient to modify it
         data = self.ds_parser(dss = dss)
@@ -132,15 +125,13 @@ class DeepMahalanobisDistance(DrillBase):
         if self.target_module == 'output':
             output = self.model(data.to(self.device))
         else:
-            _parsed_act = self.act_parser(self.model._acts)[self.target_module]
-            output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
+            output = parser_act(act_data=self.model._acts['out_activations'][self.target_module])
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-
-            gaussian_score[:,i] = term_gau.detach()
+            gaussian_score[:,i] = term_gau
 
         if magnitude != 0:
             # Input_processing
@@ -165,8 +156,7 @@ class DeepMahalanobisDistance(DrillBase):
             if self.target_module == 'output':
                 output = self.model(tempInputs.to(self.device)) 
             else:
-                _parsed_act = self.act_parser(self.model._acts)[self.target_module]
-                output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
+                output = parser_act(act_data=self.model._acts['out_activations'][self.target_module])
 
             gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
             for i in range(self.nl_model):
@@ -174,4 +164,5 @@ class DeepMahalanobisDistance(DrillBase):
                 term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
                 gaussian_score[:, i] = term_gau
 
-        return gaussian_score
+        score = gaussian_score
+        return score.detach().cpu()

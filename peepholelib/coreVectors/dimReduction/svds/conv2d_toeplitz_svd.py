@@ -18,7 +18,6 @@ class Conv2dToeplitzSVD(DRB):
         layer = kwargs['layer']
         model = kwargs['model']
         q = kwargs.get('rank', 300)
-        self.cv_dim = kwargs.get('cv_dim', None)
         sample_in = kwargs.get('sample_in')
         verbose = kwargs.get('verbose', False)
                                                       
@@ -52,7 +51,6 @@ class Conv2dToeplitzSVD(DRB):
                 raise RuntimeError("Only Conv2D and ConvTranspose2d are suported") 
             
             U, s, Vh = torch.svd_lowrank(W, q=q)
-            U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
             self._svd = {
                     'U': U,
                     's': s,
@@ -103,11 +101,12 @@ class Conv2dToeplitzSVD(DRB):
         """
         Trims corevectors obtained with `coreVectors.dimReduction.svds.conv2d_toeplitz_svd.Conv2dToeplitzSVD.
         Input shape is `[ns, q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
-        Output shape is `[ns, self.cv_dim]`, trimmed corevectors
+        Output shape is `[ns, cv_dim]`, trimmed corevectors
 
         Args:
             cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
             dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
+            cv_dim (int): desired dimension of corevector
             label_key (str): key to get labels from
 
         Returns:
@@ -116,11 +115,12 @@ class Conv2dToeplitzSVD(DRB):
         """
 
         cvs = kwargs['cvs']
+        cv_dim = kwargs['cv_dim']
         dss = kwargs.get('dss', None)
         label_key = kwargs.get('label_key', 'label') 
 
         # trim corevectors on the last dimension
-        tcvs = cvs[...,0:self.cv_dim]
+        tcvs = cvs[...,0:cv_dim]
 
         ret = tcvs if dss == None else (tcvs, dss[label_key])
         return ret 
@@ -153,7 +153,7 @@ def c2s(input_shape, layer, device='cpu', verbose=False, warns=True):
     
     # divide the input channels and output channels in groups, if groups > 1
     if Cin % groups != 0: raise RuntimeError("Cin must be divisible by groups")
-    if Cout % groups != 0: raise RuntimeError("Cout must be divisible by groups")
+    if Cout % groups != 0: raise RuntimeErrot("Cout must be divisible by groups")
     
     Cin_g = Cin // groups  
     Cout_g = Cout // groups 
