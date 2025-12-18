@@ -28,9 +28,6 @@ class LinearSVD(DRB):
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._svd = torch.load(file_path)
         else: 
-            # Turn on activation saving
-            model.set_activations(save_input=True, save_output=False)
-            
             # computation
             W = torch.hstack((_layer.weight, _layer.bias.reshape(-1,1))).to(device)
             U, s, Vh = torch.svd_lowrank(W, q)
@@ -40,9 +37,6 @@ class LinearSVD(DRB):
                     's': s,
                     'Vh': Vh.T
                     }
-
-            # Turn off activation saving
-            model.set_activations(save_input=False, save_output=False)
 
             if verbose: print(f'saving {file_path}')
             torch.save(self._svd, file_path)

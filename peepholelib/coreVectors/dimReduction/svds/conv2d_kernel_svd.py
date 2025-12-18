@@ -32,9 +32,6 @@ class Conv2dKernelSVD(DRB):
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._svd = torch.load(file_path)
         else: 
-            # Turn on activation saving
-            model.set_activations(save_input=True, save_output=False)
-            
             if not isinstance(_layer, torch.nn.Conv2d):
                 raise RuntimeError("Only Conv2D is suported") 
 
@@ -51,9 +48,6 @@ class Conv2dKernelSVD(DRB):
                     's': s,
                     'Vh': Vh.T
                     }
-
-            # Turn off activation saving
-            model.set_activations(save_input=False, save_output=False)
 
             if verbose: print(f'saving {file_path}')
             torch.save(self._svd, file_path)
@@ -78,7 +72,6 @@ class Conv2dKernelSVD(DRB):
         n_act = act_data.shape[0]
         unrolled_acts = unroll_conv2d_activations(acts=act_data, layer=self.layer)
         cvs = (self.reduct_m@unrolled_acts).transpose(1, 2)
-        print(cvs.shape)
 
         return cvs
 

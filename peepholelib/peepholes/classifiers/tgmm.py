@@ -75,7 +75,6 @@ class GMM(ClassifierBase): # quella buona
         '''
         
         data = kwargs['data']
-        print('Prob: ', data)
         probs = self._classifier.predict_proba(data)
         return probs   
     
