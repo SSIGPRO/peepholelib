@@ -7,7 +7,8 @@ setup(
     license='MIT',
     packages=[
         'peepholelib', 
-        'peepholelib/adv_atk', 
+        'peepholelib/adv_atk',
+        'peepholelib/corruptions',
         'peepholelib/coreVectors', 
         'peepholelib/datasets', 
         'peepholelib/featureSqueezing', 
@@ -29,6 +30,8 @@ setup(
         'torchvision',
         'torchgmm',
         'seaborn',
+        'pandas',
         'cuda_selector',
+        'imagecorruptions',
       ],
 )

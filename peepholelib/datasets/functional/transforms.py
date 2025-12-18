@@ -54,16 +54,19 @@ convnext_small_augmentations = transforms.Compose([
 # VGG16 Augmentations
 #-----------------------------
 vgg16_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
 ])
 
 vgg16_cifar_augmentations = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
 ])
 
 vgg16_imagenet_augmentations = transforms.Compose([
-    transforms.Resize((224, 224)),
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
     ])
 
@@ -77,8 +80,8 @@ vgg16_svhn_augmentations = transforms.Compose([
 #-----------------------------
 
 resnet50_transform = transforms.Compose([
-    transforms.Resize((232, 232)),
-    transforms.CenterCrop((224, 224)),
+    transforms.Resize(232),
+    transforms.CenterCrop(224),
 ])
 
 resnet50_cifar100_augmentations = transforms.Compose([
@@ -88,9 +91,9 @@ resnet50_cifar100_augmentations = transforms.Compose([
 ])
 
 resnet50_imagenet_augmentations = transforms.Compose([
-    transforms.Resize((232, 232)),
-    transforms.CenterCrop((224, 224)),
-    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET), 
+    transforms.Resize(232),
+    transforms.CenterCrop(224),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
 ])
 
 #-----------------------------
@@ -98,8 +101,8 @@ resnet50_imagenet_augmentations = transforms.Compose([
 #-----------------------------
 
 vit_b_16_transform = transforms.Compose([
-    transforms.Resize((256, 256)),
-    transforms.CenterCrop((224, 224)),
+    transforms.Resize(256, interpolation=InterpolationMode.BICUBIC),
+    transforms.CenterCrop(224),
 ])
 
 vit_b_16_cifar100_augmentations = transforms.Compose([
@@ -109,9 +112,9 @@ vit_b_16_cifar100_augmentations = transforms.Compose([
 ])
 
 vit_b_16_imagenet_augmentations = transforms.Compose([
-    transforms.Resize((256, 256)),
-    transforms.CenterCrop((224, 224)),
-    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET), 
+    transforms.Resize(256, interpolation=InterpolationMode.BICUBIC),
+    transforms.CenterCrop(224),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
     ])
 
 vit_b_16_svhn_augumentations = transforms.Compose([
@@ -125,18 +128,18 @@ vit_b_16_svhn_augumentations = transforms.Compose([
 #-----------------------------
 
 swin_b_transform = transforms.Compose([
-    transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
+    transforms.Resize(260, interpolation=InterpolationMode.BICUBIC),
     transforms.CenterCrop(256),
 ])
 
 swin_b_cifar100_augmentations = transforms.Compose([
-    transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
+    transforms.Resize(260, interpolation=InterpolationMode.BICUBIC),
     transforms.CenterCrop(256),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
 ])
 
 swin_b_imagenet_augmentations = transforms.Compose([
-    transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
+    transforms.Resize(260, interpolation=InterpolationMode.BICUBIC),
     transforms.CenterCrop(256),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
 ])

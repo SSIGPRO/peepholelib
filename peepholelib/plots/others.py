@@ -23,7 +23,7 @@ def plot_attacks(**kwargs):
     Args:
     - attacks (list[str]): list of attacks that are analysed
     - score type (list[str]): list of scores deployed
-    - scores (dict(str:dict(str: torch.tensor))): Three-level dictionary with first keys being the attacks, second-level the loader name, third-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - scores (pandas.DataFrame): Score dataframe with columns 'dataset', 'score name', and 'score value'.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - path ('str'): Path to save plots.
     - verbose (bool): print progress messages.
@@ -54,9 +54,15 @@ def plot_attacks(**kwargs):
             fig.suptitle(f'Attack {attack}')
 
             for i, ds_key in enumerate(loaders):
-                s = scores[attack][ds_key][type]
+                s = torch.tensor(
+                        scores.loc[
+                            (scores['dataset'] == ds_key) & (scores['score name'] == type),
+                            'score value',
+                            ].tolist(),
+                        dtype=torch.float32,
+                        )
                 if isinstance(s, torch.Tensor):
-                    s = scores[attack][ds_key][type].detach().cpu().numpy()
+                    s = s.detach().cpu().numpy()
                 
                 n_samples = len(s)//2
                 axs[i].hist(s[:n_samples], bins=50, color='red', label=f'{attack}', alpha=0.5)
@@ -132,7 +138,7 @@ def plot_ROC_confidence(**kwargs):
 
     Args:
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - scores (pandas.DataFrame): Score dataframe with columns 'dataset', 'score name', and 'score value'.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - path ('str'): Path to save plots.
     - max_score (float): Max score for the accuracy plot, within '[0., 1.]'.
@@ -150,7 +156,7 @@ def plot_ROC_confidence(**kwargs):
     else:
         path = Path(path)
 
-    if loaders == None: loaders = list(scores.keys())
+    if loaders == None: loaders = scores['dataset'].drop_duplicates().tolist()
 
     # save AUCs for plotting 
     aucs_df = pd.DataFrame()
@@ -159,8 +165,15 @@ def plot_ROC_confidence(**kwargs):
     for loader_n, ds_key in enumerate(loaders):
         fig, (ax_main, ax_zoom) = plt.subplots(1, 2, figsize=(11, 5))
 
-        for score_n, score_name in enumerate(scores[ds_key].keys()):
-            _scores = scores[ds_key][score_name]
+        score_names = scores.loc[scores['dataset'] == ds_key, 'score name'].drop_duplicates().tolist()
+        for score_n, score_name in enumerate(score_names):
+            _scores = torch.tensor(
+                    scores.loc[
+                        (scores['dataset'] == ds_key) & (scores['score name'] == score_name),
+                        'score value',
+                        ].tolist(),
+                    dtype=torch.float32,
+                    )
             results = cvs._dss[ds_key]['result']  
             if not isinstance(results, torch.Tensor):
                 results = torch.tensor(results)
@@ -218,7 +231,7 @@ def FPR95_OOD_AA(**kwargs):
 
     Args:
     - corevectors (peepholelib.coreVectors.CoreVectors): corevectors with dataset parsed (see `peepholelib.coreVectors.parse_ds`).
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - scores (pandas.DataFrame): Score dataframe with columns 'dataset', 'score name', and 'score value'.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - verbose (bool): print progress messages.
     '''
@@ -228,10 +241,16 @@ def FPR95_OOD_AA(**kwargs):
     val_loader = kwargs.get('val_loader', None)
     test_loaders = kwargs.get('test_loaders', None)
 
-    scores_name = list(scores[val_loader].keys())
+    scores_name = scores.loc[scores['dataset'] == val_loader, 'score name'].drop_duplicates().tolist()
 
     for sn in scores_name:
-        s_val = scores[val_loader][sn]
+        s_val = torch.tensor(
+                scores.loc[
+                    (scores['dataset'] == val_loader) & (scores['score name'] == sn),
+                    'score value',
+                    ].tolist(),
+                dtype=torch.float32,
+                )
         results_val = cvs._dss[val_loader]['result']
 
         s_oks = s_val[results_val == True]
@@ -240,7 +259,13 @@ def FPR95_OOD_AA(**kwargs):
         threshold = sorted_pos[tpr95_index]
 
         for test in test_loaders:
-            s_test = scores[test][sn]
+            s_test = torch.tensor(
+                    scores.loc[
+                        (scores['dataset'] == test) & (scores['score name'] == sn),
+                        'score value',
+                        ].tolist(),
+                    dtype=torch.float32,
+                    )
             results_test = cvs._dss[test]['result']
             s_kos = s_test[results_test == False]
             fpr95 = (s_kos >= threshold).float().mean().item()

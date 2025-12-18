@@ -76,7 +76,7 @@ class CifarC(DatasetWrap):
         '''
 
         DatasetWrap.__init__(self, **kwargs)
-        
+        self.original_correct = kwargs.get('original_correct', None)
         return
     
     def __load_data__(self):
@@ -141,7 +141,7 @@ class CifarC(DatasetWrap):
                     labels = _labels[cl],
                     corruptions = c_corruptions_test,
                     )
-            
+
             corrupted_datasets_val[cl] = CustomDS(
                     data = c_images_val[cl],
                     labels = _labels[cl],

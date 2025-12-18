@@ -160,7 +160,7 @@ class CoreVectors():
         model.set_activations(save_input=False, save_output=False)
     
         return
-
+    
     def normalize_corevectors(self, **kwargs):
         '''
         Normalize corevectors.
@@ -182,8 +182,6 @@ class CoreVectors():
             raise RuntimeError('No corevectors to normalize. Run get_corevectors() first.')
 
         if verbose: print(f'\n---- Applying normalization w.r.t. {wrt}\n')
-        
-        
         
         # denormalize
         for ds_key in self._corevds.keys():

@@ -619,6 +619,7 @@ class myCW(AttackBase):
         self.max_steps = kwargs.get('max_steps', 1000)
         self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
         self.mode = kwargs.get('mode', 'random')
+        self.search_step = kwargs.get('search_step', 5)
             
         targeted = False if self.mode == 'random' else True
         
@@ -628,7 +629,7 @@ class myCW(AttackBase):
                 targeted = targeted, 
                 confidence = self.confidence, 
                 c_range = self.c_range,
-                search_steps = 5, 
+                search_steps = self.search_step, 
                 max_steps = self.max_steps, 
                 abort_early = True,
                 box = (-3, 3), 

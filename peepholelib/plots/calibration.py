@@ -17,7 +17,7 @@ def plot_calibration(**kwargs):
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - scores (pandas.DataFrame): Score dataframe with columns 'dataset', 'score name', and 'score value'.
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'scores'. Defaults to 'None'.
     - path ('str'): Path to save plots.
     - calib_bin (int): Bin size for calibration plot.
@@ -48,8 +48,15 @@ def plot_calibration(**kwargs):
     for loader_n, ds_key in enumerate(loaders):
 
         df_calib = pd.DataFrame()
-        for score_name in scores[ds_key].keys():
-            _scores = scores[ds_key][score_name]
+        score_names = scores.loc[scores['dataset'] == ds_key, 'score name'].drop_duplicates().tolist()
+        for score_name in score_names:
+            _scores = torch.tensor(
+                    scores.loc[
+                        (scores['dataset'] == ds_key) & (scores['score name'] == score_name),
+                        'score value',
+                        ].tolist(),
+                    dtype=torch.float32,
+                    )
             results = dss._dss[ds_key]['result'] 
             ns = _scores.shape[0] # number of samples
 
@@ -99,10 +106,10 @@ def plot_calibration(**kwargs):
         sb.pointplot(
                 data = df_calib,
                 ax = ax,
-                x = x.repeat(len(scores[ds_key].keys())),
+                x = x.repeat(len(score_names)),
                 y = 'accuracy',
                 hue = 'score type',
-                palette = colors[0:len(scores[loaders[-1]])],
+                palette = colors[0:len(score_names)],
                 alpha = 0.75,
                 markersize = 8,
                 legend = True

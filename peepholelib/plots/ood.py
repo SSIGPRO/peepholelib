@@ -13,12 +13,78 @@ from sklearn.metrics import roc_curve, roc_auc_score, auc
 import torch
 from torcheval.metrics import BinaryAUROC as AUC
 
+def eval_ood(**kwargs):
+    '''
+    Compute OOD AUROC scores between ID/OOD pairs with the same score name.
+
+    Args:
+    - scores (pandas.DataFrame): dataframe with columns 'dataset', 'score name',
+      and 'score value'.
+    - id_loader (str): in-distribution dataset name. Defaults to
+      'ImageNet-test-ViTB16'.
+    - split (str): split name to keep in the dataset column. Defaults to
+      'test'. Use None to disable this filter.
+    - score_names (str|list[str]): score name(s) to use. If None, all score
+      names are tried.
+
+    Returns:
+    - pandas.DataFrame: one row for each ID/OOD pair with the same score name.
+    '''
+    scores = kwargs['scores']
+    id_loader = kwargs.get('id_loader', 'ImageNet-test-ViTB16')
+    split = kwargs.get('split', 'test')
+    score_names = kwargs.get('score_names', kwargs.get('score_name', None))
+    if split is not None:
+        scores = scores.loc[
+            scores['dataset'].str.contains(split, case=False, na=False)
+        ]
+
+    if score_names is None:
+        score_names = scores['score name'].drop_duplicates().tolist()
+    elif isinstance(score_names, str):
+        score_names = [score_names]
+
+    rows = []
+    for score_name in score_names:
+        score_df = scores.loc[scores['score name'] == score_name]
+
+        s_id = score_df.loc[
+            score_df['dataset'] == id_loader,
+            'score value',
+        ].dropna().tolist()
+
+        ood_loaders = [
+            ds for ds in score_df['dataset'].drop_duplicates().tolist()
+            if ds != id_loader
+        ]
+
+        for ood_loader in ood_loaders:
+            s_ood = score_df.loc[
+                score_df['dataset'] == ood_loader,
+                'score value',
+            ].dropna().tolist()
+
+            labels = [1] * len(s_id) + [0] * len(s_ood)
+            values = s_id + s_ood
+            auc_value = roc_auc_score(labels, values)
+
+            rows.append({
+                'score name': score_name,
+                'id loader': id_loader,
+                'ood loader': ood_loader,
+                'AUC': auc_value,
+                'n id': len(s_id),
+                'n ood': len(s_ood),
+            })
+
+    return pd.DataFrame(rows)
+
 def plot_ood(**kwargs):
     '''
     Plot OOD detection.
 
     Args:
-    - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
+    - scores (pandas.DataFrame): Score dataframe with columns 'dataset', 'score name', and 'score value'.
     - id_loaders (dict(str:str|list(str))): Dictionary of loaders of in-distribution data, with the key being the score type and values a str or list of strings for respective loaders.
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
@@ -59,11 +125,29 @@ def plot_ood(**kwargs):
             _id_loader = id_loaders[score_name]
             
             if type(_id_loader) is list:
-                s_id = scores[_id_loader[loader_n]][score_name]
+                id_loader = _id_loader[loader_n]
             else:
-                s_id = scores[_id_loader][score_name]
+                id_loader = _id_loader
 
-            s_ood = scores[ds_key][score_name]
+            s_id = torch.tensor(
+                    scores.loc[
+                        (scores['dataset'] == id_loader) & (scores['score name'] == score_name),
+                        'score value',
+                        ].tolist(),
+                    dtype=torch.float32,
+                    )
+            s_ood = torch.tensor(
+                    scores.loc[
+                        (scores['dataset'] == ds_key) & (scores['score name'] == score_name),
+                        'score value',
+                        ].tolist(),
+                    dtype=torch.float32,
+                    )
+
+            # guarantees the same number of samples
+            _ns = min(len(s_id), len(s_ood))
+            s_id = s_id[torch.randperm(len(s_id))[:_ns]]
+            s_ood = s_ood[torch.randperm(len(s_ood))[:_ns]]
 
             # guarantees the same number of samples
             _ns = min(len(s_id), len(s_ood))
@@ -99,7 +183,7 @@ def plot_ood(**kwargs):
             cs_idood[score_name+' ID'] = colors[score_n]
             cs_idood[score_name+' OOD'] = colors[score_n]
             ls_idood[score_name+' ID'] = '--' 
-            ls_idood[score_name+' OOd'] = '-'
+            ls_idood[score_name+' OOD'] = '-'
 
         #--------------------
         # Plotting
@@ -182,7 +266,7 @@ def plot_ood(**kwargs):
             y = 'AUC',
             hue = 'score name',
             markersize = 8,
-            palette = colors[0:len(scores[ood_loaders[0]])],
+            palette = colors[0:aucs_df['score name'].nunique()],
             alpha = 0.75,
             legend = True
             )
@@ -232,4 +316,33 @@ def plot_ood(**kwargs):
     plt.tight_layout()
     plt.savefig(path / f'auc_only{suffix}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    return 
+    return
+
+def print_ood_aucs(**kwargs):
+    '''
+    Print AUC scores for all OOD loaders of a given ID loader from score_ood output.
+
+    Args:
+    - aucs (pandas.DataFrame): output of score_ood, with columns 'score name',
+      'id loader', 'ood loader', 'AUC'.
+    - id_loader (str): in-distribution dataset name to filter on.
+    - ood_loaders (list[str]): OOD datasets to analyze. If None, all are used.
+    - csv_path (str): path of the CSV file to save. If None, no file is saved.
+    '''
+    aucs = kwargs['aucs']
+    id_loader = kwargs['id_loader']
+    ood_loaders = kwargs.get('ood_loaders', None)
+    csv_path = kwargs['csv_path']
+
+    df = aucs.loc[aucs['id loader'] == id_loader].copy()
+
+    if ood_loaders is not None:
+        df = df.loc[df['ood loader'].isin(ood_loaders)]
+
+    for ood_loader, group in df.groupby('ood loader'):
+        print(f'OOD loader: {ood_loader}')
+        for _, row in group.iterrows():
+            name = row["score name"].removesuffix(f'-{ood_loader}')
+            print(f'  {name}: {row["AUC"]:.4f}')
+
+    df.to_csv(csv_path, index=False)

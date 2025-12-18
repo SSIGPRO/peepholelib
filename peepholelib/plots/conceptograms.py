@@ -27,7 +27,7 @@ def plot_conceptogram(**kwargs):
     - verbose (bool): Print progress messages.
 
     Textual Args:
-    - scores (dict(str:dict(str:torch.tensor)))): Scores to add to title(see `peepholelib.utils.scores`) if given. Defaults to `None`.
+    - scores (pandas.DataFrame): Scores to add to title if given. Defaults to `None`.
     - classes (dict({int: str})): Dictionary containing name of the classes given their number.
     - ticks (list[str]): List of modules to put ticks. Defaults to `target_modules`.
     - protoclass_title (str): Title for the protoclass plot.
@@ -57,7 +57,7 @@ def plot_conceptogram(**kwargs):
     if len(target_modules) != len(ticks):
         raise ValueError('Number of target layers and ticks should be equal')
 
-    has_title = (scores != None) and (classes != None)
+    has_title = (scores is not None) and (classes is not None)
 
     for ds_key in loaders:
         conceptos = phs.get_conceptograms(loaders=[ds_key], target_modules=target_modules)[ds_key][samples]
@@ -91,9 +91,17 @@ def plot_conceptogram(**kwargs):
                 else:
                     title = '' 
 
-                if scores != None:
-                    for score_name in scores[ds_key]:
-                        title += f'\n{score_name}: {scores[ds_key][score_name][sample]:.2f}'
+                if scores is not None:
+                    score_names = scores.loc[scores['dataset'] == ds_key, 'score name'].drop_duplicates().tolist()
+                    for score_name in score_names:
+                        score = torch.tensor(
+                                scores.loc[
+                                    (scores['dataset'] == ds_key) & (scores['score name'] == score_name),
+                                    'score value',
+                                    ].tolist(),
+                                dtype=torch.float32,
+                                )[sample]
+                        title += f'\n{score_name}: {score:.2f}'
 
                 axs[0][0].axis('off')
                 axs[0][0].text(s=title, x=1.0, y=1.0, va='top', transform=axs[0][0].transAxes, fontweight='bold')

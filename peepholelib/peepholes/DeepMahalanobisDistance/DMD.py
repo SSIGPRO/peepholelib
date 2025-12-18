@@ -115,8 +115,11 @@ class DeepMahalanobisDistance(DrillBase):
 
         magnitude = self.magnitude
         std = self.std_transform
-        
+
         dss = kwargs['dss']
+
+        # Re-apply save settings — another driller's __init__ may have overwritten them
+        self.model.set_activations(save_input=self.save_input, save_output=self.save_output)
 
         # get input image and set gradient to modify it
         data = self.ds_parser(dss = dss)

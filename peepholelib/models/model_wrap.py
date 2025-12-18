@@ -335,10 +335,10 @@ class ModelWrap(nn.Module):
         self.device = device
         self._model.to(self.device)
         self.normalizer.to(self.device)
-        return
+        return self
 
     def cpu(self):
         self.device = torch.device('cpu')
         self._model.to(self.device)
         self.normalizer.to(self.device)
-        return
+        return self
