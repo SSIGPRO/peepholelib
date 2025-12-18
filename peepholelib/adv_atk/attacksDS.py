@@ -71,18 +71,18 @@ class AttacksDS(ParsedDataset):
 
                 self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w') 
                 
-                img_sample = ds._dss[ds_key]['image'][0:1]
-                img_shape = img_sample.shape[1:]
-                with torch.no_grad():
-                    _res = atk.model(img_sample.to(atk.model.device))
-                    num_classes = _res.shape[1]
+                # img_sample = ds._dss[ds_key]['image'][0:1]
+                # img_shape = img_sample.shape[1:]
+                # with torch.no_grad():
+                #     _res = atk.model(img_sample.to(atk.model.device))
+                #     num_classes = _res.shape[1]
 
-                self._dss[tdsk]['image'] = MMT.empty(shape=torch.Size((n_samples,)+img_shape))
-                self._dss[tdsk]['label'] = MMT.empty(shape=torch.Size((n_samples,)))
-                self._dss[tdsk]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-                self._dss[tdsk]['results'] = MMT.empty(shape=torch.Size((n_samples,)))
+                for key in ds._dss[ds_key].keys():
+                    key_sample = ds._dss[ds_key][key][0:1]
+                    key_shape = key_sample.shape[1:]
+                    self._dss[tdsk][key] = MMT.empty(shape=torch.Size((n_samples,)+key_shape))
+
                 self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
-                self._dss[tdsk]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
 
                 # Close PTD create with mode 'w' and re-open it with mode 'r+'
                 # This is done so we can use multiple workers with the dataloaders 
@@ -107,14 +107,22 @@ class AttacksDS(ParsedDataset):
                         shuffle = False,
                         num_workers = n_threads
                         )
+                
+                keys_to_overwrite = ['image', 'output', 'pred', 'result']
+
+                keylist = list(ds._dss[ds_key].keys())
+
+                keys_to_copy = [k for k in keylist if k not in keys_to_overwrite]
 
                 for di, dt in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
                     ori_images = di['image'].to(atk.model.device)
-                    labels = di['label'].int().to(atk.model.device)
+
+                    for key in keys_to_copy:
+                        dt[key] = di[key].int()
                     
                     atk_images = atk(
                             images = ori_images,
-                            labels = labels
+                            labels = di['label'].int().to(atk.model.device)
                             )
                     
                     with torch.no_grad():
@@ -125,10 +133,9 @@ class AttacksDS(ParsedDataset):
 
                     dt['image'] = atk_images
                     dt['output'] = y_pred_atk
-                    dt['label'] = labels
                     dt['pred'] = pred_labels_atk
-                    dt['results'] = pred_labels_atk == labels
-                    dt['attack_success'] = torch.logical_and(pred_labels_ori == labels, pred_labels_atk != pred_labels_ori) 
+                    dt['result'] = pred_labels_atk == dt['label'].to(atk.model.device)
+                    dt['attack_success'] = torch.logical_and(pred_labels_ori == dt['label'].to(atk.model.device), pred_labels_atk != pred_labels_ori) 
         return
 
     def get(self, ds_key, idx):

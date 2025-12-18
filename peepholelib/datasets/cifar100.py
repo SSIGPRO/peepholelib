@@ -16,9 +16,8 @@ from torchvision import datasets
 class CIFAR100Custom(CIFAR100):
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
-        supertarget = target // 5
 
-        return img, target, supertarget
+        return torch.tensor(img), torch.tensor(target), torch.tensor(target // 5)
 
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):
