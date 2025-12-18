@@ -1,4 +1,18 @@
-# v.0.0.0
+# DEVEL
+
+## SVDs
+- move SVDs to dimentionality reduction class in `coreVectors/dimReduction`.
+
+## Corevectors
+- Wrap dimentionality reduction within classes.
+- Implement dimentionality reduction base.
+
+## Peepholes
+- Move corevectors parsing (old `trim_corevectors`) inside respective dimentionality reduction class.
+- remove the `peepholes` key from `peepholes/peepholes.Peepholes._phs[<loaders>][<layer>]`.
+- remove suffix from `peepholelib/peepholes/drill_base.Drill_base`, it is supposed to be managed at experiment level.
+
+# v.0.0.1
 
 ## general
 - update `utils/testing.py` to `utils/samplers.py`
