@@ -5,6 +5,7 @@ class DrillBase(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
         self.path = kwargs['path']
         self.name = kwargs['name']
+        self.target_module = kwargs['target_module']
 
         # number of classes in the NN model
         self.nl_model = kwargs['nl_model']
@@ -12,17 +13,12 @@ class DrillBase(metaclass=abc.ABCMeta):
         # a.k.a corevector size
         self.n_features = kwargs['n_features']
 
-        self.parser = kwargs['parser']
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
+        self.device = kwargs.get('device', 'cpu')
 
         # computed in fit()
         self._classifier = None
-
-        # set in fit()
         self._cvs = None 
 
-        # used in save() or load()
-        self._suffix = f'.nl_model={self.nl_model}.n_features={self.n_features}'
         return
     
     @abc.abstractmethod

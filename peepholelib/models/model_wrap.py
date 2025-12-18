@@ -65,30 +65,29 @@ class Hook:
         return f"\nInputs shape: {self.i_act.shape}\nOutputs shape: {self.o_act.shape}\n"
 
 class ModelWrap(metaclass=abc.ABCMeta):
-
-    from .get_svds import get_svds
-
     def __init__(self, **kwargs):
+        # check and set model
+        self._model = kwargs['model']
+        assert(issubclass(type(self._model), torch.nn.Module))
+
+        # set target modules
+        self._target_modules = None
+        tm = kwargs.get('target_modules', None)
+        if tm != None:
+            self.set_target_modules(target_modules=tm) 
+
         # device for NN
         self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
-        self._model = kwargs['model']
 
-        # check and set model
-        assert(issubclass(type(self._model), torch.nn.Module))
+        # send model to device
         self._model = self._model.to(self.device)
         self._model.eval()
 
-        # set in set_target_modules()
-        self._target_modules = None 
-        self._hooks = None
-        
-        # computed in get_svds()
-        self._svds = None
-
-        # set on __call__()
+        # set in __call__()
         self._acts = None
 
-        # set on set_activation()
+        # set in set_activations()
+        self._hooks = None
         self._si = False 
         self._so = False 
 
@@ -193,7 +192,14 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         if overwrite:
             in_size = temp[-1].in_features
-            temp[-1] = torch.nn.Linear(in_size, n_classes, device=self.device)
+            new_layer = torch.nn.Linear(in_size, n_classes, device=self.device)
+            temp[-1] = new_layer
+            
+            # update target modules
+            if self._target_modules != None:
+                if out_layer in self._target_modules:
+                    self._target_modules[out_layer] = new_layer
+
         else:
             out_size = temp[-1].out_features 
             temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
@@ -250,7 +256,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         return 
     
-    def get_module(self, **kwargs):
+    def __get_module(self, **kwargs):
         '''
         Get the module of the neural network corresponding to the string passed as input
         
@@ -283,7 +289,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         _dict = {}
         for _str in key_list:
-            _m = self.get_module(key=_str)
+            _m = self.__get_module(key=_str)
             if _m != None:
                 _dict[_str] = _m 
 

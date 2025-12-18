@@ -27,7 +27,7 @@ def get_coreVectors(self, **kwargs):
     - datasets (dict(str: peepholelib.datasets.parsedDataset.ParsedDataset)): Parsed datasets.
     - loaders (list[str]): List of loaders in `datasets.keys()` to compute corevectors. If `None` uses `datasets._dss.keys()`. Defaults to `None`.
     - input_key TODO
-    - reduction_fns (dict(str: Callable)): A dictionary with keys being the module names as per the model's state_dict, and values being a callable foo(acts) which takes as input the model's batched activations and returns a dimentionality reduced version of its outputs. 
+    - reducers (dict(str: Callable)): A dictionary with keys being the module names as per the model's state_dict, and values being a callable foo(acts) which takes as input the model's batched activations and returns a dimentionality reduced version of its outputs. 
     - activations_parser (callable): A function for parsing activations. Defaults to 'get_in_activations()' (see peepholelib.models.model_wrap.py for details on how we get the activations).
     - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
     - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
@@ -38,7 +38,7 @@ def get_coreVectors(self, **kwargs):
     datasets = kwargs.get('datasets')
     loaders = kwargs.get('loaders', None)
     input_key = kwargs.get('input_key','image')
-    reduction_fns = kwargs.get('reduction_fns')
+    reducers = kwargs.get('reducers')
     activations_parser = kwargs.get('activations_parser', get_in_activations)
     bs = kwargs.get('batch_size', 64) 
     n_threads = kwargs.get('n_threads', 1) 
@@ -57,8 +57,8 @@ def get_coreVectors(self, **kwargs):
     model = self._model 
     device = self._model.device 
 
-    if reduction_fns.keys() != model._target_modules.keys(): 
-        raise RuntimeError(f'Keys inconsistency between reduction_fns and target_modules \n reduction_fns keys: {reduction_fns.keys()} \n target_modules: {model._target_modules.keys()}')
+    if reducers.keys() != model._target_modules.keys(): 
+        raise RuntimeError(f'Keys inconsistency between reducers and target_modules \n reducers keys: {reducers.keys()} \n target_modules: {model._target_modules.keys()}')
 
     # set the model to get activations
     if not has_acts:
@@ -101,7 +101,7 @@ def get_coreVectors(self, **kwargs):
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
                 # Dry run to get CV shape
-                cv_shape = reduction_fns[mk](act_data=_act0[mk]).shape[1:]
+                cv_shape = reducers[mk](act_data=_act0[mk]).shape[1:]
 
                 # allocate for core vectors 
                 if verbose: print('allocating core vectors for module: ', mk)
@@ -132,7 +132,7 @@ def get_coreVectors(self, **kwargs):
 
             for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
                 for mk in _modules_to_save:
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk])
+                    cvs_data[mk] = reducers[mk](act_data=act_data[mk]).cpu()
             
         else:
             if verbose: print('Getting activations from model')
@@ -145,7 +145,7 @@ def get_coreVectors(self, **kwargs):
                     
                 for mk in _modules_to_save:
                     act_data = activations_parser(model._acts)
-                    cvs_data[mk] = reduction_fns[mk](act_data=act_data[mk]).cpu()
+                    cvs_data[mk] = reducers[mk](act_data=act_data[mk]).cpu()
 
     # reset the model to NOT get activations
     model.set_activations(save_input=False, save_output=False)

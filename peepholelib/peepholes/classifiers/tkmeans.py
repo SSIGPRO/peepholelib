@@ -30,8 +30,8 @@ class KMeans(ClassifierBase): # quella buona
                     )
                 )
 
-        self._clas_path = self.path/(self.name+'.KMeans'+self._suffix)
-        self._empp_file = self._clas_path/'empp.pt'
+        self._clas_path = self.path/self.name
+        self._empp_file = self._clas_path/'empp_{self.label_key}.pt'
         return
 
     def fit(self, **kwargs):
@@ -46,7 +46,7 @@ class KMeans(ClassifierBase): # quella buona
         loader = kwargs.get('loader', 'train')
         verbose = kwargs.get('verbose', False)
 
-        cvs = _cvs._corevds[loader]
+        cvs = _cvs._corevds[loader][self.target_module]
         if verbose: 
             print('\n ---- KMeans classifier\n')
 
@@ -71,9 +71,7 @@ class KMeans(ClassifierBase): # quella buona
         '''
         
         data = kwargs['data']
-
         distances = self._classifier.transform(data)
-        
         # changing strategy: back to softmin
         probs = torch.nn.functional.softmin(distances, dim=1)
             

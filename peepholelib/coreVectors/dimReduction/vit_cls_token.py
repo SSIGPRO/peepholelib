@@ -4,7 +4,7 @@ import torch
 # Our stuff
 from .dim_reduction_base import DimReductionBase as DRB 
 
-class AvgPooling(DRB):
+class ViTCLSToken(DRB):
     def __init__(self, **kwargs):
         DRB.__init__(self, **kwargs)
         
@@ -12,15 +12,17 @@ class AvgPooling(DRB):
         layer = kwargs['layer']
         model = kwargs['model']
         _layer = model._target_modules[layer]
-        if not isinstance(_layer, torch.nn.Conv2d):
-            raise RuntimeError("Only Conv2D is suported") 
+        if not isinstance(_layer, torch.nn.Linear):
+            raise RuntimeError("Only Linear is suported") 
 
         return
 
     def __call__(self, **kwargs):
+        """
+        Extract the class token from ViT activations.
+        """
+        # Assuming the class token is the first token in the sequence
+
         act_data = kwargs['act_data'] 
-        act_data = act_data.view(act_data.size(0), act_data.size(1), -1)
-        cvs = torch.mean(act_data,2)
-    
-        return cvs
+        return act_data[:, 0, :]
 
