@@ -10,6 +10,7 @@ from torch.nn.functional import pad
 
 # Our stuff
 from ..dim_reduction_base import DimReductionBase as DRB 
+#from .clustering_optimization import optimize_clustering_projection
 
 class Conv2dToeplitzSVD(DRB):
     def __init__(self, **kwargs):
@@ -18,7 +19,8 @@ class Conv2dToeplitzSVD(DRB):
         layer = kwargs['layer']
         model = kwargs['model']
         q = kwargs.get('rank', 300)
-        self.cv_dim = kwargs.get('cv_dim', None)
+        self.cv_dim = kwargs['cv_dim']
+        self.layer_name = layer
         sample_in = kwargs.get('sample_in')
         verbose = kwargs.get('verbose', False)
                                                       
@@ -73,6 +75,17 @@ class Conv2dToeplitzSVD(DRB):
         self.padding = _reverse_repeat_tuple(_layer.padding, 2) 
 
         return
+
+    def _prepare_projection_input(self, act_data):
+        n_act = act_data.shape[0]
+        acts_pad = pad(act_data, pad=self.padding, mode=self.pad_mode)
+        acts_flat = acts_pad.flatten(start_dim=1)
+
+        if self.bias is None:
+            return acts_flat
+
+        ones = torch.ones(n_act, 1, device=acts_flat.device)
+        return torch.hstack((acts_flat, ones))
             
     def __call__(self, **kwargs):
         '''
@@ -84,20 +97,46 @@ class Conv2dToeplitzSVD(DRB):
         Returns:
         - cvs (torch.tensor) = batched projected activations
         '''
-        act_data = kwargs['act_data'] 
-        n_act = act_data.shape[0]
-        acts_pad = pad(act_data, pad=self.padding, mode=self.pad_mode)
-        acts_flat = acts_pad.flatten(start_dim=1)
-
-        if self.bias is None:
-            _acts = acts_flat
-        else:
-            ones = torch.ones(n_act, 1, device=acts_flat.device)
-            _acts = torch.hstack((acts_flat, ones))
-        
+        act_data = kwargs['act_data']
+        _acts = self._prepare_projection_input(act_data)
         cvs = (self.reduct_m@_acts.T).T
 
         return cvs
+
+    def optimize_clustering(self, **kwargs):
+        """
+        Optimize the current V^T projection for clustering.
+
+        Args:
+        - act_data (torch.tensor): Batched activations.
+        - inplace (bool): If True, update self.reduct_m with the optimized
+          projection. Defaults to False.
+        - datasets (ParsedDataset, optional): Parsed dataset container used to
+          read class labels from `datasets._dss[loader][label_key]`. When
+          provided, optimization metrics also include class and cluster
+          coverage computed from the empirical posterior mapping.
+        - loader (str): Dataset split key used with `datasets`. Defaults to
+          `'train'`.
+        - label_key (str): Label field inside the parsed dataset. Defaults to
+          `'label'`.
+        - remaining kwargs: forwarded to optimize_clustering_projection().
+        """
+        act_data = kwargs.pop('act_data')
+        inplace = kwargs.pop('inplace', False)
+        h_data = self._prepare_projection_input(act_data)
+        results = optimize_clustering_projection(
+                h_data=h_data,
+                reduct_m=self.reduct_m,
+                cv_dim=self.cv_dim,
+                layer_name=self.layer_name,
+                **kwargs
+                )
+        if inplace:
+            self.reduct_m = results['optimized_reduct_m'].detach().to(self.reduct_m.device)
+            self._svd['Vh'] = self.reduct_m.detach().cpu()
+            self.cv_dim = int(results.get('optimized_cv_dim', self.cv_dim))
+
+        return results
     
     def parser(self, **kwargs):
         """

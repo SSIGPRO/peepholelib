@@ -28,6 +28,7 @@ setup(
         'tensordict',
         'torchvision',
         'torchgmm',
+        'dpgmm>=0.1.0',
         'seaborn',
         'cuda_selector',
       ],

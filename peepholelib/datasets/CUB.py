@@ -1,4 +1,8 @@
 # general python stuff
+<<<<<<< HEAD
+=======
+import os
+>>>>>>> ec6a98a (starting back on XAI (#122))
 from collections import defaultdict
 from PIL import Image
 from pathlib import Path
@@ -9,7 +13,10 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 # torch stuff
 import torch
 from torch.utils.data import Dataset, Subset, random_split
+<<<<<<< HEAD
 from torchvision.transforms import ToTensor
+=======
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
 def onehot_to_index(bits):
     for i, b in enumerate(bits):
@@ -17,7 +24,12 @@ def onehot_to_index(bits):
             return torch.tensor([i])
     return torch.tensor([0])
 
+<<<<<<< HEAD
 class CUBCustom(Dataset):
+=======
+class CustomDS(Dataset):
+
+>>>>>>> ec6a98a (starting back on XAI (#122))
     def __init__(self, **kwargs):
         """
         path: path to CUB_200_2011 (folder that contains images/, attributes/, parts/, *.txt)
@@ -25,6 +37,7 @@ class CUBCustom(Dataset):
         Dataset.__init__(self) 
         self.path = Path(kwargs['path'])
         self.transform = kwargs['transform']
+        self.seed = kwargs['seed']
 
         # ---- 1) basic files ----
         images_file = self.path / "images.txt"
@@ -51,6 +64,10 @@ class CUBCustom(Dataset):
                 self.id_to_label[int(img_id)] = torch.tensor(int(class_id) - 1, dtype=torch.int64)
 
         # ---- 4) img ids ----
+<<<<<<< HEAD
+=======
+       
+>>>>>>> ec6a98a (starting back on XAI (#122))
         self.img_ids = []
         self.is_train = []
         with open(split_file, "r") as f:
@@ -65,10 +82,13 @@ class CUBCustom(Dataset):
         # ---- 5) class names ----
         # classes.txt: <class_id> <class_name>
         self.class_id_to_name = {}
+        self.id_to_class = {}
         with open(classes_file, "r") as f:
             for line in f:
                 class_id, class_name = line.strip().split()
-                self.class_id_to_name[int(class_id) - 1] = class_name
+                class_id = int(class_id)
+                self.class_id_to_name[class_id - 1] = class_name
+                self.id_to_class[class_id] = class_name
 
         # ---- 6) bounding boxes ----
         # bounding_boxes.txt: <image_id> <x> <y> <width> <height>
@@ -111,8 +131,16 @@ class CUBCustom(Dataset):
                 self.id_to_parts[img_id].append(part_info)
         
         self.id_to_parts_categorical = {}
+<<<<<<< HEAD
         for sample_id, sample_parts in self.id_to_parts.items():
             self.id_to_parts_categorical[sample_id] = {}
+=======
+
+        for sample_id, sample_parts in self.id_to_parts.items():
+
+            self.id_to_parts_categorical[sample_id] = {}
+
+>>>>>>> ec6a98a (starting back on XAI (#122))
             for part in sample_parts:
                 
                 self.id_to_parts_categorical[sample_id][part['part_name']] = torch.tensor([part['x'], part['y'], part['visible']])
@@ -133,6 +161,7 @@ class CUBCustom(Dataset):
         self.id_to_attributes = defaultdict(list)
 
         attributes_list = [
+<<<<<<< HEAD
                 'has_bill_shape', 
                 'has_wing_color',
                 'has_upperparts_color',
@@ -162,6 +191,37 @@ class CUBCustom(Dataset):
                 'has_crown_color',
                 'has_wing_pattern'
                 ]
+=======
+                        'has_bill_shape', 
+                        'has_wing_color',
+                        'has_upperparts_color',
+                        'has_underparts_color',
+                        'has_breast_pattern',
+                        'has_back_color',
+                        'has_tail_shape',
+                        'has_upper_tail_color',
+                        'has_head_pattern',
+                        'has_breast_color',
+                        'has_throat_color',
+                        'has_eye_color',
+                        'has_bill_length',
+                        'has_forehead_color',
+                        'has_under_tail_color',
+                        'has_nape_color',
+                        'has_belly_color',
+                        'has_wing_shape',
+                        'has_size',
+                        'has_shape',
+                        'has_back_pattern',
+                        'has_tail_pattern',
+                        'has_belly_pattern',
+                        'has_primary_color',
+                        'has_leg_color',
+                        'has_bill_color',
+                        'has_crown_color',
+                        'has_wing_pattern'
+                        ]
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
         with open(image_attr_file, "r") as f:
             for line in f:
@@ -185,9 +245,15 @@ class CUBCustom(Dataset):
                 }
                 self.id_to_attributes[img_id].append(attr_info)
 
+        # one binary entry per CUB concept (312 attributes)
+        self.attribute_names = [
+            self.attr_id_to_name[attr_id]
+            for attr_id in sorted(self.attr_id_to_name.keys())
+        ]
         self.id_to_attributes_categorical = {}
 
         for sample_id, sample_attributes in self.id_to_attributes.items():
+<<<<<<< HEAD
             self.id_to_attributes_categorical[sample_id] = {}
 
             for attribute in attributes_list:
@@ -195,6 +261,18 @@ class CUBCustom(Dataset):
                 for sa in sample_attributes:
                     if attribute in sa['attribute_name']:
                         encoding.append(sa['is_present'])
+=======
+
+            self.id_to_attributes_categorical[sample_id] = {}
+
+            for attribute in attributes_list:
+
+                encoding = []
+
+                for sa in sample_attributes:
+
+                    if attribute in sa['attribute_name']: encoding.append(sa['is_present'])
+>>>>>>> ec6a98a (starting back on XAI (#122))
                 
                 self.id_to_attributes_categorical[sample_id][attribute] = onehot_to_index(encoding)
 
@@ -212,7 +290,7 @@ class CUBCustom(Dataset):
         label = self.id_to_label[img_id]
         bbox = self.id_to_bbox.get(img_id, None)
         parts_categorical = self.id_to_parts_categorical.get(img_id, [])
-        attributes_categorical = self.id_to_attributes_categorical.get(img_id, [])
+        attributes_categorical = self.id_to_attributes_categorical.get(img_id, {})
 
         if self.transform is not None:
 
@@ -250,6 +328,7 @@ class CUBCustom(Dataset):
 class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
+<<<<<<< HEAD
         '''
         CUB loader (train & val & test). Train/val are created from the official CUB training split using `train_ratio`, while test uses the official CUB test split.
 
@@ -266,11 +345,16 @@ class CUB(DatasetWrap):
         self.path = kwargs['path']
         self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
+=======
+        self.path = kwargs.get('path')
+        self.transform = kwargs.get('transform')
+>>>>>>> ec6a98a (starting back on XAI (#122))
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
 
         assert 0.0 < self.train_ratio < 1.0
+<<<<<<< HEAD
 
         # append ToTensor to the transform
         if self.transform != None:
@@ -282,6 +366,8 @@ class CUB(DatasetWrap):
         if self.augmentation != None:
             self.augmentation.transforms.append(ToTensor())
 
+=======
+>>>>>>> ec6a98a (starting back on XAI (#122))
         return
 
     def __load_data__(self, **kwargs):
@@ -290,13 +376,19 @@ class CUB(DatasetWrap):
         """
         self.__dataset__ = {}
 
+<<<<<<< HEAD
         base_ds = CUBCustom(
+=======
+        # Load train split
+        _ds = CustomDS(
+>>>>>>> ec6a98a (starting back on XAI (#122))
             path=self.path,
             transform=self.transform,
             reference_ds=self.reference_ds,
             seed=self.seed
         )
 
+<<<<<<< HEAD
         train_indices_all = [i for i, flag in enumerate(base_ds.is_train) if flag == 1]
         test_indices = [i for i, flag in enumerate(base_ds.is_train) if flag == 0]
 
@@ -318,3 +410,28 @@ class CUB(DatasetWrap):
         self.__dataset__['CUB-train'] = Subset(train_source_ds, train_indices)
         self.__dataset__['CUB-val'] = Subset(base_ds, val_indices)
         self.__dataset__['CUB-test'] = Subset(base_ds, test_indices)
+=======
+        self.__dataset__ = {}
+        
+        train_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 1]
+        test_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 0]
+
+        train_ds = Subset(_ds, train_indices)
+        test_ds = Subset(_ds, test_indices)
+
+    def get(self, ds_key, idx):
+        '''
+        Get item from the dataset.
+        
+        Args:
+        - idx (int): Index of the item to get.
+        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
+        
+        Returns:
+        - a tuple of (image, label)
+        '''
+        if not self.__dataset__:
+            raise RuntimeError('Data not loaded. Please run load_data() first.')
+        
+        return [self.__dataset__[ds_key][idx]]
+>>>>>>> ec6a98a (starting back on XAI (#122))

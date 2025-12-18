@@ -6,6 +6,7 @@ import torch
 
 # Our stuff
 from ..dim_reduction_base import DimReductionBase as DRB 
+#from .clustering_optimization import optimize_clustering_projection
 
 class ViTLinearSVD(DRB):
 
@@ -70,23 +71,8 @@ class ViTLinearSVD(DRB):
             raise RuntimeError(f"Loaded SVD input dimension ({in_dim}) does not match layer input dimension ({in_features}) for layer {layer}.")
         
         return
-        
-            
-    def __call__(self, **kwargs):
-        '''
-        Applies the SVD projection to `torch.Linear` activations. The output has shape `[ns, q]`, where `ns` is the number of samples in the batch, and `q` the SVD rank.
-        For tokenized inputs `[ns, nt, c]`, `token_reduction` controls how tokens are reduced:
-        - 'first': first token (ViT class token style)
-        - 'mean': mean over tokens (useful for models without class token, e.g. Swin)
-        For Swin qkv fallbacks, 4D activations `[ns, h, w, c]` are also supported and converted to `[ns, h*w, c]` before token reduction.
 
-        Args:
-        - act_data (torch.tensor): batched input activations
-
-        Returns:
-        - cvs (torch.tensor) = batched projected activations
-        '''
-        act_data = kwargs['act_data']
+    def _prepare_projection_input(self, act_data):
         n_act = act_data.shape[0]
 
         if act_data.ndim == 4:
@@ -102,8 +88,69 @@ class ViTLinearSVD(DRB):
         else:
             _acts = acts_flat
 
-        return (self.reduct_m @ _acts.T).T
+        if _acts.shape[1] != self.reduct_m.shape[1]:
+            raise RuntimeError(
+                f"SVD projection dimension mismatch: got {_acts.shape[1]} features from activations, "
+                f"expected {self.reduct_m.shape[1]}."
+            )
 
+        return _acts
+            
+    def __call__(self, **kwargs):
+        '''
+        Applies the SVD projection to `torch.Linear` activations. The output has shape `[ns, q]`, where `ns` is the number of samples in the batch, and `q` the SVD rank.
+        For tokenized inputs `[ns, nt, c]`, `token_reduction` controls how tokens are reduced:
+        - 'first': first token (ViT class token style)
+        - 'mean': mean over tokens (useful for models without class token, e.g. Swin)
+        For Swin qkv fallbacks, 4D activations `[ns, h, w, c]` are also supported and
+        converted to `[ns, h*w, c]` before token reduction.
+
+        Args:
+        - act_data (torch.tensor): batched input activations
+
+        Returns:
+        - cvs (torch.tensor) = batched projected activations
+        '''
+        act_data = kwargs['act_data']
+        _acts = self._prepare_projection_input(act_data)
+        cvs = (self.reduct_m@_acts.T).T
+    
+        return cvs
+
+    def optimize_clustering(self, **kwargs):
+        """
+        Optimize the current V^T projection for clustering.
+
+        Args:
+        - act_data (torch.tensor): Batched activations.
+        - inplace (bool): If True, update self.reduct_m with the optimized
+          projection. Defaults to False.
+        - datasets (ParsedDataset, optional): Parsed dataset container used to
+          read class labels from `datasets._dss[loader][label_key]`. When
+          provided, optimization metrics also include class and cluster
+          coverage computed from the empirical posterior mapping.
+        - loader (str): Dataset split key used with `datasets`. Defaults to
+          `'train'`.
+        - label_key (str): Label field inside the parsed dataset. Defaults to
+          `'label'`.
+        - remaining kwargs: forwarded to optimize_clustering_projection().
+        """
+        act_data = kwargs.pop('act_data')
+        inplace = kwargs.pop('inplace', False)
+        h_data = self._prepare_projection_input(act_data)
+        results = optimize_clustering_projection(
+                h_data=h_data,
+                reduct_m=self.reduct_m,
+                cv_dim=self.cv_dim,
+                layer_name=self.layer_name,
+                **kwargs
+                )
+        if inplace:
+            self.reduct_m = results['optimized_reduct_m'].detach().to(self.reduct_m.device)
+            self._svd['Vh'] = self.reduct_m.detach().cpu()
+            self.cv_dim = int(results.get('optimized_cv_dim', self.cv_dim))
+
+        return results
 
     def parser(self, **kwargs):
         """

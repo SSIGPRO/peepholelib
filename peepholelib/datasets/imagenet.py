@@ -18,16 +18,26 @@ from torchvision.transforms import ToTensor, Resize, Compose
 
 # peepholelib imports
 from peepholelib.datasets.datasetWrap import DatasetWrap
+<<<<<<< HEAD
+=======
+from peepholelib.datasets.functional.transforms import vgg16_imagenet
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
 class ImageNetCustom(IN1K):
 
     def __getitem__(self, index):
+<<<<<<< HEAD
         img, label = super().__getitem__(index)
         sample = {
             "image": img,
             "label": torch.tensor(label),
         }
         return sample
+=======
+        img, target = super().__getitem__(index)
+
+        return torch.tensor(img), torch.tensor(target)
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
 class ImageNet(DatasetWrap):
     def __init__(self, **kwargs):
@@ -103,12 +113,30 @@ class ImageNet(DatasetWrap):
             )
             train_ds = Subset(_train_aug, train_idx)
 
+<<<<<<< HEAD
         
         self.__dataset__ = {
                 "ImageNet-train": train_ds,
                 "ImageNet-val": val_ds,
                 "ImageNet-test": test_ds
             }
+=======
+        # datasets
+        train_ds = ImageNetCustom(
+                root = self.path,
+                split = 'train',
+                transform=transform
+                )
+        val_ds = ImageNetCustom(
+                root = self.path,
+                split = 'val',
+                transform=transform
+                )
+
+        # metadata
+        self.__dataset__ = {"ImageNet-train": train_ds, "ImageNet-val": val_ds}
+        self._classes = {i: c for i, c in enumerate(train_ds.classes)}
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
         return
     

@@ -37,6 +37,7 @@ class Places(DatasetWrap):
         # add a default transform for specific DS
         self.transform = kwargs.get('std_transform', None)
 
+<<<<<<< HEAD
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
 
         # append ToTensor to the transform
@@ -44,6 +45,13 @@ class Places(DatasetWrap):
             self.transform.transforms.append(ToTensor())
         else:
             self.transform = ToTensor()
+=======
+        # make labels tensors unless caller explicitly overrides
+        if 'target_transform' not in kwargs:
+            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+
+        DatasetWrap.__init__(self, **kwargs)
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
         return
     

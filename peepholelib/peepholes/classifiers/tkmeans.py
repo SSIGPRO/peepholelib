@@ -72,7 +72,7 @@ class KMeans(ClassifierBase): # quella buona
                     datasets = _dss,
                     corevectors = _cvs,
                     loader = loader,
-                    bs = bs,
+                    batch_size = bs,
                     verbose = verbose
                     )
         return

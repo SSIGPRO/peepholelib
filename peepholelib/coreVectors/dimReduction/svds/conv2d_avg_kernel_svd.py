@@ -18,7 +18,7 @@ class Conv2dAvgKernelSVD(DRB):
         layer = kwargs['layer']
         model = kwargs['model']
         q = kwargs.get('rank', 300)
-        self.cv_dim = kwargs.get('cv_dim', None)
+        self.cv_dim = kwargs['cv_dim']
         verbose = kwargs.get('verbose', False)
                                                       
         # create folder

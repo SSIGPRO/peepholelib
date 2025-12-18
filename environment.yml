@@ -168,6 +168,7 @@ dependencies:
       - cloudpickle==3.0.0
       - contourpy==1.3.0
       - cycler==0.12.1
+      - dpgmm==0.1.0
       - filelock==3.16.0
       - fonttools==4.53.1
       - fsspec==2024.9.0

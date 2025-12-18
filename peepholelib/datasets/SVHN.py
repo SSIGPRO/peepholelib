@@ -36,6 +36,7 @@ class SVHN(DatasetWrap):
         # add a default transform for specific DS
         self.transform = kwargs.get('std_transform', None)
 
+<<<<<<< HEAD
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
 
@@ -44,6 +45,13 @@ class SVHN(DatasetWrap):
             self.transform.transforms.append(ToTensor())
         else:
             self.transform = ToTensor()
+=======
+        # make labels tensors unless caller explicitly overrides
+        if 'target_transform' not in kwargs:
+            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+
+        DatasetWrap.__init__(self, **kwargs)
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
         return
     
@@ -58,12 +66,26 @@ class SVHN(DatasetWrap):
         Returns:
         - a thumbs up
         '''
+<<<<<<< HEAD
+=======
+        transform = self.transform
+        target_transform = self.target_transform
+        seed = self.seed 
+
+        # set torch seed
+        torch.manual_seed(seed)
+>>>>>>> ec6a98a (starting back on XAI (#122))
 
         # split to get 10000 samples for test
         _test_data = SVHNCustom(
             root = self.path,
             split = 'test',
+<<<<<<< HEAD
             transform = self.transform,
+=======
+            transform = transform,
+            target_transform = target_transform,
+>>>>>>> ec6a98a (starting back on XAI (#122))
             download = True
         )
 
@@ -77,7 +99,12 @@ class SVHN(DatasetWrap):
         _train_data = SVHNCustom( 
             root = self.path,
             split = 'train',
+<<<<<<< HEAD
             transform = self.transform,
+=======
+            transform = transform,
+            target_transform = target_transform,
+>>>>>>> ec6a98a (starting back on XAI (#122))
             download = True
         )
         
