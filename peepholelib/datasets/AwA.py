@@ -1,19 +1,17 @@
 # general python stuff
-import os
-from collections import defaultdict
+# from collections import defaultdict
 from tqdm import tqdm
 from PIL import Image
 from pathlib import Path
-from types import NoneType
-from math import floor, ceil
-import json
-import re
+# from types import NoneType
+# import json
+# import re
 
 # Our stuff
-from peepholelib.datasets.parsedDataset import ParsedDataset
+# from peepholelib.datasets.parsedDataset import ParsedDataset
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_cifar100
-from peepholelib.models.prediction_fns import multilabel_classification
+# from peepholelib.datasets.functional.transforms import vgg16_cifar100
+# from peepholelib.models.prediction_fns import multilabel_classification
 
 # torch stuff
 import torch
@@ -21,25 +19,6 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
-
-# CIFAR from torchvision
-from torchvision import datasets
-
-def onehot_to_index(bits):
-    for i, b in enumerate(bits):
-        if b == 1:
-            return torch.tensor([i])
-    return torch.tensor([0])
-
-from torch.utils.data import Dataset
-from PIL import Image
-import os
-import numpy as np
-
-from torch.utils.data import Dataset
-from PIL import Image
-import torch
-import os
 
 class CustomDS(Dataset):
     def __init__(self, path, reference_ds=None , train=True, train_ratio=0.8, seed=42, transform=None):
@@ -52,13 +31,13 @@ class CustomDS(Dataset):
         
         assert 0.0 < train_ratio < 1.0
 
-        self.path = path
+        self.path = Path(path)
         self.reference_ds = reference_ds
         self.is_train = train
         self.transform = transform
 
         # ---- Load class names ----
-        classes_file = os.path.join(path, "classes.txt")
+        classes_file = self.path / "classes.txt"
         self.id_to_class = {}
         with open(classes_file) as f:
             for line in f:
@@ -66,7 +45,7 @@ class CustomDS(Dataset):
                 self.id_to_class[int(cid)] = cname
 
         # ---- Load attribute matrix ----
-        attr_file = os.path.join(path, "predicate-matrix-binary.txt")
+        attr_file = self.path / "predicate-matrix-binary.txt"
         attr_list = []
         with open(attr_file, "r") as f:
             for line in f:
@@ -74,7 +53,7 @@ class CustomDS(Dataset):
         self.attributes = torch.tensor(attr_list, dtype=torch.float32)  # [50, 85]
 
         # ---- Load attribute names ----
-        pred_file = os.path.join(path, "predicates.txt")
+        pred_file = self.path / "predicates.txt"
         self.attribute_names = []
         with open(pred_file, "r") as f:
             for line in f:
@@ -85,17 +64,17 @@ class CustomDS(Dataset):
 
         # ---- Build full list of samples (image_path, class_id) ----
         all_samples = []
-        img_path = os.path.join(path, "JPEGImages")
+        img_path = self.path / "JPEGImages"
 
         for cid, cname in self.id_to_class.items():
-            class_dir = os.path.join(img_path, cname)
-            if not os.path.isdir(class_dir):
+            class_dir = img_path / cname
+            if not class_dir.is_dir():
                 print(f"WARNING: folder missing → {class_dir}")
                 continue
 
-            for fname in os.listdir(class_dir):
-                if fname.lower().endswith((".jpg", ".jpeg", ".png")):
-                    all_samples.append((os.path.join(class_dir, fname), cid - 1))
+            for img_file in class_dir.iterdir():
+                if img_file.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    all_samples.append((img_file, cid - 1))
         
         if self.reference_ds is not None:
 

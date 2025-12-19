@@ -8,20 +8,16 @@ from types import NoneType
 from math import floor, ceil 
 
 # Our stuff
-from peepholelib.datasets.parsedDataset import ParsedDataset
+# from peepholelib.datasets.parsedDataset import ParsedDataset
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_cifar100
 from peepholelib.models.prediction_fns import multilabel_classification
 
 # torch stuff
 import torch
-from torch.utils.data import DataLoader, Dataset
-from torch.utils.data import random_split
-from tensordict import PersistentTensorDict
-from tensordict import MemoryMappedTensor as MMT
-
-# CIFAR from torchvision
-from torchvision import datasets
+from torch.utils.data import Dataset #, DataLoader
+# from torch.utils.data import random_split
+# from tensordict import PersistentTensorDict
+# from tensordict import MemoryMappedTensor as MMT
 
 def onehot_to_index(bits):
     for i, b in enumerate(bits):
@@ -37,15 +33,15 @@ class CustomDS(Dataset):
         train: True -> train split, False -> test split (uses train_test_split.txt)
         """
         Dataset.__init__(self) 
-        self.path = path
+        self.path = Path(path)
         self.transform = transform
 
         # ---- 1) basic files ----
-        images_file = os.path.join(path, "images.txt")
-        labels_file = os.path.join(path, "image_class_labels.txt")
-        split_file = os.path.join(path, "train_test_split.txt")
-        classes_file = os.path.join(path, "classes.txt")
-        bbox_file = os.path.join(path, "bounding_boxes.txt")
+        images_file = self.path / "images.txt"
+        labels_file = self.path / "image_class_labels.txt"
+        split_file = self.path / "train_test_split.txt"
+        classes_file = self.path / "classes.txt"
+        bbox_file = self.path / "bounding_boxes.txt"
 
         # ---- 2) load image paths ----
         # images.txt: <image_id> <relative_path>
@@ -98,8 +94,10 @@ class CustomDS(Dataset):
 
         # ---- 7) parts info ----
         # parts/parts.txt: <part_id> <part_name>
-        parts_file = os.path.join(path, "parts", "parts.txt")
-        part_locs_file = os.path.join(path, "parts", "part_locs.txt")
+
+        parts_dir = self.path / "parts"
+        parts_file = parts_dir / "parts.txt"
+        part_locs_file = parts_dir / "part_locs.txt"
 
         self.part_id_to_name = {}
         with open(parts_file, "r") as f:
@@ -122,7 +120,7 @@ class CustomDS(Dataset):
                     "part_name": self.part_id_to_name.get(part_id),
                     "x": float(x),
                     "y": float(y),
-                    "visible": bool(int(visible)),
+                    "visible": bool(visible),
                 }
                 self.id_to_parts[img_id].append(part_info)
         
@@ -138,8 +136,9 @@ class CustomDS(Dataset):
 
         # ---- 8) attributes ----
         # attributes/attributes.txt: <attribute_id> <attribute_name>
-        attr_file = os.path.join(path, "attributes", "attributes.txt")
-        image_attr_file = os.path.join(path, "attributes", "image_attribute_labels.txt")
+        attr_dir = self.path / "attributes"
+        attr_file = attr_dir / "attributes.txt"
+        image_attr_file = attr_dir / "image_attribute_labels.txt"
 
         self.attr_id_to_name = {}
         with open(attr_file, "r") as f:
@@ -226,7 +225,8 @@ class CustomDS(Dataset):
         img_id = self.img_ids[idx]
 
         rel_path = self.id_to_relpath[img_id]
-        img_path = os.path.join(self.path, "images", rel_path)
+        img_dir = self.path / "images"
+        img_path = img_dir / rel_path
         img = Image.open(img_path).convert("RGB")
 
         label = self.id_to_label[img_id]
