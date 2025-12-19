@@ -267,7 +267,7 @@ class CustomDS(Dataset):
         }
         return sample
     
-class CUBWrap(DatasetWrap):
+class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
         self.path = kwargs.get('path')
@@ -299,13 +299,6 @@ class CUBWrap(DatasetWrap):
             "test": test_dataset
         }
 
-        # Build class names dictionary
-        # classes = train_dataset.class_id_to_name
-        # self._classes = {
-        #     "CUB-train": classes,
-        #     "CUB-test": classes
-        # }
-
     def get(self, ds_key, idx):
         '''
         Get item from the dataset.
@@ -322,121 +315,121 @@ class CUBWrap(DatasetWrap):
         
         return [self.__dataset__[ds_key][idx]]
     
-class CUB(ParsedDataset):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        print(self.path)
-        return
+# class CUB(ParsedDataset):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         print(self.path)
+#         return
     
     
-    def create_ds(self, **kwargs):
-        path = Path(kwargs['path'])
-        cub_wrap = kwargs['cub_wrap']
-        bs = kwargs.get('batch_size', 2**11)
-        verbose = kwargs.get('verbose', False)
+#     def create_ds(self, **kwargs):
+#         path = Path(kwargs['path'])
+#         cub_wrap = kwargs['cub_wrap']
+#         bs = kwargs.get('batch_size', 2**11)
+#         verbose = kwargs.get('verbose', False)
 
-        cub_wrap.__load_data__()
+#         cub_wrap.__load_data__()
         
-        path.mkdir(parents=True, exist_ok=True)
-        self._dss = {}
+#         path.mkdir(parents=True, exist_ok=True)
+#         self._dss = {}
         
-        for ds_key in cub_wrap.__dataset__:
-            file_path = self.path/('dss.'+ds_key)
-            n_samples = len(cub_wrap.__dataset__[ds_key])
+#         for ds_key in cub_wrap.__dataset__:
+#             file_path = self.path/('dss.'+ds_key)
+#             n_samples = len(cub_wrap.__dataset__[ds_key])
             
-            # check if PTD exists 
-            if file_path.exists():
-                if verbose: print(f'File {file_path} exists. Loading from disk.')
-                self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+#             # check if PTD exists 
+#             if file_path.exists():
+#                 if verbose: print(f'File {file_path} exists. Loading from disk.')
+#                 self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
 
-            else:
-                if verbose: print(f'Creating {ds_key} dataset with n_samples: ', n_samples)
-                self._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+#             else:
+#                 if verbose: print(f'Creating {ds_key} dataset with n_samples: ', n_samples)
+#                 self._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
                 
-                # get sample to get shapes
-                sample = cub_wrap.__dataset__[ds_key][0]
-                for key in sample.keys():
-                    if verbose: print(f'allocating {key} with shape {sample[key].shape}')
-                    self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+sample[key].shape), dtype=torch.float32)
+#                 # get sample to get shapes
+#                 sample = cub_wrap.__dataset__[ds_key][0]
+#                 for key in sample.keys():
+#                     if verbose: print(f'allocating {key} with shape {sample[key].shape}')
+#                     self._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+sample[key].shape), dtype=torch.float32)
         
-                # create Dataloader of input dataset
-                ds_in = DataLoader(
-                    dataset = cub_wrap.__dataset__[ds_key],
-                    batch_size = bs
-                )
+#                 # create Dataloader of input dataset
+#                 ds_in = DataLoader(
+#                     dataset = cub_wrap.__dataset__[ds_key],
+#                     batch_size = bs
+#                 )
                                                                                                                                         
-                ds_t = DataLoader(
-                    self._dss[ds_key],
-                    collate_fn = lambda x:x, 
-                    batch_size = bs
-                )
+#                 ds_t = DataLoader(
+#                     self._dss[ds_key],
+#                     collate_fn = lambda x:x, 
+#                     batch_size = bs
+#                 )
                                                                                                                                         
-                for data_in, data_t in tqdm(zip(ds_in, ds_t), disable=not verbose, total=ceil(n_samples/bs)):
-                    for key in data_in.keys():
-                        data_t[key] = data_in[key]
+#                 for data_in, data_t in tqdm(zip(ds_in, ds_t), disable=not verbose, total=ceil(n_samples/bs)):
+#                     for key in data_in.keys():
+#                         data_t[key] = data_in[key]
             
-            # close the PTD
-            self._dss[ds_key].close()
-        return
+#             # close the PTD
+#             self._dss[ds_key].close()
+#         return
 
-    # overwrite the parse_ds() from peepholelib.datasets.parsedDataset.ParsedDataset
-    def parse_ds(self, **kwargs):
-        self.check_uncontexted()
+#     # overwrite the parse_ds() from peepholelib.datasets.parsedDataset.ParsedDataset
+#     def parse_ds(self, **kwargs):
+#         self.check_uncontexted()
 
-        model = kwargs['model']
-        loaders = kwargs.get('loaders', None)
-        bs = kwargs.get('batch_size', 2**11)
-        verbose = kwargs.get('verbose', False)
-        pred_fn = kwargs.get('pred_fn', multilabel_classification)
+#         model = kwargs['model']
+#         loaders = kwargs.get('loaders', None)
+#         bs = kwargs.get('batch_size', 2**11)
+#         verbose = kwargs.get('verbose', False)
+#         pred_fn = kwargs.get('pred_fn', multilabel_classification)
         
-        if loaders == None:
-            loaders = self._dss.keys()
+#         if loaders == None:
+#             loaders = self._dss.keys()
 
-        for ds_key in loaders:
-            file_path = self.path/('dss.'+ds_key)
-            n_samples = len(self._dss[ds_key])
+#         for ds_key in loaders:
+#             file_path = self.path/('dss.'+ds_key)
+#             n_samples = len(self._dss[ds_key])
             
-            # check if PTD exists 
-            if file_path.exists():
-                if verbose: print(f'File {file_path} exists. Loading from disk.')
-                self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-            else:
-                if verbose: raise RuntimeError(f'Not {ds_key} dataset run create_ds first')
+#             # check if PTD exists 
+#             if file_path.exists():
+#                 if verbose: print(f'File {file_path} exists. Loading from disk.')
+#                 self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+#             else:
+#                 if verbose: raise RuntimeError(f'Not {ds_key} dataset run create_ds first')
 
-            if ('output' in self._dss[ds_key]) and ('pred' in self._dss[ds_key]) and ('result' in self._dss[ds_key]):
-                if verbose: print(f'keys: output, pred and result already parsed for {ds_key}. check the next')
-                continue
+#             if ('output' in self._dss[ds_key]) and ('pred' in self._dss[ds_key]) and ('result' in self._dss[ds_key]):
+#                 if verbose: print(f'keys: output, pred and result already parsed for {ds_key}. check the next')
+#                 continue
             
-            # dataset sample for dry run
-            sample = self._dss[ds_key][0:1]['image'].to(model.device)
-            with torch.no_grad():
-                _out = model(sample)
+#             # dataset sample for dry run
+#             sample = self._dss[ds_key][0:1]['image'].to(model.device)
+#             with torch.no_grad():
+#                 _out = model(sample)
                      
-            os = _out.shape[1:]
+#             os = _out.shape[1:]
 
-            # need to fix the batch size - workaround  
-            self._dss[ds_key].batch_size = torch.Size((n_samples,))
-            # allocate disk space
-            self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
-            self._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-            self._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
-            print(self._dss[ds_key]['pred'].shape, self._dss[ds_key]['label'].shape)
+#             # need to fix the batch size - workaround  
+#             self._dss[ds_key].batch_size = torch.Size((n_samples,))
+#             # allocate disk space
+#             self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples,)+os), dtype=torch.float32)
+#             self._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
+#             self._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+#             print(self._dss[ds_key]['pred'].shape, self._dss[ds_key]['label'].shape)
 
-            dl = DataLoader(
-                self._dss[ds_key],
-                collate_fn = lambda x:x, 
-                batch_size = bs
-            )
+#             dl = DataLoader(
+#                 self._dss[ds_key],
+#                 collate_fn = lambda x:x, 
+#                 batch_size = bs
+#             )
 
-            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs)):
-                #compute predictions which is the out of decoder
+#             for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs)):
+#                 #compute predictions which is the out of decoder
 
-                with torch.no_grad():
-                    y_predicted = model(data['image'].to(model.device))
+#                 with torch.no_grad():
+#                     y_predicted = model(data['image'].to(model.device))
             
-                    predicted_labels = pred_fn(y_predicted).detach().cpu()
-                    data['output'] = y_predicted
-                    data['pred'] = predicted_labels
-                    data['result'] = predicted_labels == data['label'].squeeze(dim=1)         
+#                     predicted_labels = pred_fn(y_predicted).detach().cpu()
+#                     data['output'] = y_predicted
+#                     data['pred'] = predicted_labels
+#                     data['result'] = predicted_labels == data['label'].squeeze(dim=1)         
         
-        return
+#         return
