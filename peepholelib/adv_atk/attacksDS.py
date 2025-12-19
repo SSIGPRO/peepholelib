@@ -69,18 +69,16 @@ class AttacksDS(ParsedDataset):
                 n_samples = len(ds._dss[ds_key])
                 if verbose: print(f' Got {n_samples} samples from {ds_key}')
 
-                self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w') 
-                
-                # img_sample = ds._dss[ds_key]['image'][0:1]
-                # img_shape = img_sample.shape[1:]
-                # with torch.no_grad():
-                #     _res = atk.model(img_sample.to(atk.model.device))
-                #     num_classes = _res.shape[1]
+                self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w')
 
                 for key in ds._dss[ds_key].keys():
                     key_sample = ds._dss[ds_key][key][0:1]
                     key_shape = key_sample.shape[1:]
-                    self._dss[tdsk][key] = MMT.empty(shape=torch.Size((n_samples,)+key_shape))
+                    self._dss[tdsk][key] = MMT.empty(
+                        shape=torch.Size((n_samples,)+key_shape), 
+                        dtype=key_sample.dtype,
+                        device=key_sample.device
+                        )
 
                 self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
 
@@ -118,11 +116,11 @@ class AttacksDS(ParsedDataset):
                     ori_images = di['image'].to(atk.model.device)
 
                     for key in keys_to_copy:
-                        dt[key] = di[key].int()
+                        dt[key] = di[key]
                     
                     atk_images = atk(
                             images = ori_images,
-                            labels = di['label'].int().to(atk.model.device)
+                            labels = di['label'].to(atk.model.device)
                             )
                     
                     with torch.no_grad():
@@ -134,8 +132,8 @@ class AttacksDS(ParsedDataset):
                     dt['image'] = atk_images
                     dt['output'] = y_pred_atk
                     dt['pred'] = pred_labels_atk
-                    dt['result'] = pred_labels_atk == dt['label'].to(atk.model.device)
-                    dt['attack_success'] = torch.logical_and(pred_labels_ori == dt['label'].to(atk.model.device), pred_labels_atk != pred_labels_ori) 
+                    dt['result'] = pred_labels_atk == dt['label']
+                    dt['attack_success'] = torch.logical_and(pred_labels_ori == dt['label'], pred_labels_atk != pred_labels_ori) 
         return
 
     def get(self, ds_key, idx):

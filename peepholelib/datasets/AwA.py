@@ -246,13 +246,6 @@ class AwAWrap(DatasetWrap):
             "test": test_dataset
         }
 
-        # Build class names dictionary
-        # classes = train_dataset.class_id_to_name
-        # self._classes = {
-        #     "CUB-train": classes,
-        #     "CUB-test": classes
-        # }
-
     def get(self, ds_key, idx):
         '''
         Get item from the dataset.

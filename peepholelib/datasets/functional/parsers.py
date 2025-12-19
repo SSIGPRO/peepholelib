@@ -1,5 +1,4 @@
 import torch
-from torch.utils.data._utils.collate import default_collate
 
 def from_dataset(batch, keylist=['image', 'label']):
 
