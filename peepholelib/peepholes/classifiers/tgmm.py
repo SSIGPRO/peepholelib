@@ -38,12 +38,16 @@ class GMM(ClassifierBase): # quella buona
         Fit GMM. 
 
         Args:
-        - corevectors (TensorDict): Corevectors.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+        - batch_size: Do the computation in batchs. Defaults to 512.
         - verbose (Bool): Print progress messages. 
         '''
+        _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
+        bs = kwargs.get('batch_size', 512)
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
         cvs = _cvs._corevds[loader][self.target_module]
@@ -63,7 +67,15 @@ class GMM(ClassifierBase): # quella buona
             self._classifier.fit(fit_data)
             converged = not self._classifier.predict_proba(fit_data[0:1]).isnan().any()
             if verbose and (not converged): print('GMM fail, trying again.')
-
+        
+        # compute empirical posteriors
+        self._compute_empirical_posteriors(
+                datasets = _dss,
+                corevectors = _cvs,
+                loader = loader,
+                bs = bs,
+                verbose = verbose
+                )
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -85,14 +97,17 @@ class GMM(ClassifierBase): # quella buona
         self._clas_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self._clas_path)
         super().save()
-        
+         
         return
 
     def load(self, **kwargs):
-        self._classifier = tGMM.load(self._clas_path)
-        super().load()
-        
-        return
+        if self._clas_path.exists(): 
+            self._classifier = tGMM.load(self._clas_path)
+            ok = super().load()
+        else:
+            ok = False
+
+        return ok
     
     def load_without_empp(self, **kwargs):
         self._classifier = tGMM.load(self._clas_path)

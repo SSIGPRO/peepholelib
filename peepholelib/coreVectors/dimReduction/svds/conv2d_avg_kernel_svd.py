@@ -11,7 +11,7 @@ from torch.nn.functional import pad
 # Our stuff
 from ..dim_reduction_base import DimReductionBase as DRB 
 
-class Conv2dKernelSVD(DRB):
+class Conv2dAvgKernelSVD(DRB):
     def __init__(self, **kwargs):
         DRB.__init__(self, **kwargs)
         path = Path(kwargs['path'])
@@ -72,15 +72,15 @@ class Conv2dKernelSVD(DRB):
         act_data = kwargs['act_data'] 
         n_act = act_data.shape[0]
         unrolled_acts = unroll_conv2d_activations(acts=act_data, layer=self.layer)
-        cvs = (self.reduct_m@unrolled_acts).transpose(1, 2)
+        cvs = (self.reduct_m@unrolled_acts).transpose(1, 2).mean(axis=1)
 
         return cvs
 
     def parser(self, **kwargs):
         """
-        Trims multi kernel corevectors obtained with `coreVectors.dimReduction.svds.conv2d_kernel_svd.Conv2dKernelSVD`.
-        Input shape is `[ns, ow*oh, q]`, where `ns` is the number of samples in the batch, `ow, oh` the width and heigth of the layer's output, and `q` the SVD rank.
-        Output shape is `[ns, ow*oh*self.cv_dim]`, the concatenation of the trimmed corevectors of all output channels.
+        Trims multi kernel corevectors obtained with `coreVectors.dimReduction.svds.conv2d_avg_kernel_svd.Conv2dAvgKernelSVD`.
+        Input shape is `[ns, q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
+        Output shape is `[ns, self.cv_dim]`, trimmed corevectors
     
         Args:
             cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
@@ -96,13 +96,9 @@ class Conv2dKernelSVD(DRB):
         dss = kwargs.get('dss', None)
         label_key = kwargs.get('label_key', 'label') 
 
-        _ns = cvs.shape[0] # n samples
-        _ks = cvs.shape[1] # n kernels 
-        _r  = cvs.shape[2] # rank
-
-        # trim and reshape cvs
-        tcvs = cvs[...,0:self.cv_dim].reshape(_ns, _ks*self.cv_dim)
-        
+        # trim corevectors on the last dimension
+        tcvs = cvs[...,0:self.cv_dim]
+                                                              
         ret = tcvs if dss == None else (tcvs, dss[label_key])
         return ret 
 

@@ -26,3 +26,10 @@ class ViTCLSToken(DRB):
         act_data = kwargs['act_data'] 
         return act_data[:, 0, :]
 
+    def parser(self, **kwargs):
+        cvs = kwargs['cvs']
+        dss = kwargs.get('dss', None)
+        label_key = kwargs.get('label_key', 'label') 
+                                                            
+        ret = cvs if dss == None else (cvs, dss[label_key])
+        return ret

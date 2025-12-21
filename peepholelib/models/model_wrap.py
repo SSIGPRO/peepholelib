@@ -25,6 +25,12 @@ class InputNormalizer(nn.Module):
     def __repr__(self):
         return f'InputNormalizer(mean={self.mean}, std={self.std})'  
 
+def get_in_activations(x):
+    return x['in_activations']
+
+def get_out_activations(x):
+    return x['out_activations']
+
 class Hook:
     def __init__(self, save_input=True, save_output=False):
         self.module = None 
