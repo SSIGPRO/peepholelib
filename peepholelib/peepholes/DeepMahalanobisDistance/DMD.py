@@ -3,10 +3,14 @@ import abc
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+
 # torch stuff
 import torch
 from peepholelib.peepholes.drill_base import DrillBase
 from sklearn import covariance
+
+# pur stuff
+from peepholelib.models.model_wrap import get_out_activations
 
 def get_images(**kwargs):
     """
@@ -29,6 +33,8 @@ class DeepMahalanobisDistance(DrillBase):
         self.magnitude = kwargs['magnitude']
         self.reducer = kwargs['reducer']
         self.ds_parser = kwargs.get('ds_parser', get_images)
+        self.act_parser = kwargs.get('act_parser', get_out_activations)
+        self.cv_parser = kwargs.get('cv_parser', self.reducer.parser)
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
         self.save_input = kwargs.get('save_input', False)
         self.save_output = kwargs.get('save_output', True)
@@ -77,7 +83,7 @@ class DeepMahalanobisDistance(DrillBase):
         
         # parsing for simplification
         dss = _dss._dss[loader]
-        cvs = _cvs._corevds[loader][self.target_module]
+        cvs = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module])
 
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
@@ -109,7 +115,6 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         dss = kwargs['dss']
-        parser_act = self.reducer
 
         # get input image and set gradient to modify it
         data = self.ds_parser(dss = dss)
@@ -125,7 +130,8 @@ class DeepMahalanobisDistance(DrillBase):
         if self.target_module == 'output':
             output = self.model(data.to(self.device))
         else:
-            output = parser_act(act_data=self.model._acts['out_activations'][self.target_module])
+            _parsed_act = self.act_parser(self.model._acts)[self.target_module]
+            output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
@@ -156,7 +162,8 @@ class DeepMahalanobisDistance(DrillBase):
             if self.target_module == 'output':
                 output = self.model(tempInputs.to(self.device)) 
             else:
-                output = parser_act(act_data=self.model._acts['out_activations'][self.target_module])
+                _parsed_act = self.act_parser(self.model._acts)[self.target_module]
+                output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
 
             gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
             for i in range(self.nl_model):

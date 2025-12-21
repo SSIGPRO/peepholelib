@@ -9,13 +9,9 @@ from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
+# our stuff
+from peepholelib.models.model_wrap import get_in_activations
 from peepholelib.models.prediction_fns import multilabel_classification
-
-def get_in_activations(x):
-    return x['in_activations']
-
-def get_out_activations(x):
-    return x['out_activations']
 
 def get_coreVectors(self, **kwargs):
     '''
