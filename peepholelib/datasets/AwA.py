@@ -192,7 +192,8 @@ class AwA(DatasetWrap):
         _ds = CustomDS(
             path=self.path,
             transform=self.transform,
-            reference_ds=self.reference_ds
+            reference_ds=self.reference_ds,
+            seed=self.seed
         )
 
         self.__dataset__ = {}

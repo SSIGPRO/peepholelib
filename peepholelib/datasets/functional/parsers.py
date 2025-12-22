@@ -11,4 +11,3 @@ def from_dataset(batch, keylist=['image', 'label']):
         parsed_batch[key] = torch.stack(f)
 
     return parsed_batch
-
