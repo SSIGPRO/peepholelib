@@ -27,14 +27,13 @@ def onehot_to_index(bits):
 
 class CustomDS(Dataset):
 
-    def __init__(self, path, train=True, transform=None):
+    def __init__(self, **kwargs):
         """
         path: path to CUB_200_2011 (folder that contains images/, attributes/, parts/, *.txt)
-        train: True -> train split, False -> test split (uses train_test_split.txt)
         """
         Dataset.__init__(self) 
-        self.path = Path(path)
-        self.transform = transform
+        self.path = Path(kwargs['path'])
+        self.transform = kwargs['transform']
 
         # ---- 1) basic files ----
         images_file = self.path / "images.txt"
@@ -60,21 +59,16 @@ class CustomDS(Dataset):
                 # make labels 0-based
                 self.id_to_label[int(img_id)] = torch.tensor([int(class_id) - 1])
 
-        # ---- 4) train / test split ----
-        # train_test_split.txt: <image_id> <is_training_image>
-        self.train_ids = []
-        self.test_ids = []
+        # ---- 4) img ids ----
+       
+        self.img_ids = []
         with open(split_file, "r") as f:
             for line in f:
                 img_id, is_train = line.strip().split()
                 img_id = int(img_id)
                 is_train = int(is_train)
-                if is_train == 1:
-                    self.train_ids.append(img_id)
-                else:
-                    self.test_ids.append(img_id)
-
-        self.img_ids = self.train_ids if train else self.test_ids
+                
+                self.img_ids.append(img_id)
 
         # ---- 5) class names ----
         # classes.txt: <class_id> <class_name>
@@ -281,23 +275,19 @@ class CUB(DatasetWrap):
         self.__dataset__ = {}
 
         # Load train split
-        train_dataset = CustomDS(
+        _ds = CustomDS(
             path=self.path,
-            train=True,
             transform=self.transform
         )
 
-        # Load test split
-        test_dataset = CustomDS(
-            path=self.path,
-            train=False,
-            transform=self.transform
+        self.__dataset__ = {}
+        
+        # split train into train and test
+        self.__dataset__['train'], self.__dataset__['test'] = torch.utils.data.random_split(
+                _ds,
+                [1 - self.train_ratio, self.train_ratio],
+                generator = torch.Generator().manual_seed(self.seed)
         )
-
-        self.__dataset__ = {
-            "train": train_dataset,
-            "test": test_dataset
-        }
 
     def get(self, ds_key, idx):
         '''
