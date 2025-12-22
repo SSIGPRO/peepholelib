@@ -21,20 +21,18 @@ from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 
 class CustomDS(Dataset):
-    def __init__(self, path, reference_ds=None , train=True, train_ratio=0.8, seed=42, transform=None):
+    def __init__(self, **kwargs):
         """
         path: path to AwA2 folder containing JPEGImages/, classes.txt, predicate-matrix-binary.txt
         split: "train" or "test"
         train_ratio: fraction of samples used for training
         seed: for deterministic split
         """
-        
-        assert 0.0 < train_ratio < 1.0
 
-        self.path = Path(path)
-        self.reference_ds = reference_ds
-        self.is_train = train
-        self.transform = transform
+        self.path = Path(kwargs['path'])
+        self.reference_ds = kwargs['reference_ds']
+        self.transform = kwargs['transform']        
+        self.seed = kwargs['seed']
 
         # ---- Load class names ----
         classes_file = self.path / "classes.txt"
@@ -63,7 +61,7 @@ class CustomDS(Dataset):
         assert len(self.attribute_names) == self.attributes.shape[1]
 
         # ---- Build full list of samples (image_path, class_id) ----
-        all_samples = []
+        self.samples = []
         img_path = self.path / "JPEGImages"
 
         for cid, cname in self.id_to_class.items():
@@ -74,7 +72,7 @@ class CustomDS(Dataset):
 
             for img_file in class_dir.iterdir():
                 if img_file.suffix.lower() in {".jpg", ".jpeg", ".png"}:
-                    all_samples.append((img_file, cid - 1))
+                    self.samples.append((img_file, cid - 1))
         
         if self.reference_ds is not None:
 
@@ -140,21 +138,6 @@ class CustomDS(Dataset):
                 for c_AwA, cs_IN in self.mapping_AwA_ImageNet.items():
                     for c_IN in cs_IN:
                         self.M[c_AwA, c_IN] = 1
-    
-        # ---- Deterministic train/test split ----
-        n_total = len(all_samples)
-        n_train = int(train_ratio * n_total)
-
-        g = torch.Generator().manual_seed(seed)
-        perm = torch.randperm(n_total, generator=g)
-
-        train_idx = perm[:n_train].tolist()
-        test_idx  = perm[n_train:].tolist()
-
-        if self.is_train:
-            self.samples = [all_samples[i] for i in train_idx]
-        else:
-            self.samples = [all_samples[i] for i in test_idx]
 
     def __len__(self):
         return len(self.samples)
@@ -194,6 +177,9 @@ class AwA(DatasetWrap):
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
+        self.train_ratio = kwargs.get('train_ratio', 0.8)
+
+        assert 0.0 < self.train_ratio < 1.0
         return
 
     def __load_data__(self, **kwargs):
@@ -203,27 +189,20 @@ class AwA(DatasetWrap):
         self.__dataset__ = {}
 
         # Load train split
-        train_dataset = CustomDS(
+        _ds = CustomDS(
             path=self.path,
-            train=True,
-            seed=self.seed,
             transform=self.transform,
             reference_ds=self.reference_ds
         )
 
-        # Load test split
-        test_dataset = CustomDS(
-            path=self.path,
-            train=False,
-            seed=self.seed,
-            transform=self.transform,
-            reference_ds=self.reference_ds
+        self.__dataset__ = {}
+        
+        # split train into train and test
+        self.__dataset__['train'], self.__dataset__['test'] = torch.utils.data.random_split(
+                _ds,
+                [1 - self.train_ratio, self.train_ratio],
+                generator = torch.Generator().manual_seed(self.seed)
         )
-
-        self.__dataset__ = {
-            "train": train_dataset,
-            "test": test_dataset
-        }
 
     def get(self, ds_key, idx):
         '''
