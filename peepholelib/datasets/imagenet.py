@@ -20,6 +20,13 @@ from torchvision.datasets import ImageNet as IN1K
 from peepholelib.datasets.datasetWrap import DatasetWrap
 from peepholelib.datasets.functional.transforms import vgg16_imagenet
 
+class ImageNetCustom(IN1K):
+
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+
+        return torch.tensor(img), torch.tensor(target)
+
 class ImageNet(DatasetWrap):
     def __init__(self, **kwargs):
         """
@@ -53,12 +60,12 @@ class ImageNet(DatasetWrap):
         torch.manual_seed(seed)
 
         # datasets
-        train_ds = IN1K(
+        train_ds = ImageNetCustom(
                 root = self.path,
                 split = 'train',
                 transform=transform
                 )
-        val_ds = IN1K(
+        val_ds = ImageNetCustom(
                 root = self.path,
                 split = 'val',
                 transform=transform

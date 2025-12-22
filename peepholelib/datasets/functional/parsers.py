@@ -7,7 +7,7 @@ def from_dataset(batch, keylist=['image', 'label']):
     parsed_batch = {}
 
     for f, key in zip(features, keylist):
-        print(f)
+        
         parsed_batch[key] = torch.stack(f)
 
     return parsed_batch
