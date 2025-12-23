@@ -237,7 +237,7 @@ def empp_coverage_scores(**kwargs):
         if module in cluster_scores:
             avg = (class_scores[module] + cluster_scores[module]) / 2
             scores[module] = avg
-            print(f"[{module}] Avg Coverage: {avg:.2f}% (Class: {class_scores[module]:.2f}%, Cluster: {cluster_scores[module]:.2f}%)")
+            print(f"[{module}] Avg Coverage: {avg:.2f}% (Class: {class_scores[module]:.2f}%, Cluster: {cluster_scores[module]:.3f}%)")
 
     # Optional plot
     if plot:
@@ -250,10 +250,10 @@ def empp_coverage_scores(**kwargs):
         plt.plot(modules, cluster_values, label='Cluster Coverage', marker='x')
 
         plt.xticks(rotation=45, ha='right')
-        plt.ylabel('Coverage (%)')
+        plt.ylabel('Coverage')
         plt.xlabel('Module')
         plt.title(f'Empirical Posterior Coverage (Threshold ≥ {threshold})')
-        plt.ylim(0, 105)
+        plt.ylim(0, 1)
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
