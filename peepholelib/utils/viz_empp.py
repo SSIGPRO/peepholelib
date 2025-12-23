@@ -237,7 +237,7 @@ def empp_coverage_scores(**kwargs):
         if module in cluster_scores:
             avg = (class_scores[module] + cluster_scores[module]) / 2
             scores[module] = avg
-            print(f"[{module}] Avg Coverage: {avg:.2f}% (Class: {class_scores[module]:.2f}%, Cluster: {cluster_scores[module]:.3f}%)")
+            print(f"[{module}] Avg Coverage: {avg:.3f}% (Class: {class_scores[module]:.3f}%, Cluster: {cluster_scores[module]:.3f}%)")
 
     # Optional plot
     if plot:
