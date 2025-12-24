@@ -205,6 +205,12 @@ class AwA(DatasetWrap):
                 generator = torch.Generator().manual_seed(self.seed)
         )
 
+        self._classes = {
+                'CIFAR10-train': _ds.id_to_class,
+                'CIFAR10-val': _ds.id_to_class, 
+                'CIFAR10-test': _ds.id_to_class
+                }
+
     def get(self, ds_key, idx):
         '''
         Get item from the dataset.
