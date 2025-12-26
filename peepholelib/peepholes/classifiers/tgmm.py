@@ -92,6 +92,8 @@ class GMM(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+        if verbose: print('\n ---- Loading GMM classifier\n')
         self._classifier = tGMM.load(self._clas_path)
         super().load()
         
