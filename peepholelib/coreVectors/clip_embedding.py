@@ -19,11 +19,9 @@ def get_clip_embeddings(self, **kwargs):
    - verbose (bool): print progress messages. Defaults to False.
    '''
 
-
    self.check_uncontexted()
     
    datasets = kwargs.get('datasets')
-   loaders = kwargs.get('loaders', None)
    
    bs = kwargs.get('batch_size', 64) 
    n_threads = kwargs.get('n_threads', 1) 
@@ -55,6 +53,7 @@ def get_clip_embeddings(self, **kwargs):
          if verbose: print('created clip embeddings with n_samples: ', n_samples)
       
       if verbose: print(f'\n ---- Getting CLIP embeddings for {ds_key}\n')
+      print(embed_shape)
 
       self._corevds[ds_key]['embedding'] = MMT.empty(shape=((n_samples,)+(embed_shape[1],)))
 
