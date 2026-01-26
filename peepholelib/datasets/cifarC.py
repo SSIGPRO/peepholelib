@@ -68,8 +68,9 @@ class CifarC(DatasetWrap):
 
         c_levels = 5
         label_file = list(self.path.glob('labels.npy'))[0]
-        _labels = np.load(label_file).astype(int)
-        _labels = _labels.reshape(c_levels, int(_labels.shape[0]/c_levels))
+
+        _labels = torch.from_numpy(np.load(label_file)).long()
+        _labels = _labels.view(c_levels, _labels.numel() // c_levels)
         n_samples = _labels.shape[1]
 
         # list files with different corruptions

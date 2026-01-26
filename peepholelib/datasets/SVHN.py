@@ -24,6 +24,10 @@ class SVHN(DatasetWrap):
         if 'transform' not in kwargs:
             kwargs['transform'] = vgg16_svhn
 
+        # make labels tensors unless caller explicitly overrides
+        if 'target_transform' not in kwargs:
+            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+
         DatasetWrap.__init__(self, **kwargs)
 
         return
@@ -40,6 +44,7 @@ class SVHN(DatasetWrap):
         - a thumbs up
         '''
         transform = self.transform
+        target_transform = self.target_transform
         seed = self.seed 
 
         # set torch seed
@@ -50,6 +55,7 @@ class SVHN(DatasetWrap):
             root = self.path,
             split = 'test',
             transform = transform,
+            target_transform = target_transform,
             download = True
         )
 
@@ -64,6 +70,7 @@ class SVHN(DatasetWrap):
             root = self.path,
             split = 'train',
             transform = transform,
+            target_transform = target_transform,
             download = True
         )
         

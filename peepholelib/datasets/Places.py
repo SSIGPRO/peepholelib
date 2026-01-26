@@ -24,6 +24,10 @@ class Places(DatasetWrap):
         if 'transform' not in kwargs:
             kwargs['transform'] = vgg16_imagenet
 
+        # make labels tensors unless caller explicitly overrides
+        if 'target_transform' not in kwargs:
+            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+
         DatasetWrap.__init__(self, **kwargs)
 
         return
@@ -37,6 +41,7 @@ class Places(DatasetWrap):
         '''
 
         transform = self.transform
+        target_transform = self.target_transform
         seed = self.seed              
 
         # set torch seed
@@ -46,6 +51,7 @@ class Places(DatasetWrap):
                 root = self.path,
                 split = 'val',
                 transform = transform,
+                target_transform = target_transform,
                 small = True,
                 download = True
                 )
