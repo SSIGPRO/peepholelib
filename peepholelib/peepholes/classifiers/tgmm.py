@@ -22,7 +22,7 @@ class GMM(ClassifierBase): # quella buona
                 **cls_kwargs,
                 trainer_params = dict(
                     num_nodes = 1,
-                    max_epochs = 5000,
+                    max_epochs = 50000,
                     accelerator = self.device.type,
                     devices = [self.device.index],
                     enable_progress_bar = False 
@@ -38,18 +38,12 @@ class GMM(ClassifierBase): # quella buona
         Fit GMM. 
 
         Args:
-        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
-        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
+        - corevectors (TensorDict): Corevectors.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
-        - batch_size (int): Do the computation in batchs. Defaults to 512.
-        - compute_empp (bool): Wether to compute the empirical posterior. Defaults to `True`.
-        - verbose (bool): Print progress messages. 
+        - verbose (Bool): Print progress messages. 
         '''
-        _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
-        bs = kwargs.get('batch_size', 512)
-        _compute_empp = kwargs.get('compute_empp', True)
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
         cvs = _cvs._corevds[loader][self.target_module]
@@ -69,15 +63,7 @@ class GMM(ClassifierBase): # quella buona
             self._classifier.fit(fit_data)
             converged = not self._classifier.predict_proba(fit_data[0:1]).isnan().any()
             if verbose and (not converged): print('GMM fail, trying again.')
-        
-        # compute empirical posteriors
-        if _compute_empp:
-            self._compute_empirical_posteriors(
-                    datasets = _dss,
-                    corevectors = _cvs,
-                    loader = loader,
-                    verbose = verbose
-                    )
+
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -99,19 +85,18 @@ class GMM(ClassifierBase): # quella buona
         self._clas_path.mkdir(parents=True, exist_ok=True)
         self._classifier.save(self._clas_path)
         super().save()
-         
+        
         return
 
     def load(self, **kwargs):
-        if self._clas_path.exists():
-            self._classifier = tGMM.load(self._clas_path)
-            super().load()
-            ok = True
-        else:
-            ok = False
-
-        return ok
+        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
+        if verbose: print('\n ---- Loading GMM classifier\n')
+        self._classifier = tGMM.load(self._clas_path)
+        super().load()
+        
+        return
     
     def load_without_empp(self, **kwargs):
         self._classifier = tGMM.load(self._clas_path)
+        
         return
