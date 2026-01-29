@@ -12,11 +12,8 @@ def random_subsampling(ds, perc):
     return 
 
 def dist_preserving(data, n, weights='label'):
-    # TODO: unused
-    raise RuntimeError('Old deprecated function. Needs reworking')
-
     if torch.is_tensor(weights) and len(weights.shape) == 1:
-        _w = weights 
+        _w = weights.float()
     elif type(weights) == str:
         _d = data[weights].detach().int()
         _l = torch.bincount(_d)
@@ -25,9 +22,8 @@ def dist_preserving(data, n, weights='label'):
     else:
         raise RuntimeError('wrt should be an 1-dim array containing the weights for each sample index, or a string indicating the key in `data` for computing the weights')
 
-    print('n', n, type(n))
-    sampler = WeightedRandomSampler(_w, len(weights))
-    _dl = DataLoader(data, batch_size=n, collate_fn=lambda x: x)
+    n = int(n)
+    sampler = WeightedRandomSampler(_w, n, replacement=False)
+    _dl = DataLoader(data, batch_size=n, sampler=sampler, collate_fn=lambda x: x)
     sub_sampled_data = next(iter(_dl))
     return sub_sampled_data, _w 
-

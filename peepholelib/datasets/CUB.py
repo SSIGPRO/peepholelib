@@ -295,9 +295,9 @@ class CUB(DatasetWrap):
                                 generator=torch.Generator().manual_seed(self.seed)
                             )
         
-        self.__dataset__['val'] = val_ds
-        self.__dataset__['train'] = train_ds
-        self.__dataset__['test'] = test_ds
+        self.__dataset__['CUB-val'] = val_ds
+        self.__dataset__['CUB-train'] = train_ds
+        self.__dataset__['CUB-test'] = test_ds
 
     def get(self, ds_key, idx):
         '''
