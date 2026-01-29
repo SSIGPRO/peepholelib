@@ -17,7 +17,12 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         self.label_key = kwargs.get('label_key', 'label')
         self.reducer = kwargs['reducer']
 
+<<<<<<< HEAD
         self.parser = self.reducer.parser 
+=======
+        self.parser = self.reducer.parser
+
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         # computed in inheriting classes 
         self._classifier = None
 
@@ -34,12 +39,23 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
     def load(self, **kwargs):
         if self._empp_file.exists():
             self._empp = torch.load(self._empp_file).to(self.device)
+<<<<<<< HEAD
         return 
 
     @abc.abstractmethod
     def save(self, **kwargs):
         if self._empp != None:
             torch.save(self._empp, self._empp_file)
+=======
+            ok = True
+        else:
+            ok = False
+        return ok 
+
+    @abc.abstractmethod
+    def save(self, **kwargs):
+        torch.save(self._empp, self._empp_file)
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         return 
 
     @abc.abstractmethod
@@ -61,13 +77,23 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
+<<<<<<< HEAD
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'.
+=======
+        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
+        - batch_size: Do the computation in batchs. Defaults to 512.
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         - verbose (Bool): Print progress messages. 
         '''
         
         dss = kwargs['datasets']
         cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
+<<<<<<< HEAD
+=======
+        bs = kwargs.get('batch_size', 512)
+        verbose = kwargs.get('verbose', False)
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
 
         # pre-allocate empirical posteriors
         _empp = torch.zeros(self.nl_class, self.nl_model, device=self.device)

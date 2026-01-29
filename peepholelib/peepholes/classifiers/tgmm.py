@@ -41,15 +41,23 @@ class GMM(ClassifierBase): # quella buona
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+<<<<<<< HEAD
         - batch_size (int): Do the computation in batchs. Defaults to 512.
         - compute_empp (bool): Wether to compute the empirical posterior. Defaults to `True`.
         - verbose (bool): Print progress messages. 
+=======
+        - batch_size: Do the computation in batchs. Defaults to 512.
+        - verbose (Bool): Print progress messages. 
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         '''
         _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         bs = kwargs.get('batch_size', 512)
+<<<<<<< HEAD
         _compute_empp = kwargs.get('compute_empp', True)
+=======
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         
         cvs = _cvs._corevds[loader][self.target_module]
@@ -71,6 +79,7 @@ class GMM(ClassifierBase): # quella buona
             if verbose and (not converged): print('GMM fail, trying again.')
         
         # compute empirical posteriors
+<<<<<<< HEAD
         if _compute_empp:
             self._compute_empirical_posteriors(
                     datasets = _dss,
@@ -78,6 +87,15 @@ class GMM(ClassifierBase): # quella buona
                     loader = loader,
                     verbose = verbose
                     )
+=======
+        self._compute_empirical_posteriors(
+                datasets = _dss,
+                corevectors = _cvs,
+                loader = loader,
+                bs = bs,
+                verbose = verbose
+                )
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -103,10 +121,16 @@ class GMM(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
+<<<<<<< HEAD
         if self._clas_path.exists():
             self._classifier = tGMM.load(self._clas_path)
             super().load()
             ok = True
+=======
+        if self._clas_path.exists(): 
+            self._classifier = tGMM.load(self._clas_path)
+            ok = super().load()
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         else:
             ok = False
 
