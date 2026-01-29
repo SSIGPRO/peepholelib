@@ -3,7 +3,7 @@ import pickle
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_cifar100
+from peepholelib.datasets.functional.transforms import vgg16_cifar100 
 
 # torch stuff
 import torch
@@ -47,9 +47,12 @@ class CIFAR100Custom(CIFAR100):
                 self.M[superc, c] = 1
 
     def __getitem__(self, index):
-        img, target = super().__getitem__(index)
+        img, label = super().__getitem__(index)
 
-        return torch.tensor(img), torch.tensor(target), torch.tensor(self.M[:, target].argmax())
+        return {'image': torch.as_tensor(img),
+                'label': torch.as_tensor(label),
+                'suprlabel': self.M[:, label].argmax()
+                }  
 
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):
@@ -62,9 +65,8 @@ class Cifar100(DatasetWrap):
             - a thumbs up
         '''
         
-        # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_cifar100
+        self.transform = kwargs.get('transform', vgg16_cifar100)
+        self.augmentation = kwargs.get('augmentation', None)
 
         DatasetWrap.__init__(self, **kwargs)
 
@@ -79,6 +81,7 @@ class Cifar100(DatasetWrap):
         '''
         
         transform = self.transform
+        augmentation = self.augmentation
         seed = self.seed
             
         # set torch seed
@@ -92,22 +95,46 @@ class Cifar100(DatasetWrap):
             download = True
         )
         
-        # train data will be splitted into training and validation
-        _train_data = CIFAR100Custom( 
-            root = self.path,
-            train = True,
-            transform = None, 
-            download = True
-        )
-        
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
-        )
+        if augmentation is not None:
 
-        # Apply the transform 
-        if transform != None:
+            full_train_aug = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=augmentation,
+                download=True
+            )
+
+            full_train_noaug = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=transform,
+                download=False
+            )
+
+            g = torch.Generator().manual_seed(seed)
+            train_idx, val_idx = random_split(
+                range(len(full_train_aug)),
+                [0.8, 0.2],
+                generator=g
+            )
+            train_dataset = torch.utils.data.Subset(full_train_aug, train_idx)
+            val_dataset = torch.utils.data.Subset(full_train_noaug, val_idx)
+
+        else:
+            _train_data = CIFAR100Custom( 
+                root = self.path,
+                train = True,
+                transform = None, 
+                download = True
+            )
+            
+            train_dataset, val_dataset = random_split(
+                _train_data,
+                [0.8, 0.2],
+                generator=torch.Generator().manual_seed(seed)
+            )
+
+            # Apply the transform 
             val_dataset.dataset.transform = transform
             train_dataset.dataset.transform = transform 
     

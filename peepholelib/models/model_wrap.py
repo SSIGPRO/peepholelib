@@ -11,6 +11,15 @@ from torch import Tensor
 
 '''Inspired by https://github.com/RobustBench/robustbench/blob/master/robustbench/model_zoo/architectures/utils_architectures.py'''
 
+class NormalizedModel(nn.Module):
+    def __init__(self, model, mean, std):
+        super().__init__()
+        self.normalizer = InputNormalizer(mean, std)
+        self.model = model
+
+    def forward(self, x):
+        return self.model(self.normalizer(x))
+
 class InputNormalizer(nn.Module):
 
     def __init__(self, mean, std):
@@ -75,6 +84,10 @@ class ModelWrap(metaclass=abc.ABCMeta):
         # check and set model
         self._model = kwargs['model']
         assert(issubclass(type(self._model), torch.nn.Module))
+
+        # impose requirse_grad = False for all parameters
+
+        self.set_requires_grad(requires_grad=False, layer_names=None)
 
         # set target modules
         self._target_modules = None
@@ -164,53 +177,78 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         return res 
     
-    def update_output(self, **kwargs):
-        '''
-        Update the model output to one with size `to_n_classes`. This is done by substituting the model's output by, or appending a, new `torch.nn.Linear` layer accoding to `overwrite`.
-        The last layer is assumed to be `torch.nn.Linear` within a `torch.nn.Sequential` module.
-
+    def set_requires_grad(self, **kwargs):
+        """
+        Set requires_grad for model parameters.
+        
         Args:
-        - output_layer (str): The output layer of the model as per the state dict key
-        - to_n_classes (int): Number of output features of the new output layers 
-        - overwrite (bool): If True, the last layer will be substituted by a new (randomly initialize) layer with the same `in_features` and `out_features = to_n_classes`. If False a new `torch.nn.Linear(out_features, to_n_classes)` layer will be appended after the `output_layer` layer. 
+            requires_grad: Whether to enable gradients
+            layer_names: Optional list of layer names to target. If None, affects all parameters.
+        """
+        layer_names = kwargs['layer_names']
+        requires_grad = kwargs.get('requires_grad', True) 
         
-        Returns:
-        - a thumbs up
-        '''
-
-        out_layer = kwargs['output_layer']
-        n_classes = kwargs['to_n_classes']
-        overwrite = kwargs['overwrite'] if  'overwrite' in kwargs else False
-        
-        keys = out_layer.split(".")[:-1]
-        temp = self._model
-        for p in keys:
-            #check that string part is actually a key in temp._modules
-            if p not in temp._modules.keys():
-                raise RuntimeError(f'seems like {p} is not in the NN, are you sure the output_layer is correct?') 
-            temp = temp._modules[p]
-
-        if not isinstance(temp, torch.nn.Sequential):
-            raise RuntimeError('Last module should be torch.nn.Sequential(). If you update the logic to handle any type of network, please submitt a PR.')
-
-        if not isinstance(temp[-1], torch.nn.Linear):
-            raise RuntimeError('Last layer is not a linear layer. I will not change it.')
-        
-        if overwrite:
-            in_size = temp[-1].in_features
-            new_layer = torch.nn.Linear(in_size, n_classes, device=self.device)
-            temp[-1] = new_layer
-            
-            # update target modules
-            if self._target_modules != None:
-                if out_layer in self._target_modules:
-                    self._target_modules[out_layer] = new_layer
-
+        if layer_names is None:
+            # Affect all parameters
+            for param in self._model.parameters():
+                param.requires_grad = requires_grad
         else:
-            out_size = temp[-1].out_features 
-            temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
+            # Affect only specified layers
+            for name, param in self._model.named_parameters():
+                if any(layer_name in name for layer_name in layer_names):
+                    param.requires_grad = requires_grad
 
-        return
+    def _set_submodule(self, **kwargs):
+
+        name = kwargs['name']
+        new_mod = kwargs['new_mod']
+
+        model = self._model
+
+        if name is None:
+            raise RuntimeError("No module name to replace.")
+        if "." in name:
+            parent_name, child_name = name.rsplit(".", 1)
+            parent = self._model.get_submodule(parent_name)
+        else:
+            parent, child_name = model, name
+        parent._modules[child_name] = new_mod
+
+    def update_output(self, **kwargs):
+        n_classes = kwargs["to_n_classes"]
+        output_layer = kwargs["output_layer"]  
+
+        model = self._model
+  
+        layer = model.get_submodule(output_layer)
+        if not isinstance(layer, nn.Linear):
+            raise TypeError(f"{output_layer} is not nn.Linear")
+        new_layer = nn.Linear(layer.in_features, n_classes, bias=(layer.bias is not None), device=self.device)
+        self._set_submodule(name=output_layer, new_mod=new_layer)
+        return model
+    
+
+    def append_classifier(self, **kwargs):
+        n_classes = kwargs["to_n_classes"]
+        output_layer = kwargs["output_layer"]
+
+        model = self._model
+
+        layer = model.get_submodule(output_layer)
+        if isinstance(layer, nn.Linear):
+            out_size = layer.out_features
+            new_head = nn.Linear(out_size, n_classes, bias=(layer.bias is not None), device=self.device)
+            new_layer = nn.Sequential(layer, new_head)
+            self._set_submodule(name=output_layer, new_mod=new_layer)
+            return model
+
+        if isinstance(layer, nn.Sequential) and len(layer) > 0 and isinstance(layer[-1], nn.Linear):
+            out_size = layer[-1].out_features
+            new_head = nn.Linear(out_size, n_classes, bias=(layer[-1].bias is not None), device=self.device)
+            layer.append(new_head)
+            return model
+
+        raise TypeError(f"{output_layer} is not nn.Linear or nn.Sequential ending with nn.Linear")
 
     def load_checkpoint(self, **kwargs):
         '''
@@ -260,7 +298,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         self._model = nn.Sequential(layers)
 
-        return 
+        return  
     
     def __get_module(self, **kwargs):
         '''
@@ -302,4 +340,3 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._target_modules = _dict
         
         return
-
