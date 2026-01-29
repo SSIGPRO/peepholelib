@@ -25,13 +25,15 @@ means = {
         'CIFAR10': torch.tensor([0.424, 0.415, 0.384]).view(1,3,1,1),
         'CIFAR100': torch.tensor([0.438, 0.418, 0.377]).view(1,3,1,1),
         'ImageNet': torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1),
-        'SVHN': torch.tensor([0.438, 0.444, 0.473]).view(1,3,1,1)
+        'ImageNetAttr': torch.tensor([0.480, 0.449, 0.395]).view(1,3,1,1),
+        'SVHN': torch.tensor([0.438, 0.444, 0.473]).view(1,3,1,1),
         }
 
 stds = {
         'CIFAR10': torch.tensor([0.283, 0.278, 0.284]).view(1,3,1,1),
         'CIFAR100': torch.tensor([0.300, 0.287, 0.294]).view(1,3,1,1),
         'ImageNet': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1),
+        'ImageNetAttr': torch.tensor([0.288, 0.280, 0.292]).view(1,3,1,1),
         'SVHN': torch.tensor([0.198, 0.201, 0.197]).view(1,3,1,1),
         }
     
@@ -102,6 +104,15 @@ vit_b_16_transform = transforms.Compose([
     transforms.CenterCrop((224, 224)),
 ])
 
+vit_b_16_chexpert_transform = transforms.Compose([
+    transforms.Resize((384, 384)),
+    transforms.ToTensor(),
+])
+
+#-----------------------------
+# ViT Augmentations
+#-----------------------------
+
 vit_b_16_cifar100_augmentations = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.CenterCrop((224, 224)),
@@ -118,7 +129,20 @@ vit_b_16_svhn_augumentations = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.CenterCrop((224, 224)),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.SVHN), 
+    transforms.ToTensor(),
 ])
+# based on CheXpert paper and https://proceedings.mlr.press/v227/huang24a.html
+vit_b_16_chexpert_augmentations = transforms.Compose([
+    transforms.Resize((384, 384)),
+    transforms.RandomHorizontalFlip(0.5),
+    transforms.RandomAffine(degrees=3,
+        translate=(0.01, 0.01),
+        scale=(0.99, 1.01),
+        interpolation=InterpolationMode.BILINEAR,
+        fill=0),
+    transforms.ToTensor(),
+])
+
 
 #-----------------------------
 # Swin Augmentations

@@ -4,6 +4,7 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
+from peepholelib.datasets.functional.transforms import vgg16_transform 
 
 # torch stuff
 import torch
@@ -201,7 +202,7 @@ class AwA(DatasetWrap):
         """
 
         self.__dataset__ = {}
-        _ds = AwACustom(
+        _ds = CustomDS(
                 path=self.path,
                 transform=self.transform,
                 reference_ds=self.reference_ds,
@@ -231,6 +232,8 @@ class AwA(DatasetWrap):
                     )
 
             train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
+            val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
+            test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
             val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
             test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
 
