@@ -50,7 +50,7 @@ class ParsedDataset():
         Parse datasets, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
         Data is saved into a 'tensordict.PersistentTensorDict' at 'save_path/dss.<loader>', with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
         Args:
-        - datasets (peepholelib.dataset_base.DatasetBase): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetBase`.
+        - datasets (peepholelib.dataset_base.DatasetWrap): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetWrap`.
         - ds_parsers (dict(str: callable)): Dictionary with same keys as `datasets`, and values being functions taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels']. 
         - ds_samplers (dict(str: dict())): Dictionary with same keys as `datasets`, and values being a sampler (see `datasets.functional.samplers`). Facultative.
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.

@@ -15,12 +15,12 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         # number of classes in classifier a.k.a. number of clusters
         self.nl_class = kwargs['nl_classifier'] if 'nl_classifier' in kwargs else None# computed in fit()
         self.label_key = kwargs.get('label_key', 'label')
-        self.parser = kwargs['parser']
+        self.reducer = kwargs['reducer']
 
+        self.parser = self.reducer.parser
+
+        # computed in inheriting classes 
         self._classifier = None
-
-        # set in fit()
-        self._cvs = None 
 
         # computer in compute_empirical_posteriors()
         self._empp = None
@@ -33,13 +33,17 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
     
     @abc.abstractmethod
     def load(self, **kwargs):
-        self._empp = torch.load(self._empp_file).to(self.device)
-        pass 
+        if self._empp_file.exists():
+            self._empp = torch.load(self._empp_file).to(self.device)
+            ok = True
+        else:
+            ok = False
+        return ok 
 
     @abc.abstractmethod
     def save(self, **kwargs):
         torch.save(self._empp, self._empp_file)
-        pass
+        return 
 
     @abc.abstractmethod
     def predict(self, data):
@@ -53,7 +57,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
     def classifier_probabilities(self, **kwargs):
         pass
     
-    def compute_empirical_posteriors(self, **kwargs):
+    def _compute_empirical_posteriors(self, **kwargs):
         '''
         Compute the empirical posterior matrix P, where P(g, c) is the probability that a sample assigned to classifier's class g belongs to the model's class c.
 
@@ -61,14 +65,14 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
-        - batch_size: Do the computation in batchs. Defaults to 64.
+        - batch_size: Do the computation in batchs. Defaults to 512.
         - verbose (Bool): Print progress messages. 
         '''
         
         dss = kwargs['datasets']
         cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
-        bs = kwargs.get('batch_size', 64)
+        bs = kwargs.get('batch_size', 512)
         verbose = kwargs.get('verbose', False)
 
         # pre-allocate empirical posteriors
@@ -106,7 +110,6 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         
         '''
         cvs = kwargs['cvs']
-        print('CLA BASE: ', cvs)
         verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`

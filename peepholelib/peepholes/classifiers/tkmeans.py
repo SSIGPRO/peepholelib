@@ -38,12 +38,16 @@ class KMeans(ClassifierBase): # quella buona
         '''
         Fitss clusters.
         Args:
-        - corevectors (TensorDict): Corevectors.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+        - batch_size: Do the computation in batchs. Defaults to 512.
         - verbose (Bool): Print progress messages. 
         '''
+        _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
+        bs = kwargs.get('batch_size', 512)
         verbose = kwargs.get('verbose', False)
 
         cvs = _cvs._corevds[loader][self.target_module]
@@ -60,6 +64,14 @@ class KMeans(ClassifierBase): # quella buona
         if verbose: print('Fitting KMeans')
         self._classifier.fit(data)
 
+        # compute empirical posteriors       
+        self._compute_empirical_posteriors(
+                datasets = _dss,
+                corevectors = _cvs,
+                loader = loader,
+                bs = bs,
+                verbose = verbose
+                )
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -88,7 +100,10 @@ class KMeans(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
-        self._classifier = tKMeans.load(self._clas_path)
-        super().load()
+        if self._clas_path.exists(): 
+            self._classifier = tGMM.load(self._clas_path)
+            ok = super().load()
+        else:
+            ok = False
 
-        return
+        return ok

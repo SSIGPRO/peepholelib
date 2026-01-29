@@ -20,7 +20,15 @@ class AvgPooling(DRB):
     def __call__(self, **kwargs):
         act_data = kwargs['act_data'] 
         act_data = act_data.view(act_data.size(0), act_data.size(1), -1)
-        cvs = torch.mean(act_data,2)
+        cvs = torch.mean(act_data, 2)
     
         return cvs
+
+    def parser(self, **kwargs):
+        cvs = kwargs['cvs']
+        dss = kwargs.get('dss', None)
+        label_key = kwargs.get('label_key', 'label') 
+
+        ret = cvs if dss == None else (cvs, dss[label_key])
+        return ret
 
