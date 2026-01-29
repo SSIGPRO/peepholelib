@@ -39,7 +39,10 @@ class Conv2dAvgKernelSVD(DRB):
             # computation
             uw = flatten_conv2d_weight(_layer).to(device)
             U, s, Vh = torch.svd_lowrank(uw, q=q)
+<<<<<<< HEAD
             U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
+=======
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
             
             self._svd = {
                     'U': U,

@@ -21,11 +21,14 @@ class ViTLinearSVD(DRB):
         layer = kwargs['layer']
         q = kwargs.get('rank',300)
         self.cv_dim = kwargs.get('cv_dim', None)
+<<<<<<< HEAD
         token_reduction = kwargs.get('token_reduction', 'first')
         if token_reduction not in self._REDUCTIONS:
             raise RuntimeError(f"Unknown token_reduction '{token_reduction}'. Supported: {list(self._REDUCTIONS)}")
         self.red_fn = self._REDUCTIONS[token_reduction]
 
+=======
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         verbose = kwargs.get('verbose', False)
                                                       
         # create folder

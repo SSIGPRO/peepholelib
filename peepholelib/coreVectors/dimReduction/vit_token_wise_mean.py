@@ -27,3 +27,11 @@ class ViTTokenWiseMean(DRB):
         act_data = act_data[:, 1:, :]  # Exclude the class token
         cvs = torch.mean(act_data, dim=2)  # Mean across tokens
         return cvs
+
+    def parser(self, **kwargs):
+        cvs = kwargs['cvs']
+        dss = kwargs.get('dss', None)
+        label_key = kwargs.get('label_key', 'label') 
+
+        ret = cvs if dss == None else (cvs, dss[label_key])
+        return ret

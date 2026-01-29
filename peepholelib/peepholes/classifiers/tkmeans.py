@@ -42,14 +42,20 @@ class KMeans(ClassifierBase): # quella buona
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
         - batch_size: Do the computation in batchs. Defaults to 512.
+<<<<<<< HEAD
         - compute_empp (bool): Wether to compute the empirical posterior. Defaults to `True`.
+=======
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         - verbose (Bool): Print progress messages. 
         '''
         _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         bs = kwargs.get('batch_size', 512)
+<<<<<<< HEAD
         _compute_empp = kwargs.get('compute_empp', True)
+=======
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         verbose = kwargs.get('verbose', False)
 
         cvs = _cvs._corevds[loader][self.target_module]
@@ -67,6 +73,7 @@ class KMeans(ClassifierBase): # quella buona
         self._classifier.fit(data)
 
         # compute empirical posteriors       
+<<<<<<< HEAD
         if _compute_empp:
             self._compute_empirical_posteriors(
                     datasets = _dss,
@@ -75,6 +82,15 @@ class KMeans(ClassifierBase): # quella buona
                     bs = bs,
                     verbose = verbose
                     )
+=======
+        self._compute_empirical_posteriors(
+                datasets = _dss,
+                corevectors = _cvs,
+                loader = loader,
+                bs = bs,
+                verbose = verbose
+                )
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -104,9 +120,14 @@ class KMeans(ClassifierBase): # quella buona
 
     def load(self, **kwargs):
         if self._clas_path.exists(): 
+<<<<<<< HEAD
             self._classifier = tKMeans.load(self._clas_path)
             super().load()
             ok = True 
+=======
+            self._classifier = tGMM.load(self._clas_path)
+            ok = super().load()
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         else:
             ok = False
 

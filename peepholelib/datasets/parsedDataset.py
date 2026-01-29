@@ -43,7 +43,12 @@ class ParsedDataset():
         When `chunk_size` is set the dataset is split into multiple shard files named `dss.<loader>.chunk_<i>` and wrapped in a `_ShardedPTD`. This keeps individual files small and avoids memory pressure on large datasets. `load_only()` detects these shard files automatically.
 
         Args:
+<<<<<<< HEAD
         - dataset_wraps (dict{str: peepholelib.dataset_base.DatasetWrap}): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetWrap`.
+=======
+        - datasets (peepholelib.dataset_base.DatasetWrap): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetWrap`.
+        - ds_parsers (dict(str: callable)): Dictionary with same keys as `datasets`, and values being functions taking batched dataset samples and parsing into a dictionary with keys = ['images', 'labels']. 
+>>>>>>> 0eef6bb (implement svg kernel svd (#127))
         - ds_samplers (dict(str: dict())): Dictionary with same keys as `datasets`, and values being a sampler (see `datasets.functional.samplers`). Facultative.
         - keys_to_copy (list[str]): List with same keys as `datasets`, and values lists of keys to copy from the dataset_wraps. Skips already present keys. If `None` copies all keys (which are not already present). Defaults to `None`.
         - chunk_size (int | None): If set, split each loader into shards of at most `chunk_size` samples saved as separate files. If `None` (default) a single file is written as before.
