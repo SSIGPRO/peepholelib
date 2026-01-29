@@ -11,7 +11,8 @@ from torch.utils.data import DataLoader
 from torch.nn import DataParallel
 
 def img_classification_acc(pred, target):
-    return torch.count_nonzero(torch.argmax(pred, axis=1)==labels)
+    #return torch.count_nonzero(torch.argmax(pred, axis=1)==labels)
+    return torch.count_nonzero(torch.argmax(pred, axis=1) == target)
 
 def fine_tune(**kwargs):
     model = kwargs['model']
@@ -27,7 +28,9 @@ def fine_tune(**kwargs):
     train_key = kwargs.get('train_key', 'train')
     val_key = kwargs.get('val_key', 'val')
     in_parser = kwargs.get('in_parser', lambda x:x)
-    out_parser = kwargs.get('out_parser', lambda x:x.long())
+    #out_parser = kwargs.get('out_parser', lambda x:x.long())
+    out_parser=lambda x: x
+
 
     # training artifacts
     _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
@@ -56,15 +59,15 @@ def fine_tune(**kwargs):
     
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
-        iter_train = ceil(len(ds._dss[train_key])/bs)
-        iter_val = ceil(len(ds._dss[val_key])/bs) 
+        iter_train = ceil(len(ds.__dataset__[train_key])/bs)
+        iter_val = ceil(len(ds.__dataset__[val_key])/bs) 
     else:
         iter_train = iterations 
         iter_val = iterations 
 
     # dataloader for the dataset
-    train_dl = DataLoader(dataset=ds._dss[train_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x)
-    val_dl = DataLoader(dataset=ds._dss[val_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x) 
+    train_dl = DataLoader(dataset=ds.__dataset__[train_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x)
+    val_dl = DataLoader(dataset=ds.__dataset__[val_key], batch_size=bs, shuffle=True, collate_fn=lambda x:x) 
     
     # to save losses
     file = path/name
