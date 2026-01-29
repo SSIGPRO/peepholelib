@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 # our stuff
 from peepholelib.models.prediction_fns import multilabel_classification
+from peepholelib.datasets.functional.results import results_one_hot_encoding
 
 class ParsedDataset():
     def __init__(self, **kwargs):
@@ -66,6 +67,7 @@ class ParsedDataset():
         ds_kwargs = kwargs.get('ds_kwargs', None) ## it will be a dictionary
         ds_samplers = kwargs.get('ds_samplers', None) ## it will be a dictionary
         pred_fn = kwargs.get('pred_fn', multilabel_classification)
+        result_fn = kwargs.get('result_fn', results_one_hot_encoding)
 
         bs = kwargs.get('batch_size', 64) 
         n_threads = kwargs.get('n_threads', 1) 
@@ -127,7 +129,7 @@ class ParsedDataset():
                         # allocate memory for pred and result
                         ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
                         ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)))
+                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,))) 
 
                         # Close PTD create with mode 'w' and re-open it with mode 'r+'
                         # This is done so we can use multiple workers with the dataloaders 
@@ -168,7 +170,7 @@ class ParsedDataset():
                                 predicted_labels = pred_fn(y_predicted).detach().cpu()
                                 data_t['output'] = y_predicted
                                 data_t['pred'] = predicted_labels
-                                data_t['result'] = predicted_labels == data_t['label']
+                                data_t['result'] = result_fn(predicted_labels, data_t['label'])
         
         return ret
 

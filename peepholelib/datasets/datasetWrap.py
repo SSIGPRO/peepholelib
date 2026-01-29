@@ -17,6 +17,8 @@ class DatasetWrap(metaclass=abc.ABCMeta):
         self.path = Path(kwargs['path'])
         self.seed = kwargs.get('seed', 42)
         self.transform = kwargs['transform']
+        # optional transform applied to labels (e.g., convert to tensors)
+        self.target_transform = kwargs.get('target_transform', None)
         
         return
 
