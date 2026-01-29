@@ -14,6 +14,7 @@ class ViTLinearSVD(DRB):
         model = kwargs['model']
         layer = kwargs['layer']
         q = kwargs.get('rank',300)
+        self.cv_dim = kwargs.get('cv_dim', None)
         verbose = kwargs.get('verbose', False)
                                                       
         # create folder
@@ -74,12 +75,11 @@ class ViTLinearSVD(DRB):
         """
         Trims corevectors obtained with `coreVectors.dimReduction.svds.vit_linear_svd.ViTLinearSVD.
         Input shape is `[ns, q]`, where `ns` is the number of samples in the batch, `q` the SVD rank.
-        Output shape is `[ns, cv_dim]`, trimmed corevectors
+        Output shape is `[ns, self.cv_dim]`, trimmed corevectors
                                                                                                             
         Args:
             cvs (TensorDict): Batch from TensorDict for corevectors inside `peepholelib.CoreVectors` class.
             dss (TensorDict): Batch from TensorDict for dataset inside `peepholelib.CoreVectors` class
-            cv_dim (int): desired dimension of corevector
             label_key (str): key to get labels from
                                                                                                             
         Returns:
@@ -89,11 +89,10 @@ class ViTLinearSVD(DRB):
 
         cvs = kwargs['cvs']
         dss = kwargs.get('dss', None)
-        cv_dim = kwargs['cv_dim']
         label_key = kwargs.get('label_key', 'label') 
 
         # trim corevectors on the last dimension
-        tcvs = cvs[...,0:cv_dim]
+        tcvs = cvs[...,0:self.cv_dim]
 
         ret = tcvs if dss == None else (tcvs, dss[label_key])
         return ret 

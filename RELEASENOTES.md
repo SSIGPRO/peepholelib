@@ -8,6 +8,8 @@
 - Implement dimentionality reduction base.
 
 ## Peepholes
+- Classifiers now call `compute_empirical_posteriors` inside `fit` to have a common interface with `DMD`.
+- drillers' `load()` returns a bool indicating if it has been fitted and saved as common interface for checking it.
 - Move corevectors parsing (old `trim_corevectors`) inside respective dimentionality reduction class.
 - remove the `peepholes` key from `peepholes/peepholes.Peepholes._phs[<loaders>][<layer>]`.
 - remove suffix from `peepholelib/peepholes/drill_base.Drill_base`, it is supposed to be managed at experiment level.
