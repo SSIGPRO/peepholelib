@@ -1,6 +1,7 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_svhn
+from peepholelib.datasets.functional.transforms import vgg16 as transform 
+from torchvision.datasets import SVHN as torchSVHN
 
 # torch stuff
 import torch
@@ -8,6 +9,18 @@ from torch.utils.data import random_split
 
 # SVHN from torchvision
 from torchvision import datasets
+
+class SVHNCustom(torchSVHN):
+
+    def __init__(self, **kwargs):
+        torchSVHN.__init__(self, **kwargs)
+
+    def __getitem__(self, index):
+        img, label = super().__getitem__(index)
+
+        return {'image': img,
+                'label': torch.tensor(label),
+                }  
 
 class SVHN(DatasetWrap):
     def __init__(self, **kwargs):
@@ -22,11 +35,10 @@ class SVHN(DatasetWrap):
         
         # add a default transform for specific DS
         if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_svhn
+            kwargs['transform'] = transform
 
-        # make labels tensors unless caller explicitly overrides
-        if 'target_transform' not in kwargs:
-            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+        self.train_ratio = kwargs.get('train_ratio', 0.86349)
+        self.test_ratio = kwargs.get('test_ratio', 0.38415)
 
         DatasetWrap.__init__(self, **kwargs)
 
@@ -51,36 +63,35 @@ class SVHN(DatasetWrap):
         torch.manual_seed(seed)
 
         # split to get 10000 samples for test
-        _test_data = datasets.__dict__['SVHN'](
+        _test_data = SVHNCustom(
             root = self.path,
             split = 'test',
             transform = transform,
-            target_transform = target_transform,
             download = True
         )
 
         _, test_dataset = random_split(
                 _test_data,
-                [0.61585, 0.38415],
+                [1 - self.test_ratio, self.test_ratio],
                 generator=torch.Generator().manual_seed(seed)
                 )
         
         # split to get 10000 samples for val
-        _train_data = datasets.__dict__['SVHN']( 
+        _train_data = SVHNCustom( 
             root = self.path,
             split = 'train',
             transform = transform,
-            target_transform = target_transform,
             download = True
         )
         
-        _, val_dataset = random_split(
+        train_dataset, val_dataset = random_split(
                 _train_data,
-                [0.86349, 0.13651],
+                [self.train_ratio, 1 - self.train_ratio],
                 generator=torch.Generator().manual_seed(seed)
                 )
 
         self.__dataset__ = {
+                'SVHN-train': train_dataset,
                 'SVHN-val': val_dataset,
                 'SVHN-test': test_dataset
                 }

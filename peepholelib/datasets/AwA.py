@@ -5,6 +5,7 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
+from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 # torch stuff
 import torch
@@ -163,8 +164,29 @@ class CustomDS(Dataset):
 class AwA(DatasetWrap):
 
     def __init__(self, **kwargs): 
+        '''
+        AwA loader (train & val & test). Splits are created from the full dataset
+        according to `splitting_ratio` (default: 0.6 train, 0.2 val, 0.2 test).
+
+        Args:
+            path (str): Path to the AwA2 folder containing dataset files
+                (e.g. `JPEGImages`, `classes.txt`, `predicates.txt`,
+                `predicate-matrix-binary.txt`).
+            transform (callable, optional): Transform applied to validation/test
+                images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the
+                training split.
+            splitting_ratio (list[float], optional): Ratios for
+                [train, val, test]. Must sum to 1.0.
+            seed (int, optional): Random seed used for deterministic splits.
+            reference_ds (str, optional): Optional reference dataset name for
+                label remapping (currently supports `'ImageNet'`).
+        Returns:
+            - a thumbs up
+        '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('transform')
+        self.transform = kwargs.get('std_transform', transform)
+        self.augmentation = kwargs.get('aug_transform', None)
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -174,29 +196,48 @@ class AwA(DatasetWrap):
 
     def __load_data__(self, **kwargs):
         """
-        Load and prepare CUB data.
+        Load and prepare AwA data.
         """
-        self.__dataset__ = {}
 
-        # Load train split
+        self.__dataset__ = {}
         _ds = CustomDS(
-            path=self.path,
-            transform=self.transform,
-            reference_ds=self.reference_ds,
-            seed=self.seed
-        )
+                path=self.path,
+                transform=self.transform,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
 
-        self.__dataset__ = {}
-        
-        # split train into train and test
-        self.__dataset__['AwA-train'], self.__dataset__['AwA-val'], self.__dataset__['AwA-test'] = torch.utils.data.random_split(
-                _ds,
-                self.splitting_ratio,
-                generator = torch.Generator().manual_seed(self.seed)
-        )
+        if self.augmentation is None:
+            
+            # split train into train and test
+            train_ds, val_ds, test_ds = torch.utils.data.random_split(
+                                                            _ds,
+                                                            self.splitting_ratio,
+                                                            generator = torch.Generator().manual_seed(self.seed)
+                                                    )
 
-        # self._classes = {
-        #         'AwA-train': _ds.id_to_class,
-        #         'AwA-val': _ds.id_to_class,
-        #         }
+        else:
+
+            aug_ds = CustomDS(
+                    path=self.path,
+                    transform=self.augmentation,      
+                    reference_ds=self.reference_ds,
+                    seed=self.seed
+                )
+
+            train_idx, val_idx, test_idx = torch.utils.data.random_split(
+                                range(len(_ds)), self.splitting_ratio, generator=torch.Generator().manual_seed(self.seed)
+                            )
+
+            train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
+            val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
+            test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
+
+        # 4) Save
+        self.__dataset__ = {
+                'AwA-train': train_ds,
+                'AwA-val': val_ds,
+                'AwA-test': test_ds
+            }
+
 

@@ -17,8 +17,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         self.label_key = kwargs.get('label_key', 'label')
         self.reducer = kwargs['reducer']
 
-        self.parser = self.reducer.parser
-
+        self.parser = self.reducer.parser 
         # computed in inheriting classes 
         self._classifier = None
 

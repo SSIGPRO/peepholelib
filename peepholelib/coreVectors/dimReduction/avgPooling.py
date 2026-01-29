@@ -12,8 +12,6 @@ class AvgPooling(DRB):
         layer = kwargs['layer']
         model = kwargs['model']
         _layer = model._target_modules[layer]
-        if not isinstance(_layer, torch.nn.Conv2d):
-            raise RuntimeError("Only Conv2D is suported") 
 
         return
 
