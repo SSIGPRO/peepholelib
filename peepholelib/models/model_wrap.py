@@ -10,6 +10,15 @@ from torch import Tensor
 
 '''Inspired by https://github.com/RobustBench/robustbench/blob/master/robustbench/model_zoo/architectures/utils_architectures.py'''
 
+class NormalizedModel(nn.Module):
+    def __init__(self, model, mean, std):
+        super().__init__()
+        self.normalizer = InputNormalizer(mean, std)
+        self.model = model
+
+    def forward(self, x):
+        return self.model(self.normalizer(x))
+
 class InputNormalizer(nn.Module):
 
     def __init__(self, mean, std):
@@ -34,6 +43,7 @@ class Hook:
     def __init__(self, save_input=True, save_output=False):
         self.module = None 
         self.handle = None
+        self.extra_handles = []
 
         self._si = save_input
         self._so = save_output
@@ -50,11 +60,30 @@ class Hook:
         self.module = module 
         self.handle = module.register_forward_hook(self)
         return self.handle
+
+    def register_input_fallback(self, module):
+        """
+        Register a fallback input hook on a parent module.
+        This is used for modules (e.g., torchvision Swin `attn.qkv`) whose
+        parameters are consumed functionally (F.linear) and never call the
+        target submodule's forward.
+        """
+        def _set_input_from_parent(_module, module_in):
+            if self._si:
+                self.i_act = module_in[0] if len(module_in) > 0 else None
+
+        handle = module.register_forward_pre_hook(_set_input_from_parent)
+        self.extra_handles.append(handle)
+        return handle
     
     def unregister(self):
         if self.handle:
             self.handle.remove()
+        for handle in self.extra_handles:
+            handle.remove()
+
         self.handle = None
+        self.extra_handles = []
         self.module = None
         return
 
@@ -135,6 +164,19 @@ class ModelWrap(nn.Module):
                 module = self._target_modules[key]
                 hook = Hook(save_input=self._si, save_output=self._so)
                 handle = hook.register(module)
+
+                # torchvision Swin uses attention linear weights via F.linear in parent
+                # attention forward. In that case, child module forward hooks never fire,
+                # so capture inputs from the parent attention pre-hook for those targets.
+                if self._si and (key.endswith('.qkv') or key.endswith('attn.proj')):
+                    parent_name = key.rsplit('.', 1)[0]
+                    try:
+                        parent_module = self._model.get_submodule(parent_name)
+                        hook.register_input_fallback(parent_module)
+                    except AttributeError:
+                        if verbose:
+                            print(f'Could not register attention fallback hook for {key}')
+                                                                       
                 _hooks[key] = hook
             
             self._hooks = _hooks
