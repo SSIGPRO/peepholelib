@@ -180,7 +180,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         out_layer = kwargs['output_layer']
         n_classes = kwargs['to_n_classes']
-        overwrite = kwargs['overwrite'] if  'overwrite' in kwargs else False
+        overwrite = kwargs.get('overwrite', False)
         
         keys = out_layer.split(".")[:-1]
         temp = self._model
