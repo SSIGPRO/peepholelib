@@ -119,7 +119,7 @@ class ParsedDataset():
                 ds_samplers[ds_key](ds=self._dss[ds_key])
             
             # dataset sample for dry run
-            sample = self._dss[ds_key][0:1]['data'].to(model.device)
+            sample = self._dss[ds_key][0:1]['image'].to(model.device)
             with torch.no_grad():
                 _out, _ls = model(sample)
                      

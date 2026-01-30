@@ -49,7 +49,12 @@ class CIFAR100Custom(CIFAR100):
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
 
-        return torch.tensor(img), torch.tensor(target), torch.tensor(self.M[:, target].argmax())
+        sample = {
+            "image": torch.tensor(img),
+            "label": torch.tensor(target),
+            "coarse_label": torch.tensor(self.M[:, int(target)].argmax()),
+        }
+        return sample
 
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):

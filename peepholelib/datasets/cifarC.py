@@ -27,9 +27,11 @@ class CustomDS(Dataset):
         return self.len
 
     def __getitem__(self, idx):
-        d = self.transform(self.data[idx])
-        l = self.labels[idx]
-        return d, l
+        sample = {
+            "image": self.transform(self.data[idx]),
+            "label": self.labels[idx]
+        }
+        return sample
 
     def __getitems__(self, idxs):
         return [(self.transform(self.data[i]), self.labels[i]) for i in idxs]
