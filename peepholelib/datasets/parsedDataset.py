@@ -55,7 +55,7 @@ class ParsedDataset():
         cls_inst = cls(path = path)
         cls_inst._dss = {}
 
-        ds_wrap.__load_data__(verbose=verbose)
+        ds_wrap.__load_data__()
 
         for ds_key in ds_wrap.__dataset__:
             file_path = cls_inst.path/('dss.'+ds_key)
