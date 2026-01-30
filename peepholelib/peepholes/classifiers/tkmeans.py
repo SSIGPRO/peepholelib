@@ -104,7 +104,7 @@ class KMeans(ClassifierBase): # quella buona
 
     def load(self, **kwargs):
         if self._clas_path.exists(): 
-            self._classifier = tGMM.load(self._clas_path)
+            self._classifier = tKMeans.load(self._clas_path)
             super().load()
             ok = True 
         else:
