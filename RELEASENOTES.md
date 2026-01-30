@@ -1,5 +1,8 @@
 # DEVEL
 
+## Datasets
+- Implement AWA e CUB wrappers
+
 ## SVDs
 - move SVDs to dimentionality reduction class in `coreVectors/dimReduction`.
 
@@ -8,6 +11,7 @@
 - Implement dimentionality reduction base.
 
 ## Peepholes
+- add Flag to control wether or not call `_compute_empirical_posteriors()` in classifiers' `fit()`. 
 - Classifiers now call `compute_empirical_posteriors` inside `fit` to have a common interface with `DMD`.
 - drillers' `load()` returns a bool indicating if it has been fitted and saved as common interface for checking it.
 - Move corevectors parsing (old `trim_corevectors`) inside respective dimentionality reduction class.

@@ -97,11 +97,12 @@ def get_coreVectors(self, **kwargs):
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
                 # Dry run to get CV shape
-                cv_shape = reducers[mk](act_data=_act0[mk]).shape[1:]
+                _cv = reducers[mk](act_data=_act0[mk])
+                cv_shape = _cv.shape[1:]
 
                 # allocate for core vectors 
                 if verbose: print('allocating core vectors for module: ', mk)
-                self._corevds[ds_key][mk] = MMT.empty(shape=((n_samples,)+cv_shape))
+                self._corevds[ds_key][mk] = MMT.empty(shape=((n_samples,)+cv_shape), dtype=_cv.dtype)
                 _modules_to_save.append(mk)
 
         if verbose: print('Modules to save: ', _modules_to_save)

@@ -173,5 +173,4 @@ class DeepMahalanobisDistance(DrillBase):
                 term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
                 gaussian_score[:, i] = term_gau
 
-        score = gaussian_score
-        return score.detach().cpu()
+        return gaussian_score
