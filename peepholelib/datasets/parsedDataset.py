@@ -119,17 +119,18 @@ class ParsedDataset():
                         with torch.no_grad():
                             _res = model(data['image'].to(device))
                             num_classes = _res.shape[1]
+                            _pred_labels = pred_fn(_res)
 
                         for key in data.keys():
                             _d = data[key]
                             # pre-allocation activations
-                            ret._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]))
+                            ret._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]), dtype=_d.dtype)
                          
                         if verbose: print(f'Allocating output, pred, result')
                         # allocate memory for pred and result
-                        ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)))
-                        ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)))
-                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,))) 
+                        ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)), dtype=_res.dtype)
+                        ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=_pred_labels.dtype)
+                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=torch.bool) 
 
                         # Close PTD create with mode 'w' and re-open it with mode 'r+'
                         # This is done so we can use multiple workers with the dataloaders 
@@ -166,8 +167,8 @@ class ParsedDataset():
                             # ---------------------------------------
                             with torch.no_grad():
                                 y_predicted = model(data_t['image'].to(device))
-                        
                                 predicted_labels = pred_fn(y_predicted).detach().cpu()
+                        
                                 data_t['output'] = y_predicted
                                 data_t['pred'] = predicted_labels
                                 data_t['result'] = result_fn(predicted_labels, data_t['label'])

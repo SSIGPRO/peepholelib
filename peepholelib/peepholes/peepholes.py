@@ -86,8 +86,13 @@ class Peepholes:
                     #------------------------
                     # Pre-allocate peepholes
                     #------------------------
+                    # dry run to get size and dtype
+                    _cv = cvds[module][0:1]
+                    _d = dssds[0:1] 
+                    _ph = self._drillers[module](cvs=_cv, dss=_d)
+
                     if verbose: print('allocating peepholes for module: ', module)
-                    self._phs[ds_key][module] = MMT.empty(shape=(n_samples, self._drillers[module].nl_model))
+                    self._phs[ds_key][module] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
                     modules_to_compute.append(module)
                 else:
                     if verbose: print(f'Peepholes for {module} already present. Skipping.')
@@ -112,7 +117,7 @@ class Peepholes:
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
                 for module in modules_to_compute:
-                    phs[module] = self._drillers[module](cvs=_cvs[module], dss=_dss)
+                    phs[module] = self._drillers[module](cvs=_cvs[module], dss=_dss).cpu()
 
         return 
 
