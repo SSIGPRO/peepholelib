@@ -35,14 +35,12 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
     def load(self, **kwargs):
         if self._empp_file.exists():
             self._empp = torch.load(self._empp_file).to(self.device)
-            ok = True
-        else:
-            ok = False
-        return ok 
+        return 
 
     @abc.abstractmethod
     def save(self, **kwargs):
-        torch.save(self._empp, self._empp_file)
+        if self._empp != None:
+            torch.save(self._empp, self._empp_file)
         return 
 
     @abc.abstractmethod
