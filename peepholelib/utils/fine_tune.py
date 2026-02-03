@@ -63,9 +63,9 @@ def fine_tune(**kwargs):
     # training progress
     lr = kwargs.get('lr', 5e-5)
     bs = kwargs.get('batch_size', 256)
-    max_epochs = kwargs.get('max_epochs', 1e3)
+    max_epochs = kwargs.get('max_epochs', 1000)
     iterations = kwargs.get('iterations', 'full')
-    n_threads = kwargs.get('n_threads', 36)
+    n_threads = kwargs.get('n_threads', 0)
 
     # early stopping
     early_stopping = kwargs.get('early_stopping', False)
@@ -118,8 +118,6 @@ def fine_tune(**kwargs):
             shuffle = True, 
             collate_fn = lambda x:x, 
             num_workers = n_threads,
-            persistent_workers = True,
-            prefetch_factor = 4,
         )
 
     val_dl = DataLoader(
@@ -128,8 +126,6 @@ def fine_tune(**kwargs):
             shuffle = False, 
             collate_fn = lambda x:x, 
             num_workers = n_threads,
-            persistent_workers = True,
-            prefetch_factor = 4,
         ) 
     
     # to save losses
@@ -208,16 +204,12 @@ def fine_tune(**kwargs):
         epochs_without_improvement = 0
 
         model._model.train()
-        for it, _data in tqdm(zip(range(iter_train), train_dl), total=iter_train):
-
+        for it, _data in zip(range(iter_train), train_dl):
             data = in_parser(_data)
-
             images = data['image'].contiguous().to(device, non_blocking=True)
             labels = data['label'].contiguous().to(device, non_blocking=True)
-
             n_samples = len(images)
             samples_acc += n_samples 
-
             model_out = model(images)
             pred = out_parser(model_out)
             loss = loss_fn(pred, labels)
@@ -238,7 +230,7 @@ def fine_tune(**kwargs):
             acc_acc = 0.0
             samples_acc = 0
 
-            for it, _data in tqdm(zip(range(iter_val), val_dl), total=iter_val):
+            for it, _data in zip(range(iter_val), val_dl):
 
                 data = in_parser(_data)
 
@@ -262,9 +254,10 @@ def fine_tune(**kwargs):
             if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                 scheduler.step(val_losses[epoch])
                 current_lr = optim.param_groups[0]['lr']
+
                 if old_lr != current_lr:
                     old_lr = current_lr
-                    if verbose:  print(f'Current LR: {optim.param_groups[0]["lr"]:.6f}')
+                    if verbose:  print(f'New LR: {optim.param_groups[0]["lr"]:.6f}')
             else:
                 scheduler.step()
         
