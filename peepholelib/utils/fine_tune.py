@@ -14,6 +14,8 @@ def img_classification_acc(pred, target):
     #return torch.count_nonzero(torch.argmax(pred, axis=1)==labels)
     return torch.count_nonzero(torch.argmax(pred, axis=1) == target)
 
+
+
 def fine_tune(**kwargs):
     model = kwargs['model']
     device = model.device
@@ -38,7 +40,7 @@ def fine_tune(**kwargs):
     optim_kwargs = kwargs.get('optim_kwargs', dict())
     acc_fn = kwargs.get('acc_fn', img_classification_acc)
     _sched = kwargs.get('scheduler', None)
-    scheduler_kwargs = kwargs['scheduler_kwargs'] if 'scheduler_kwargs' in kwargs and 'scheduler' in kwargs else {} 
+    scheduler_kwargs = kwargs['sched_kwargs'] if 'sched_kwargs' in kwargs and 'scheduler' in kwargs else {} 
     
     # training progress
     lr = kwargs['lr']
@@ -214,3 +216,5 @@ def fine_tune(**kwargs):
             plt.ylabel('loss')
             plt.legend()
             plt.savefig(file.as_posix()+'.losses.png', dpi=300, bbox_inches='tight')
+
+
