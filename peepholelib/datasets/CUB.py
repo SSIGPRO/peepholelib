@@ -6,6 +6,7 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
+from peepholelib.datasets.functional.transforms import vgg16_imagenet 
 
 # torch stuff
 import torch
@@ -259,7 +260,8 @@ class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('transform')
+        self.transform = kwargs.get('transform', vgg16_imagenet)
+        self.augmentation = kwargs.get('augmentation', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -273,31 +275,95 @@ class CUB(DatasetWrap):
         """
         self.__dataset__ = {}
 
-        # Load train split
-        _ds = CustomDS(
-            path=self.path,
-            transform=self.transform,
-            reference_ds=self.reference_ds,
-            seed=self.seed
-        )
+        if self.augmentation is None:
 
-        self.__dataset__ = {}
-        
-        train_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 1]
-        test_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 0]
+            # Load train split
+            base_ds = CustomDS(
+                path=self.path,
+                transform=self.transform,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
 
-        train_ds = Subset(_ds, train_indices)
-        test_ds = Subset(_ds, test_indices)
+            aug_ds = CustomDS(
+                path=self.path,
+                transform=self.augmentation,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
 
-        train_ds, val_ds = random_split(
-                                train_ds,
-                                [0.8, 0.2],
-                                generator=torch.Generator().manual_seed(self.seed)
-                            )
-        
-        self.__dataset__['val'] = val_ds
-        self.__dataset__['train'] = train_ds
-        self.__dataset__['test'] = test_ds
+            self.__dataset__ = {}
+            
+            train_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 1]
+            test_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 0]
+
+            generator = torch.Generator().manual_seed(self.seed)
+            train_split, val_split = torch.utils.data.random_split(
+                range(len(train_indices)),
+                [0.8, 0.2],
+                generator=generator
+            )
+
+            # map back to original indices
+            train_indices = [train_indices[i] for i in train_split.indices]
+            val_indices  = [train_indices[i] for i in val_split.indices]
+
+            train_ds = Subset(aug_ds, train_indices)
+            val_ds = Subset(aug_ds, val_indices)
+            test_ds = Subset(base_ds, test_indices)
+
+            
+            self.__dataset__['val'] = val_ds
+            self.__dataset__['train'] = train_ds
+            self.__dataset__['test'] = test_ds
+
+        else:
+
+            base_ds = CustomDS(
+                path=self.path,
+                transform=self.transform,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
+
+            aug_ds = CustomDS(
+                path=self.path,
+                transform=self.augmentation,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
+
+            self.__dataset__ = {}
+
+            # fixed train/test split from is_train
+            train_indices = [i for i, flag in enumerate(base_ds.is_train) if flag == 1]
+            test_indices  = [i for i, flag in enumerate(base_ds.is_train) if flag == 0]
+
+            # test always uses base transforms
+            test_ds = Subset(base_ds, test_indices)
+
+            # build a Subset just for indexing train
+            train_base = Subset(base_ds, train_indices)
+
+            # split train indices into train/val (deterministic)
+            train_split, val_split = random_split(
+                range(len(train_base)),
+                [0.8, 0.2],
+                generator=torch.Generator().manual_seed(self.seed)
+            )
+
+            # map split indices back to original dataset indices
+            train_idx = [train_indices[i] for i in train_split.indices]
+            val_idx   = [train_indices[i] for i in val_split.indices]
+
+            # apply indices to base/aug datasets
+            train_ds = Subset(aug_ds, train_idx)     # augmented
+            val_ds   = Subset(base_ds, val_idx)      # standard
+
+            self.__dataset__['train'] = train_ds
+            self.__dataset__['val']   = val_ds
+            self.__dataset__['test']  = test_ds
+
 
     def get(self, ds_key, idx):
         '''

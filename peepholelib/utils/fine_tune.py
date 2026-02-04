@@ -32,6 +32,9 @@ def fine_tune(**kwargs):
     in_parser = kwargs.get('in_parser', lambda x:x)
     out_parser = kwargs.get('out_parser', lambda x:x)
 
+    # dataloader
+    dl_kwargs = kwargs['dl_kwargs']
+
     # training artifacts
     _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
     loss_kwargs = kwargs.get('loss_kwargs', dict())
@@ -46,15 +49,10 @@ def fine_tune(**kwargs):
     bs = kwargs.get('batch_size', 256)
     max_epochs = kwargs.get('max_epochs', 1000)
     iterations = kwargs.get('iterations', 'full')
-    n_threads = kwargs.get('n_threads', 0)
-
-    # early stopping
     early_stopping = kwargs.get('early_stopping', False)
-    early_stopping_patience = kwargs.get('early_stopping_patience', 10)
-    early_stopping_min_delta = kwargs.get('early_stopping_min_delta', 0.0)
 
     # Layer freezing configuration 
-    freeze_all_but = kwargs.get('freeze_all_but', None)
+    layers_to_train = kwargs.get('layers_to_train', None)
 
     # saving
     save_every = kwargs.get('save_every', 100)
@@ -64,13 +62,12 @@ def fine_tune(**kwargs):
     loss_fn = _l(**loss_kwargs)
 
     # Apply initial layer freezing
-    if freeze_all_but is not None:
+    if layers_to_train is not None:
         if verbose:
-            print(f'Freezing all layers except: {freeze_all_but}')
-        model.set_requires_grad(set_requires_grad = False, layer_names = None)
-        model.set_requires_grad(set_requires_grad = True, layer_names = freeze_all_but)
+            print(f'Freezing all layers except: {layers_to_train}')
+        model.set_requires_grad(requires_grad = True, layer_names = layers_to_train)
     else:
-        model.set_requires_grad(set_requires_grad = True, layer_names = None)
+        model.set_requires_grad(requires_grad = True, layer_names = None)
         if verbose:
             print(f'No layers to freeze. Training all layers')
 
@@ -83,30 +80,33 @@ def fine_tune(**kwargs):
     
     optim = _opt(trainable_params, lr=lr, **optim_kwargs)
     scheduler = _sched(optimizer=optim, **scheduler_kwargs) if _sched is not None else None
+
+    if early_stopping:
+        if scheduler is None:
+            raise ValueError('early_stopping=True requires a scheduler with num_bad_epochs and patience.')
+        if not hasattr(scheduler, 'num_bad_epochs') or not hasattr(scheduler, 'patience'):
+            raise ValueError('early_stopping=True requires a scheduler with num_bad_epochs and patience.')
     
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
-        iter_train = ceil(len(ds._dss[train_key])/bs)
-        iter_val = ceil(len(ds._dss[val_key])/bs) 
+        iter_train = ceil(len(ds.__dataset__[train_key])/bs)
+        iter_val = ceil(len(ds.__dataset__[val_key])/bs) 
     else:
         iter_train = iterations 
         iter_val = iterations 
 
-    # dataloader for the dataset
     train_dl = DataLoader(
-            dataset = ds._dss[train_key], 
-            batch_size = bs, 
-            shuffle = True, 
-            collate_fn = lambda x:x, 
-            num_workers = n_threads,
+            dataset=ds.__dataset__[train_key],
+            batch_size=bs,
+            shuffle=True,
+            **dl_kwargs,
         )
 
     val_dl = DataLoader(
-            dataset = ds._dss[val_key], 
-            batch_size = bs, 
-            shuffle = False, 
-            collate_fn = lambda x:x, 
-            num_workers = n_threads,
+            dataset=ds.__dataset__[val_key],
+            batch_size=bs,
+            shuffle=False,
+            **dl_kwargs,
         ) 
     
     # to save losses
@@ -148,7 +148,7 @@ def fine_tune(**kwargs):
         
         initial_epoch = trained_for
         
-        if data['freeze_all_but'] == freeze_all_but:
+        if data['layers_to_train'] == layers_to_train:
         
             optim.load_state_dict(data['optimizer']) 
 
@@ -182,8 +182,6 @@ def fine_tune(**kwargs):
         loss_acc = 0.0
         acc_acc = 0.0
         samples_acc = 0
-        epochs_without_improvement = 0
-
         model._model.train()
         for it, _data in zip(range(iter_train), train_dl):
             data = in_parser(_data)
@@ -241,10 +239,18 @@ def fine_tune(**kwargs):
                     if verbose:  print(f'New LR: {optim.param_groups[0]["lr"]:.6f}')
             else:
                 scheduler.step()
+
+        if early_stopping and scheduler is not None and hasattr(scheduler, 'num_bad_epochs'):
+            if scheduler.num_bad_epochs > scheduler.patience:
+                if verbose:
+                    print(
+                        f'Early stopping: no improvement for {scheduler.num_bad_epochs} epochs '
+                        f'(patience={scheduler.patience}).'
+                    )
+                break
         
-        if val_losses[epoch] < best_val_loss - early_stopping_min_delta:
+        if val_losses[epoch] < best_val_loss:
             best_val_loss = val_losses[epoch]
-            epochs_without_improvement = 0
             # Save best model
             _d = {
                   'epoch': epoch,
@@ -255,7 +261,7 @@ def fine_tune(**kwargs):
                   'state_dict': model._model.state_dict(),
                   'optimizer': optim.state_dict(),
                   'scheduler': scheduler.state_dict() if not scheduler == None else None,
-                  'freezed_all_but': freeze_all_but,
+                  'freezed_all_but': layers_to_train,
                   'best_epoch': best_epoch,
                   'best_val_loss': best_val_loss
                   }
@@ -264,16 +270,8 @@ def fine_tune(**kwargs):
 
             if verbose: print(f'  → New best validation loss: {best_val_loss:.6f}')
 
-        else:
-            epochs_without_improvement += 1
-
         if verbose: 
             print(f'epoch {epoch} - train loss: {train_losses[epoch]:.4f} - val loss: {val_losses[epoch]:.4f} - train acc: {train_acc[epoch]*100:.2f} - val acc: {val_acc[epoch]*100:.2f} - time: {time()-t0:.2f}')
-
-        if early_stopping and epochs_without_improvement >= early_stopping_patience:
-            if verbose:
-                print(f'\nEarly stopping triggered after {early_stopping_patience} epochs without improvement')
-            break
         
         # saving and plotting
         if (epoch+1)%save_every == 0:
@@ -286,7 +284,7 @@ def fine_tune(**kwargs):
                   'state_dict': model._model.state_dict(),
                   'optimizer': optim.state_dict(),
                   'scheduler': scheduler.state_dict() if not scheduler == None else None,
-                  'freeze_all_but': freeze_all_but, 
+                  'layers_to_train': layers_to_train, 
                   'best_epoch': best_epoch,
                   'best_val_loss': best_val_loss
                   }
@@ -323,12 +321,12 @@ def fine_tune(**kwargs):
                 color=axs[0].lines[1].get_color(), label=f'best loss {val_losses_np[best_epoch]:.3f}'
             )
             axs[1].plot(
-                [best_epoch], [train_acc_np[best_epoch]],
+                [best_epoch], [train_acc_np[best_epoch]*100],
                 marker='*', markersize=12, linestyle='None',
                 color=axs[1].lines[0].get_color()
             )
             axs[1].plot(
-                [best_epoch], [val_acc_np[best_epoch]],
+                [best_epoch], [val_acc_np[best_epoch]*100],
                 marker='*', markersize=12, linestyle='None',
                 color=axs[1].lines[1].get_color(), label=f'best Acc {val_acc_np[best_epoch]:.3f}'
             )

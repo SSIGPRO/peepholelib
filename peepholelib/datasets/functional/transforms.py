@@ -1,5 +1,6 @@
 import torch
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 
 means = {
         'CIFAR10': torch.tensor([0.424, 0.415, 0.384]).view(1,3,1,1),
@@ -24,7 +25,7 @@ vgg16_cifar100 = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-vgg16_cifar100_augumentations = transforms.Compose([
+vgg16_cifar100_augmentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     vgg16_cifar100
 ])
@@ -39,9 +40,11 @@ resnet50_cifar100 = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-resnet50_cifar100_augumentations = transforms.Compose([
+resnet50_cifar100_augmentations = transforms.Compose([
+    transforms.Resize((232, 232)),
+    transforms.CenterCrop((224, 224)),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
-    vgg16_cifar100
+    transforms.ToTensor(),
 ])
 
 #-----------------------------
@@ -53,9 +56,10 @@ vgg16_cifar10 = transforms.Compose([
     transforms.ToTensor(),
     ])
 
-vgg16_cifar10_augumentations = transforms.Compose([
-    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
-    vgg16_cifar10
+vgg16_cifar10_augmentations = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
+    transforms.ToTensor(),
     ])
 
 #-----------------------------
@@ -81,7 +85,7 @@ vgg16_svhn = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-vgg16_svhn_augumentations = transforms.Compose([
+vgg16_svhn_augmentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.SVHN), 
     vgg16_svhn
 ])
@@ -97,10 +101,12 @@ vit_b_16_cifar100 = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-vit_b_16_cifar100_augumentations = transforms.Compose([
-    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
-    vit_b_16_cifar100
-    ])
+vit_b_16_cifar100_augmentations = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop((224, 224)),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
+    transforms.ToTensor(),
+])
 
 #-----------------------------
 # ViT on ImageNet
@@ -113,7 +119,7 @@ vit_b_16_imagenet = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-vit_b_16_imagenet_augumentations = transforms.Compose([
+vit_b_16_imagenet_augmentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET), 
     vit_b_16_imagenet
     ])
@@ -131,6 +137,26 @@ vit_b_16_svhn = transforms.Compose([
 vit_b_16_svhn_augumentations = transforms.Compose([
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.SVHN), 
     vit_b_16_svhn
+])
+
+#-----------------------------
+# Swin on CIFAR 100
+#-----------------------------
+
+swin_b_cifar100 = transforms.Compose([
+    # uses interpolation=InterpolationMode.BILINEAR by default 
+    transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
+    transforms.CenterCrop(256),
+    transforms.ToTensor(),
+    transforms.ToTensor(),
+])
+
+swin_b_cifar100_augmentations = transforms.Compose([
+    transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
+    transforms.CenterCrop(256),
+    transforms.ToTensor(),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
+    transforms.ToTensor(),
 ])
 
 #-----------------------------

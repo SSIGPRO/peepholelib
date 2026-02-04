@@ -5,6 +5,7 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
+from peepholelib.datasets.functional.transforms import vgg16_imagenet 
 
 # torch stuff
 import torch
@@ -164,7 +165,8 @@ class AwA(DatasetWrap):
 
     def __init__(self, **kwargs): 
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('transform')
+        self.transform = kwargs.get('transform', vgg16_imagenet)
+        self.augmentation = kwargs.get('augmentation', None)
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -176,29 +178,59 @@ class AwA(DatasetWrap):
         """
         Load and prepare CUB data.
         """
-        self.__dataset__ = {}
-
-        # Load train split
-        _ds = CustomDS(
-            path=self.path,
-            transform=self.transform,
-            reference_ds=self.reference_ds,
-            seed=self.seed
-        )
 
         self.__dataset__ = {}
-        
-        # split train into train and test
-        self.__dataset__['train'], self.__dataset__['val'], self.__dataset__['test'] = torch.utils.data.random_split(
-                _ds,
-                self.splitting_ratio,
-                generator = torch.Generator().manual_seed(self.seed)
-        )
+        if self.augmentation is None:
+            
 
-        # self._classes = {
-        #         'AwA-train': _ds.id_to_class,
-        #         'AwA-val': _ds.id_to_class,
-        #         }
+            # Load train split
+            _ds = CustomDS(
+                path=self.path,
+                transform=self.transform,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
+            
+            # split train into train and test
+            self.__dataset__['train'], self.__dataset__['val'], self.__dataset__['test'] = torch.utils.data.random_split(
+                    _ds,
+                    self.splitting_ratio,
+                    generator = torch.Generator().manual_seed(self.seed)
+            )
+
+        else:
+
+            base_ds = CustomDS(
+                    path=self.path,
+                    transform=self.transform,          
+                    reference_ds=self.reference_ds,
+                    seed=self.seed
+                )
+
+            aug_ds = CustomDS(
+                    path=self.path,
+                    transform=self.augmentation,      
+                    reference_ds=self.reference_ds,
+                    seed=self.seed
+                )
+
+            generator = torch.Generator().manual_seed(self.seed)
+
+            train_idx, val_idx, test_idx = torch.utils.data.random_split(
+                range(len(base_ds)), self.splitting_ratio, generator=generator
+            )
+
+            train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
+            val_ds   = torch.utils.data.Subset(base_ds, val_idx.indices)
+            test_ds  = torch.utils.data.Subset(base_ds, test_idx.indices)
+
+            # 4) Save
+            self.__dataset__ = {
+                    'train': train_ds,
+                    'val': val_ds,
+                    'test': test_ds
+                }
+
 
     def get(self, ds_key, idx):
         '''
