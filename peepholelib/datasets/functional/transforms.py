@@ -30,6 +30,21 @@ vgg16_cifar100_augumentations = transforms.Compose([
 ])
 
 #-----------------------------
+# ResNet50 on CIFAR100 
+#-----------------------------
+
+resnet50_cifar100 = transforms.Compose([
+    transforms.Resize((232, 232)),
+    transforms.CenterCrop((224, 224)),
+    transforms.ToTensor(),
+])
+
+resnet50_cifar100_augumentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
+    vgg16_cifar100
+])
+
+#-----------------------------
 # VGG16 on CIFAR10 
 #-----------------------------
 

@@ -15,25 +15,6 @@ def img_classification_acc(pred, target):
     pred_idx = torch.argmax(pred, dim=1)
     return (pred_idx == target).sum()
 
-def set_requires_grad(model, requires_grad, layer_names):
-    """
-    Set requires_grad for model parameters.
-    
-    Args:
-        model: PyTorch model
-        requires_grad: Whether to enable gradients
-        layer_names: Optional list of layer names to target. If None, affects all parameters.
-    """
-    if layer_names is None:
-        # Affect all parameters
-        for param in model.parameters():
-            param.requires_grad = requires_grad
-    else:
-        # Affect only specified layers
-        for name, param in model.named_parameters():
-            if any(layer_name in name for layer_name in layer_names):
-                param.requires_grad = requires_grad
-
 def get_trainable_params(model):
     """Get list of trainable parameters."""
     return [p for p in model.parameters() if p.requires_grad]
@@ -86,10 +67,10 @@ def fine_tune(**kwargs):
     if freeze_all_but is not None:
         if verbose:
             print(f'Freezing all layers except: {freeze_all_but}')
-        set_requires_grad(model._model, False, None)
-        set_requires_grad(model._model, True, freeze_all_but)
+        model.set_requires_grad(set_requires_grad = False, layer_names = None)
+        model.set_requires_grad(set_requires_grad = True, layer_names = freeze_all_but)
     else:
-        set_requires_grad(model._model, True, None)
+        model.set_requires_grad(set_requires_grad = True, layer_names = None)
         if verbose:
             print(f'No layers to freeze. Training all layers')
 
@@ -182,7 +163,7 @@ def fine_tune(**kwargs):
         if verbose: print('No training ongoing, starting anew.')
         initial_epoch = 0
         best_val_loss = float('inf')
-        best_epoch = None
+        best_epoch = 0
 
     path.mkdir(parents=True, exist_ok=True)
     best_model_path = path/'best_model'
@@ -323,8 +304,8 @@ def fine_tune(**kwargs):
             axs[0].set_ylabel('loss')
             axs[0].set_title('Loss')
 
-            axs[1].plot(train_acc_np, label='train')
-            axs[1].plot(val_acc_np, label='val')
+            axs[1].plot(train_acc_np*100, label='train')
+            axs[1].plot(val_acc_np*100, label='val')
             axs[1].set_ylabel('Acc')
             axs[1].set_xlabel('epoch')
             axs[1].set_title('Accuracy')
@@ -334,12 +315,12 @@ def fine_tune(**kwargs):
             axs[0].plot(
                 [best_epoch], [train_losses_np[best_epoch]],
                 marker='*', markersize=12, linestyle='None',
-                color=axs[0].lines[0].get_color(), label='best model'
+                color=axs[0].lines[0].get_color()
             )
             axs[0].plot(
                 [best_epoch], [val_losses_np[best_epoch]],
                 marker='*', markersize=12, linestyle='None',
-                color=axs[0].lines[1].get_color()
+                color=axs[0].lines[1].get_color(), label=f'best loss {val_losses_np[best_epoch]:.3f}'
             )
             axs[1].plot(
                 [best_epoch], [train_acc_np[best_epoch]],
@@ -349,7 +330,7 @@ def fine_tune(**kwargs):
             axs[1].plot(
                 [best_epoch], [val_acc_np[best_epoch]],
                 marker='*', markersize=12, linestyle='None',
-                color=axs[1].lines[1].get_color()
+                color=axs[1].lines[1].get_color(), label=f'best Acc {val_acc_np[best_epoch]:.3f}'
             )
 
             for ax in axs:

@@ -164,6 +164,28 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         return res 
     
+    def set_requires_grad(self, **kwargs):
+        """
+        Set requires_grad for model parameters.
+        
+        Args:
+            model: PyTorch model
+            requires_grad: Whether to enable gradients
+            layer_names: Optional list of layer names to target. If None, affects all parameters.
+        """
+        layer_names = kwargs['layer_names']
+        requires_grad = kwargs.get('requires_grad', True) 
+        
+        if layer_names is None:
+            # Affect all parameters
+            for param in self._model.parameters():
+                param.requires_grad = requires_grad
+        else:
+            # Affect only specified layers
+            for name, param in self._model.named_parameters():
+                if any(layer_name in name for layer_name in layer_names):
+                    param.requires_grad = requires_grad
+    
     def update_output(self, **kwargs):
         '''
         Update the model output to one with size `to_n_classes`. This is done by substituting the model's output by, or appending a, new `torch.nn.Linear` layer accoding to `overwrite`.
@@ -178,39 +200,63 @@ class ModelWrap(metaclass=abc.ABCMeta):
         - a thumbs up
         '''
 
-        out_layer = kwargs['output_layer']
         n_classes = kwargs['to_n_classes']
-        overwrite = kwargs.get('overwrite', False)
-        
-        keys = out_layer.split(".")[:-1]
-        temp = self._model
-        for p in keys:
-            #check that string part is actually a key in temp._modules
-            if p not in temp._modules.keys():
-                raise RuntimeError(f'seems like {p} is not in the NN, are you sure the output_layer is correct?') 
-            temp = temp._modules[p]
 
-        if not isinstance(temp, torch.nn.Sequential):
-            raise RuntimeError('Last module should be torch.nn.Sequential(). If you update the logic to handle any type of network, please submitt a PR.')
+        model = self._model
+    
+        for attr in ["fc", "classifier", "heads"]:
+            if hasattr(model, attr):
+                layer = getattr(model, attr)
+                if isinstance(layer, nn.Linear):
+                    setattr(model, attr, nn.Linear(layer.in_features, n_classes, bias=(layer.bias is not None), device=self.device))
+                    return model
+                if isinstance(layer, nn.Sequential) and len(layer) > 0 and isinstance(layer[-1], nn.Linear):
+                    last = layer[-1]
+                    layer[-1] = nn.Linear(last.in_features, n_classes, bias=(last.bias is not None), device=self.device)
+                    return model
+                
+    def append_classifier(self, **kwargs):
+        """
+        Append a new nn.Linear head after the existing classifier.
 
-        if not isinstance(temp[-1], torch.nn.Linear):
-            raise RuntimeError('Last layer is not a linear layer. I will not change it.')
-        
-        if overwrite:
-            in_size = temp[-1].in_features
-            new_layer = torch.nn.Linear(in_size, n_classes, device=self.device)
-            temp[-1] = new_layer
-            
-            # update target modules
-            if self._target_modules != None:
-                if out_layer in self._target_modules:
-                    self._target_modules[out_layer] = new_layer
+        Tries common classifier attributes: fc, classifier, head.
+        The classifier must be either:
+        - nn.Linear
+        - nn.Sequential ending with nn.Linear
+        """
 
-        else:
-            out_size = temp[-1].out_features 
-            temp.append(torch.nn.Linear(out_size, n_classes, device=self.device))
+        n_classes = kwargs['to_n_classes']
 
-        return
+        model = self._model
+
+        for attr in ["fc", "classifier", "heads"]:
+            if not hasattr(model, attr):
+                continue
+
+            layer = getattr(model, attr)
+
+            if isinstance(layer, nn.Linear):
+                out_size = layer.out_features
+                new_head = nn.Linear(out_size, n_classes, bias=(layer.bias is not None), device=self.device)
+
+                setattr(
+                    model,
+                    attr,
+                    nn.Sequential(layer, new_head)
+                )
+                return model
+
+            if isinstance(layer, nn.Sequential) and len(layer) > 0 and isinstance(layer[-1], nn.Linear):
+                out_size = layer[-1].out_features
+                new_head = nn.Linear(out_size, n_classes, bias=(layer[-1].bias is not None), device=self.device)
+
+                layer.append(new_head)
+                return model
+
+        raise RuntimeError(
+            "Could not find a classifier head to append to. "
+            "Expected one of ['fc', 'classifier', 'head']."
+        )
 
     def load_checkpoint(self, **kwargs):
         '''
