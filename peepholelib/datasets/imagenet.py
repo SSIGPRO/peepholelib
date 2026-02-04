@@ -15,6 +15,7 @@ import pickle
 import torch
 from torch.utils.data import DataLoader
 from torchvision.datasets import ImageNet as IN1K
+from torch.utils.data import random_split
 
 # peepholelib imports
 from peepholelib.datasets.datasetWrap import DatasetWrap
@@ -41,6 +42,8 @@ class ImageNet(DatasetWrap):
         if 'transform' not in kwargs:
             kwargs['transform'] = vgg16_imagenet
 
+        augmentation = kwargs.get('augmentation', None)
+
         DatasetWrap.__init__(self, **kwargs)
 
         return
@@ -55,24 +58,59 @@ class ImageNet(DatasetWrap):
 
         transform = self.transform
         seed = self.seed
-            
+
         # set torch seed
         torch.manual_seed(seed)
 
-        # datasets
-        train_ds = ImageNetCustom(
-                root = self.path,
-                split = 'train',
+        test_ds = ImageNetCustom(
+                root=self.path,
+                split='val',
                 transform=transform
-                )
-        val_ds = ImageNetCustom(
-                root = self.path,
-                split = 'val',
-                transform=transform
-                )
+            )
 
-        # metadata
-        self.__dataset__ = {"ImageNet-train": train_ds, "ImageNet-val": val_ds}
+        if self.augmentation is None:
+
+            full_train = ImageNetCustom(
+                root=self.path,
+                split='train',
+                transform=transform
+            )
+
+            train_ds, val_ds = random_split(
+                full_train,
+                [0.8, 0.2],
+                generator=torch.Generator().manual_seed(self.seed)
+            )
+            
+        else:
+            full_train_aug = ImageNetCustom(
+                root=self.path,
+                split='train',
+                transform=self.augmentation
+            )
+
+            full_train_noaug = ImageNetCustom(
+                root=self.path,
+                split='train',
+                transform=transform
+            )
+
+            g = torch.Generator().manual_seed(seed)
+            train_idx, val_idx = random_split(
+                range(len(full_train_aug)),
+                [0.8, 0.2],
+                generator=g
+            )
+            train_ds = torch.utils.data.Subset(full_train_aug, train_idx)
+            val_ds = torch.utils.data.Subset(full_train_noaug, val_idx)
+
+        
+        self.__dataset__ = {
+                "ImageNet-train": train_ds,
+                "ImageNet-val": val_ds,
+                "ImageNet-test": test_ds
+            }
+
         self._classes = {i: c for i, c in enumerate(train_ds.classes)}
 
         return

@@ -9,6 +9,7 @@ from tqdm import tqdm
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data._utils.collate import default_collate
 
 def img_classification_acc(pred, target):
     
@@ -46,7 +47,7 @@ def fine_tune(**kwargs):
     bs = kwargs.get('batch_size', 256)
     max_epochs = kwargs.get('max_epochs', 1000)
     iterations = kwargs.get('iterations', 'full')
-    n_threads = kwargs.get('n_threads', 0)
+    n_threads = kwargs.get('n_threads', 4)
 
     # early stopping
     early_stopping = kwargs.get('early_stopping', False)
@@ -67,10 +68,10 @@ def fine_tune(**kwargs):
     if freeze_all_but is not None:
         if verbose:
             print(f'Freezing all layers except: {freeze_all_but}')
-        model.set_requires_grad(set_requires_grad = False, layer_names = None)
-        model.set_requires_grad(set_requires_grad = True, layer_names = freeze_all_but)
+        model.set_requires_grad(requires_grad = False, layer_names = None)
+        model.set_requires_grad(requires_grad = True, layer_names = freeze_all_but)
     else:
-        model.set_requires_grad(set_requires_grad = True, layer_names = None)
+        model.set_requires_grad(requires_grad = True, layer_names = None)
         if verbose:
             print(f'No layers to freeze. Training all layers')
 
@@ -86,27 +87,34 @@ def fine_tune(**kwargs):
     
     if iterations == 'full': 
         if verbose: print('using the whole dataset every iteration')
-        iter_train = ceil(len(ds._dss[train_key])/bs)
-        iter_val = ceil(len(ds._dss[val_key])/bs) 
+        iter_train = ceil(len(ds.__dataset__[train_key])/bs)
+        iter_val = ceil(len(ds.__dataset__[val_key])/bs) 
     else:
         iter_train = iterations 
         iter_val = iterations 
 
     # dataloader for the dataset
+    pin_memory = device.type == "cuda"
+    dl_kwargs = dict(
+            collate_fn=default_collate,
+            num_workers=n_threads,
+            pin_memory=pin_memory,
+            persistent_workers=n_threads > 0,
+            prefetch_factor=2 if n_threads > 0 else None,
+        )
+
     train_dl = DataLoader(
-            dataset = ds._dss[train_key], 
-            batch_size = bs, 
-            shuffle = True, 
-            collate_fn = lambda x:x, 
-            num_workers = n_threads,
+            dataset=ds.__dataset__[train_key],
+            batch_size=bs,
+            shuffle=True,
+            **dl_kwargs,
         )
 
     val_dl = DataLoader(
-            dataset = ds._dss[val_key], 
-            batch_size = bs, 
-            shuffle = False, 
-            collate_fn = lambda x:x, 
-            num_workers = n_threads,
+            dataset=ds.__dataset__[val_key],
+            batch_size=bs,
+            shuffle=False,
+            **dl_kwargs,
         ) 
     
     # to save losses
@@ -199,6 +207,8 @@ def fine_tune(**kwargs):
             optim.step()
             loss_acc += loss*n_samples
             acc_acc += acc_fn(pred, labels)
+
+            
 
         train_losses[epoch] = (loss_acc/samples_acc).detach().cpu()
         train_acc[epoch] = (acc_acc/samples_acc).detach().cpu()
