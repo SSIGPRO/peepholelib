@@ -189,7 +189,7 @@ class AwA(DatasetWrap):
         self.__dataset__ = {}
         
         # split train into train and test
-        self.__dataset__['train'], self.__dataset__['val'], self.__dataset__['test'] = torch.utils.data.random_split(
+        self.__dataset__['AwA-train'], self.__dataset__['AwA-val'], self.__dataset__['AwA-test'] = torch.utils.data.random_split(
                 _ds,
                 self.splitting_ratio,
                 generator = torch.Generator().manual_seed(self.seed)
