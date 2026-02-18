@@ -24,8 +24,11 @@ class ImageNetCustom(IN1K):
 
     def __getitem__(self, index):
         img, target = super().__getitem__(index)
-
-        return torch.tensor(img), torch.tensor(target)
+        sample = {
+            "image": torch.tensor(img),
+            "label": torch.tensor(target),
+        }
+        return sample
 
 class ImageNet(DatasetWrap):
     def __init__(self, **kwargs):
