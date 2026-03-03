@@ -180,6 +180,10 @@ class ParsedDataset():
                             num_workers = n_threads
                             )
                     
+                    if len(in_ktc) == 0 and len(out_ktc) == 0: 
+                        if verbose: print(f'Nothing to parse. Skipping.')
+                        continue
+
                     if verbose: print(f'Parsing {ds_key}')
                     for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
                         # parse input ds
@@ -226,25 +230,6 @@ class ParsedDataset():
 
         return
     
-    def lazy_stack(self, **kwargs):
-        '''
-        Append other parsed datasets to self. `parsed datasets` contain then `self._dss` stribute.
-
-        Args:
-        others (list[peepholelib.datasets.dataset_base.DatasetBase]): list os datasets inheriting `DatasetBase` which have been parsed.
-        '''
-        others = kwargs.get('others')
-
-        for ods in others:
-            for ds_key in ods._dss:
-                print('dskey: ', ds_key)
-                if ds_key in self._dss:
-                    raise RuntimeError(f'Trying to add {ds_key} from others, but key is already present in self.')
-                    
-                self._dss[ds_key] = ods._dss[ds_key]
-                print(f'appending {ds_key}')
-        return
-
     def __enter__(self):
         self._is_contexted = True
         return self

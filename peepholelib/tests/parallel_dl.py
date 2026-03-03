@@ -7,6 +7,10 @@ import sys
 from torch.utils.data import DataLoader
 import time
 
+# ----------
+# What we learn
+#
+# 1. Using multiple workers usually only slows down things. I believe that the overhead of managing threads are overthrowing the benefits. Maybe it is a GIL problem
 def p(td, bs, nw=1):
     if nw == 1:
         dl = DataLoader(td, batch_size=bs, collate_fn=lambda x:x)
