@@ -3,7 +3,6 @@ from pathlib import Path as Path
 from tqdm import tqdm
 from math import ceil
 
-
 # tensordict
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
@@ -11,10 +10,6 @@ from tensordict import MemoryMappedTensor as MMT
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
-
-# our stuff
-from peepholelib.models.prediction_fns import multilabel_classification
-from peepholelib.datasets.functional.results import results_one_hot_encoding
 
 class ParsedDataset():
     def __init__(self, **kwargs):
@@ -32,7 +27,7 @@ class ParsedDataset():
         self._classes = None
         
         # used in the contexted manager
-        self._is_contexted = None 
+        is_contexted = None 
         return
 
     def get(self, ds_key, idx):
@@ -44,144 +39,162 @@ class ParsedDataset():
             raise RuntimeError('Data not loaded. Please run model.load_only() first.')
 
         return self._classes
-    
+   
     @classmethod
-    def create_ds(cls, **kwargs):
+    def parse_ds(cls, **kwargs):
         '''
-            Create datasets: creates a `ParsedDataset` instance containing a pointer for a PersistentTensorDict for each dataset, pointers are saved in a dictionary `cls._dss` whose keys are the `dataset_wraps`'s keys appendend with each loader insides its `__datasets__` dict. Generally the name of the PTDFs files are  `dss.<ds_wrap_key>-<loader>` and are saved in `path`.
-            Returns: a pointer to the class istance `cls`.
+        Parse datasets, saving images, labels, model output, 'result' (1 if samples are correctly classified, 0 otherwise). I know, copying images and labels is redundant, but it is convenient to have them all in a common structure for the downstream computations.
+        Data is saved into a 'tensordict.PersistentTensorDict' at 'path/dss.<loader>', with 'loader' being the loaders keys (see peepholelib.datasets). Alreday existing files are skipped.
+        Args:
+        - path (str): base path to store parsed datasets.
+        - dataset_wraps (dict{str: peepholelib.dataset_base.DatasetWrap}): Dictionary with key being the name, and value an instance of specific dataset inheriting `datasets.DatasetWrap`.
+        - ds_samplers (dict(str: dict())): Dictionary with same keys as `datasets`, and values being a sampler (see `datasets.functional.samplers`). Facultative.
+        - keys_to_copy (dict(str: list[str])): Dictionary with same keys as `datasets`, and values lists of keys to copy from the dataset_wraps. Skips already present keys. If `None` copies all keys (which are not already present). Defaults to `None`. 
+        - inference_fn (callable): Inference function that returns a dictionary of outputs to be saved with the parsed dataset. This is useful if the model does not return a dictionary or to add extra computation to its outputs, e.g. One might pass a function which returns just `image` and `label`, so the parsed dataset can be used for training a model; another example is to add `result` and `output` for havin the model's logits or a correct classification. Defaults to `None`
 
-            Args:
-            - path (str): base path to store the datasets
-            - dataset_wraps (dict[str, peepholelib.datasets.datasetWrap.DatasetWrap]): dict of dataset classes inhereting the `DatasetWrap` class. 
-            - batch_size (int): batch size for processing.
-            - n_threads (int): number of workers passed to DataLoaders.
-            - ds_samplers (dict[str, function]): dict of functions to apply to the datasets (should have the same keys as the dataset_wraps)
-            - verbose (bool): print progress messages.
+        - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+        - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
+        - verbose (bool): print progress messages.
         '''
-        path = Path(kwargs['path'])
-        dataset_wraps = kwargs['dataset_wraps'] 
-        bs = kwargs.get('batch_size', 2**11)
-        n_threads = kwargs.get('n_threads', 1)
-        ds_samplers = kwargs.get('ds_samplers', None) 
-        verbose = kwargs.get('verbose', False)
+        
+        path = Path(kwargs.get('path'))
+        model = kwargs.get('model')
+        ds_wraps = kwargs.get('dataset_wraps')
+        ds_samplers = kwargs.get('ds_samplers', None)
+        keys_to_copy = kwargs.get('keys_to_copy', None)
+        inference_fn = kwargs.get('inference_fn', None)
+        bs = kwargs.get('batch_size', 64) 
+        n_threads = kwargs.get('n_threads', 1) 
+        verbose = kwargs.get('verbose', False) 
 
         path.mkdir(parents=True, exist_ok=True)
-        cls_inst = cls(path=path)
+        cls_inst = cls(path = path)
         cls_inst._dss = {}
 
-        if verbose: print(f'Creating datasets {list(dataset_wraps.keys())}. ')
-
+        # enter the context manager
         with cls_inst:
-            for ds_name, ds_wrap in dataset_wraps.items():
+            for ds_name, ds_wrap in ds_wraps.items():
+
                 ds_wrap.__load_data__()
 
-                if ds_samplers is not None:
-                    ds_samplers[ds_name](ds=ds_wrap)
+                if ds_samplers != None and ds_name in ds_samplers:
+                    if verbose: print(f'Applying {ds_samplers[ds_name]} to {ds_name}')
+                    ds_samplers[ds_name](ds = ds_wrap)
 
-                for ds_key, ds_src in ds_wrap.__dataset__.items():
-
-                    file_path = path / ('dss.' + ds_key)
+                for ds_key in ds_wrap.__dataset__:
+                    if verbose: print(f'\n ---- Getting data from {ds_key}\n')
+                    file_path = cls_inst.path/('dss.'+ds_key)
+                    
                     if file_path.exists():
-                        if verbose: print(f'File {file_path} exists. Skipping creation of {ds_key}.')
-                        continue
+                        if verbose: print(f'File {file_path} exists. Loading from disk.')
 
-                    n_samples = len(ds_src)
-                    if verbose: print(f'Creating {ds_key} dataset with n_samples: ', n_samples)
+                        cls_inst._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+                        n_samples = len(cls_inst._dss[ds_key])
+                        # this is a workaround for when loading PTDs with already populated MMTs
+                        cls_inst._dss[ds_key].batch_size = torch.Size((n_samples,))
 
-                    cls_inst._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-                    sample = ds_src[0]
+                        _ns_wrap = len(ds_wrap.__dataset__[ds_key])
 
-                    for k, v in sample.items(): 
-                        if verbose: print(f'allocating {k} with shape {v.shape}')
-                        cls_inst._dss[ds_key][k] = MMT.empty(
-                            shape=torch.Size((n_samples,) + v.shape),
-                            dtype=v.dtype
-                        )
+                        # Check if PTD's number of samples is the same ds_wrap's 
+                        if n_samples != _ns_wrap:
+                            raise RuntimeError('Dataset Wrap {ds_key} has {_ns_wrap} samples, but the partsed one has {n_samples} samples. Something is wrong here.')
+                        
+                        if verbose: print('loaded n_samples: ', n_samples)
+                    else:
+                        n_samples = len(ds_wrap.__dataset__[ds_key])
 
-                    dl_in = DataLoader(dataset=ds_src, batch_size=bs, num_workers=n_threads)
-                    dl_t = DataLoader(cls_inst._dss[ds_key], collate_fn=lambda x: x, batch_size=bs)
+                        if verbose: print('Creating dataset with n_samples: ', n_samples)
 
-                    for data_in, data_t in tqdm(zip(dl_in, dl_t), disable=not verbose, total=ceil(n_samples/bs)):
-                        for key in data_in.keys():
+                        cls_inst._dss[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+
+                    #------------------------
+                    # Pre-allocation 
+                    #------------------------
+                    # dry run to get shapes
+                    sample = next(iter(DataLoader(
+                            dataset = ds_wrap.__dataset__[ds_key],
+                            batch_size = 1,
+                            shuffle = False
+                            ))) 
+
+                    # check is all keys_to_copy are withing the samples
+                    if len(list(set(keys_to_copy)-set(sample.keys()))) > 0:
+                           raise RuntimeError(f'keys_to_copy {keys_to_copy} should be a subset of the keys from a ds_wrap sample, but {ds_key} has {list(sample.keys())}.')
+                    
+                    # only copy the keys that are not already within the PTD
+                    in_ktc  = list(set(keys_to_copy) - set(cls_inst._dss[ds_key].keys()))
+
+                    if verbose: print(f'New keys to copy from dataset wrap: {in_ktc}')
+
+                    for key in in_ktc:
+                        _v = sample[key]
+                        _shape = (n_samples,)+_v.shape[1:]
+
+                        if verbose: print(f'Allocating {key} with shape {_shape}')
+
+                        cls_inst._dss[ds_key][key] = MMT.empty(
+                                shape = torch.Size(_shape),
+                                dtype = _v.dtype
+                                )
+
+                    if inference_fn != None:
+                        # make the inference
+                        with torch.no_grad():
+                            _res = inference_fn(data = sample)
+
+                        out_ktc = list(set(_res.keys())-set(cls_inst._dss[ds_key].keys()))
+                        if verbose: print(f'New output keys to add: {out_ktc}')
+                         
+                        for key in out_ktc:
+                            _v = _res[key]
+                            _shape = (n_samples,)+_v.shape[1:]
+
+                            if verbose: print(f'Allocating {key} with shape {_shape}')
+
+                            cls_inst._dss[ds_key][key] = MMT.empty(
+                                    shape = torch.Size(_shape),
+                                    dtype = _v.dtype
+                                    )
+
+                    # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                    # This is done so we can use multiple workers with the dataloaders 
+                    cls_inst._dss[ds_key].close()
+                    cls_inst._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+                    #------------------------
+                    # copy images and labels
+                    #------------------------
+                    # create dataloader of input dataset
+                    dl_ori = DataLoader(
+                            dataset = ds_wrap.__dataset__[ds_key],
+                            batch_size = bs,
+                            shuffle = False
+                            ) 
+
+                    dl_dst = DataLoader(
+                            cls_inst._dss[ds_key],
+                            batch_size = bs,
+                            collate_fn = lambda x:x,
+                            shuffle = False,
+                            num_workers = n_threads
+                            )
+                    
+                    if verbose: print(f'Parsing {ds_key}')
+                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
+                        # parse input ds
+                        for key in in_ktc:
                             data_t[key] = data_in[key]
+                        
+                        # parse outputs 
+                        if inference_fn != None:
+                            with torch.no_grad():
+                                _res = inference_fn(data = data_in)
+
+                            for key in out_ktc:
+                                data_t[key] = _res[key]
 
         return cls_inst
 
-
-    def parse_ds(self, **kwargs):
-        '''
-        Adds model outputs, predictions and results to an existing `ParsedDataset` dataset (for each loader).
-        If these fields are already present, they are skipped.
-
-        Args:
-        - model (peepholelib.models.model_warp.ModelWrap): Model to use for predictions.
-        - loaders (list[str]): list of dataset keys to parse. If None, all keys in self._dss are parsed.
-        - batch_size (int): batch size for processing.
-        - pred_fn (function): function to get predicted labels from model outputs. Defaults to `multilabel_classification`.
-        - result_fn (function): function to get results from predicted labels and true labels. Defaults to `results_one_hot_encoding`.
-        - verbose (bool): print progress messages.
-        '''
-        self.check_uncontexted()
-        
-        model = kwargs['model'] 
-        loaders = kwargs.get('loaders', None)
-        bs = kwargs.get('batch_size', 2**11)
-        verbose = kwargs.get('verbose', False)
-        pred_fn = kwargs.get('pred_fn', multilabel_classification) 
-        result_fn = kwargs.get('result_fn', results_one_hot_encoding) 
-
-        if loaders is None:
-            loaders = self._dss.keys()
-
-        # check if dataset is opened with the correct mode bofore any allocation/computation 
-        r_modes = [ds_key for ds_key in loaders if self._dss[ds_key].mode == 'r']
-        if len(r_modes) > 0:
-            raise RuntimeError(f"Datasets '{r_modes}' are in 'r' mode. Make sure no other handle/process has it open read-only.") 
-
-        for ds_key in loaders:
-            file_path = self.path / ('dss.' + ds_key)
-
-            if self._dss is None:
-                self._dss = {}
-
-            if ds_key not in self._dss:
-                    self._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-
-            if ('output' in self._dss[ds_key]) and ('pred' in self._dss[ds_key]) and ('result' in self._dss[ds_key]):
-                continue
-
-            n_samples = len(self._dss[ds_key])
-
-            # Dry run to get shapes and dtype
-            sample = self._dss[ds_key][0:1]['image'].to(model.device)
-            sample_label = self._dss[ds_key][0:1]['label'].to(model.device)
-            with torch.no_grad():
-                _out = model(sample)
-
-            self._dss[ds_key].batch_size = torch.Size((n_samples,))
-            num_classes = _out.shape[1]
-            _pred = pred_fn(_out)
-            _res = result_fn(_pred, sample_label)
-
-            # TODO: get the shapes from output, pred and result from the dryrun 
-            self._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)), dtype=_out.dtype)
-            self._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=_pred.dtype)
-            self._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=_res.dtype)
-
-            dl = DataLoader(self._dss[ds_key], collate_fn=lambda x: x, batch_size=bs)
-
-            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples / bs)):
-                with torch.no_grad():
-                    y_output = model(data['image'].to(model.device))
-
-                predicted_labels = pred_fn(y_output).detach().cpu()
-                data['output'] = y_output
-                data['pred'] = predicted_labels
-                data['result'] = result_fn(predicted_labels, data['label'])
-
-        return 
-    
     def load_only(self, **kwargs):
         '''
         Load already computed dataset.
@@ -252,3 +265,5 @@ class ParsedDataset():
         if not self._is_contexted:
             raise RuntimeError('Function should be called within context manager')
         return
+
+

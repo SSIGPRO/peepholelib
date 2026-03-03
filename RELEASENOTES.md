@@ -1,6 +1,7 @@
 # DEVEL
 
 ## Datasets
+- Add `inference_fn` for parsing datasets.
 - Implement AWA e CUB wrappers
 
 ## SVDs

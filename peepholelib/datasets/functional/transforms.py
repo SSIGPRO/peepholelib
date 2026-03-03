@@ -46,7 +46,6 @@ vgg16_cifar10_augumentations = transforms.Compose([
 #-----------------------------
 # VGG16 on Imagenet 
 #-----------------------------
-
 vgg16_imagenet = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
