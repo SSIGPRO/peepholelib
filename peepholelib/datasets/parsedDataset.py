@@ -27,7 +27,7 @@ class ParsedDataset():
         self._classes = None
         
         # used in the contexted manager
-        is_contexted = None 
+        self._is_contexted = None 
         return
 
     def get(self, ds_key, idx):
@@ -58,7 +58,6 @@ class ParsedDataset():
         '''
         
         path = Path(kwargs.get('path'))
-        model = kwargs.get('model')
         ds_wraps = kwargs.get('dataset_wraps')
         ds_samplers = kwargs.get('ds_samplers', None)
         keys_to_copy = kwargs.get('keys_to_copy', None)
@@ -97,7 +96,7 @@ class ParsedDataset():
 
                         # Check if PTD's number of samples is the same ds_wrap's 
                         if n_samples != _ns_wrap:
-                            raise RuntimeError('Dataset Wrap {ds_key} has {_ns_wrap} samples, but the partsed one has {n_samples} samples. Something is wrong here.')
+                            raise RuntimeError(f'Dataset Wrap {ds_key} has {_ns_wrap} samples, but the parsed one has {n_samples} samples. Something is wrong here.')
                         
                         if verbose: print('loaded n_samples: ', n_samples)
                     else:
@@ -118,7 +117,9 @@ class ParsedDataset():
                             ))) 
 
                     # check is all keys_to_copy are withing the samples
-                    if len(list(set(keys_to_copy)-set(sample.keys()))) > 0:
+                    if keys_to_copy == None:
+                        keys_to_copy = list(sample.keys())
+                    elif len(list(set(keys_to_copy)-set(sample.keys()))) > 0:
                            raise RuntimeError(f'keys_to_copy {keys_to_copy} should be a subset of the keys from a ds_wrap sample, but {ds_key} has {list(sample.keys())}.')
                     
                     # only copy the keys that are not already within the PTD
