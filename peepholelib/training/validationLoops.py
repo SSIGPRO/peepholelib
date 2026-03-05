@@ -1,4 +1,5 @@
 from time import time
+from math import isinf
 import torch
 
 def DefaultValidationLoop(**kwargs):
@@ -12,7 +13,7 @@ def DefaultValidationLoop(**kwargs):
         acc_acc = 0.0
         samples_acc = 0
 
-        for it, _data in zip(range(trainer.iter_val), trainer.val_dl):
+        for _, _data in zip(range(trainer.iter_val), trainer.val_dl):
             data = trainer.in_parser(_data)
             images = data["image"].contiguous().to(trainer.device, non_blocking=True)
             labels = data["label"].contiguous().to(trainer.device, non_blocking=True)
@@ -41,25 +42,11 @@ def DefaultValidationLoop(**kwargs):
         else:
             trainer.scheduler.step()
 
-    # early stopping
-    if (
-        trainer.early_stopping
-        and trainer.scheduler is not None
-        and hasattr(trainer.scheduler, "num_bad_epochs")
-        and hasattr(trainer.scheduler, "patience")
-    ):
-        if trainer.scheduler.num_bad_epochs > trainer.scheduler.patience:
-            if trainer.verbose:
-                print(
-                    f'Early stopping: no improvement for {trainer.scheduler.num_bad_epochs} epochs '
-                    f'(patience={trainer.scheduler.patience}).'
-                )
-            return True
-
     # best model tracking
     if trainer.val_losses[epoch] < trainer.best_val_loss:
         trainer.best_val_loss = trainer.val_losses[epoch]
         trainer.best_epoch = epoch
+        if trainer.num_bad_epochs is not None : trainer.num_bad_epochs = 0
 
         # Optional: save best model snapshot
         best_model_path = getattr(trainer, "best_model_path", trainer.path / "best_model")
@@ -80,6 +67,27 @@ def DefaultValidationLoop(**kwargs):
 
         if trainer.verbose:
             print(f'  -> New best validation loss: {trainer.best_val_loss:.6f}')
+    else:
+        if trainer.num_bad_epochs is not None : trainer.num_bad_epochs += 1
+
+    # early stopping
+    if trainer.early_stopping:
+        if (hasattr(trainer.scheduler, "num_bad_epochs") and hasattr(trainer.scheduler, "patience")):
+            if trainer.scheduler.num_bad_epochs > trainer.scheduler.patience:
+                if trainer.verbose:
+                    print(
+                        f'Early stopping: no improvement for {trainer.scheduler.num_bad_epochs} epochs '
+                        f'(patience={trainer.scheduler.patience}).'
+                    )
+                return True
+        else:
+            if trainer.num_bad_epochs > trainer.early_stopping_patience:
+                if trainer.verbose:
+                    print(
+                        f'Early stopping: no improvement for {trainer.num_bad_epochs} epochs '
+                        f'(patience={trainer.early_stopping_patience}).'
+                    )
+                return True
 
     if trainer.verbose and t0 is not None:
         print(

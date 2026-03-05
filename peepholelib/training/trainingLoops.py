@@ -1,4 +1,6 @@
-def DefaultTrainLoop(trainer, epoch):
+def DefaultTrainLoop(**kwargs):
+    trainer = kwargs['trainer']
+    epoch = kwargs['epoch']
     loss_acc = 0.0
     acc_acc = 0.0
     samples_acc = 0

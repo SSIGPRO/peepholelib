@@ -89,3 +89,4 @@ def DefaultSavingLoop(trainer, epoch):
             trainer._plot_archived = True
 
     fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)

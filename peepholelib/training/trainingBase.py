@@ -1,8 +1,6 @@
 #general python stuff
 from pathlib import Path as Path
 import abc 
-from matplotlib import pyplot as plt
-from functools import partial
 from math import ceil
 from time import time
 from math import isinf
@@ -100,7 +98,7 @@ class Trainer(metaclass=abc.ABCMeta):
         self.early_stopping_patience = kwargs.get("early_stopping_patience", float('inf'))
         self._plot_archived = False
         self.no_training = False
-        self.bad_epochs = 0
+        self.num_bad_epochs = None
 
         self.train_dl = DataLoader(
                                 dataset=self.ds.__dataset__[self.train_key],
@@ -135,6 +133,7 @@ class Trainer(metaclass=abc.ABCMeta):
             if self.scheduler is None:
                 raise ValueError('early_stopping=True requires a scheduler with num_bad_epochs and patience.')
             if not hasattr(self.scheduler, 'num_bad_epochs') or not hasattr(self.scheduler, 'patience'):
+                self.num_bad_epochs = 0
                 if isinf(self.early_stopping_patience):
                     raise ValueError("early_stopping_patience cannot be infinite.")
 
@@ -178,7 +177,6 @@ class Trainer(metaclass=abc.ABCMeta):
             
             # resume from the checkpoint we loaded
             self.initial_epoch = int(data.get('best_epoch', trained_for-1)) + 1
-            
             
             current_state = self.optim.state_dict()
             saved_state = data['optimizer']
@@ -229,8 +227,8 @@ class Trainer(metaclass=abc.ABCMeta):
         for epoch in range(self.initial_epoch, self.max_epochs):
 
             t0 = time()
-            self.train_loop(self, epoch)
-            stop = self.validation_loop(self, epoch, t0=t0)
+            self.train_loop(trainer=self, epoch=epoch)
+            stop = self.validation_loop(trainer=self, epoch=epoch, t0=t0)
             if stop:
                 break
             if (epoch + 1) % self.save_every == 0:
