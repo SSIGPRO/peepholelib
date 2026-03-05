@@ -98,7 +98,6 @@ class Trainer(metaclass=abc.ABCMeta):
         self.early_stopping_patience = kwargs.get("early_stopping_patience", float('inf'))
         self._plot_archived = False
         self.no_training = False
-        self.num_bad_epochs = None
 
         self.train_dl = DataLoader(
                                 dataset=self.ds.__dataset__[self.train_key],
@@ -132,7 +131,7 @@ class Trainer(metaclass=abc.ABCMeta):
         if self.early_stopping:
             if self.scheduler is None:
                 raise ValueError('early_stopping=True requires a scheduler.')
-            if not hasattr(self.scheduler, 'num_bad_epochs') or not hasattr(self.scheduler, 'patience'):
+            else:
                 self.num_bad_epochs = 0
                 if isinf(self.early_stopping_patience):
                     raise ValueError("early_stopping_patience cannot be infinite.")
@@ -173,7 +172,7 @@ class Trainer(metaclass=abc.ABCMeta):
             self.val_acc[:saved_len] = data['val_accuracy'] 
             self.best_epoch = data['best_epoch']
             self.best_val_loss = data['best_val_loss']
-            self.num_bad_epochs = data.get('num_bad_epochs', self.num_bad_epochs)
+            self.num_bad_epochs = data['num_bad_epochs']
 
             self.model.load_checkpoint(
                     path = self.path,

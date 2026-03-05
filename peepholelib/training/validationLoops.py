@@ -73,22 +73,13 @@ def DefaultValidationLoop(**kwargs):
 
     # early stopping
     if trainer.early_stopping:
-        if (hasattr(trainer.scheduler, "num_bad_epochs") and hasattr(trainer.scheduler, "patience")):
-            if trainer.scheduler.num_bad_epochs >= trainer.scheduler.patience:
-                if trainer.verbose:
-                    print(
-                        f'Early stopping: no improvement for {trainer.scheduler.num_bad_epochs} epochs '
-                        f'(patience={trainer.scheduler.patience}).'
-                    )
-                return True
-        else:
-            if trainer.num_bad_epochs >= trainer.early_stopping_patience:
-                if trainer.verbose:
-                    print(
-                        f'Early stopping: no improvement for {trainer.num_bad_epochs} epochs '
-                        f'(patience={trainer.early_stopping_patience}).'
-                    )
-                return True
+        if trainer.num_bad_epochs > trainer.early_stopping_patience:
+            if trainer.verbose:
+                print(
+                    f'Early stopping: no improvement for {trainer.num_bad_epochs} epochs '
+                    f'(patience={trainer.early_stopping_patience}).'
+                )
+            return True
 
     if trainer.verbose and t0 is not None:
         print(
