@@ -131,7 +131,7 @@ class Trainer(metaclass=abc.ABCMeta):
 
         if self.early_stopping:
             if self.scheduler is None:
-                raise ValueError('early_stopping=True requires a scheduler with num_bad_epochs and patience.')
+                raise ValueError('early_stopping=True requires a scheduler.')
             if not hasattr(self.scheduler, 'num_bad_epochs') or not hasattr(self.scheduler, 'patience'):
                 self.num_bad_epochs = 0
                 if isinf(self.early_stopping_patience):
@@ -158,7 +158,12 @@ class Trainer(metaclass=abc.ABCMeta):
             
             _f = (self.path / 'best_model' / 'best_model_config.pt').as_posix()
             if self.verbose: print(f'Loading best model config from {_f}')
-            data = torch.load(_f) 
+            if not Path(_f).exists():
+                raise FileNotFoundError(
+                    f'Checkpoint files found in {self.path} but no best model config at {_f}. '
+                    'Training state may be corrupted.'
+                )
+            data = torch.load(_f, weights_only=False) 
             
             # to save accuracies and losses
             saved_len = len(data['train_losses'])
@@ -168,26 +173,27 @@ class Trainer(metaclass=abc.ABCMeta):
             self.val_acc[:saved_len] = data['val_accuracy'] 
             self.best_epoch = data['best_epoch']
             self.best_val_loss = data['best_val_loss']
+            self.num_bad_epochs = data.get('num_bad_epochs', self.num_bad_epochs)
 
             self.model.load_checkpoint(
                     path = self.path,
                     name = _f,
-                    vebose =self. verbose
+                    verbose =self. verbose
                     )
             
             # resume from the checkpoint we loaded
             self.initial_epoch = int(data.get('best_epoch', trained_for-1)) + 1
             
-            current_state = self.optim.state_dict()
-            saved_state = data['optimizer']
-            if current_state == saved_state:
+            try:
                 self.optim.load_state_dict(data['optimizer'])
+            except (ValueError, KeyError):
+                if self.verbose: print('Optimizer state incompatible with checkpoint, starting fresh.')
 
             if self.scheduler is not None and 'scheduler' in data and data['scheduler'] is not None:
-                current_state = self.scheduler.state_dict()
-                saved_state = data['scheduler']
-
-                if current_state == saved_state: self.scheduler.load_state_dict(data['scheduler'])
+                try:
+                    self.scheduler.load_state_dict(data['scheduler'])
+                except (ValueError, KeyError):
+                    if self.verbose: print('Scheduler state incompatible with checkpoint, starting fresh.')
             
         else:
             if self.verbose: print('No training ongoing, starting anew.')
@@ -232,7 +238,7 @@ class Trainer(metaclass=abc.ABCMeta):
             if stop:
                 break
             if (epoch + 1) % self.save_every == 0:
-                self.saving_loop(self, epoch)
+                self.saving_loop(trainer=self, epoch=epoch)
                 
     def test(self):
         if self.verbose: print('----- Testing Model ----- ')
@@ -247,6 +253,6 @@ class Trainer(metaclass=abc.ABCMeta):
                             verbose=self.verbose,
                         )
 
-        return self.test_loop(self)
+        return self.test_loop(trainer=self)
 
     

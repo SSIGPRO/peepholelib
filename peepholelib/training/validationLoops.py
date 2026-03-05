@@ -62,6 +62,7 @@ def DefaultValidationLoop(**kwargs):
             "scheduler": trainer.scheduler.state_dict() if trainer.scheduler is not None else None,
             "best_epoch": trainer.best_epoch,
             "best_val_loss": trainer.best_val_loss,
+            "num_bad_epochs": trainer.num_bad_epochs,
         }
         torch.save(_d, best_model_path / "best_model_config.pt")
 
@@ -73,7 +74,7 @@ def DefaultValidationLoop(**kwargs):
     # early stopping
     if trainer.early_stopping:
         if (hasattr(trainer.scheduler, "num_bad_epochs") and hasattr(trainer.scheduler, "patience")):
-            if trainer.scheduler.num_bad_epochs > trainer.scheduler.patience:
+            if trainer.scheduler.num_bad_epochs >= trainer.scheduler.patience:
                 if trainer.verbose:
                     print(
                         f'Early stopping: no improvement for {trainer.scheduler.num_bad_epochs} epochs '
@@ -81,7 +82,7 @@ def DefaultValidationLoop(**kwargs):
                     )
                 return True
         else:
-            if trainer.num_bad_epochs > trainer.early_stopping_patience:
+            if trainer.num_bad_epochs >= trainer.early_stopping_patience:
                 if trainer.verbose:
                     print(
                         f'Early stopping: no improvement for {trainer.num_bad_epochs} epochs '

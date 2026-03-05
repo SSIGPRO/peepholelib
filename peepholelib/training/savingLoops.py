@@ -1,7 +1,9 @@
 import torch
 from matplotlib import pyplot as plt
 
-def DefaultSavingLoop(trainer, epoch):
+def DefaultSavingLoop(**kwargs):
+    trainer = kwargs['trainer']
+    epoch = kwargs['epoch']
     _d = {
         "epoch": epoch,
         "train_losses": trainer.train_losses[: epoch + 1],
@@ -13,6 +15,7 @@ def DefaultSavingLoop(trainer, epoch):
         "scheduler": trainer.scheduler.state_dict() if trainer.scheduler is not None else None,
         "best_epoch": trainer.best_epoch,
         "best_val_loss": trainer.best_val_loss,
+        "num_bad_epochs": trainer.num_bad_epochs,
     }
     torch.save(_d, trainer.file.as_posix() + "." + str(epoch) + ".pt")
 

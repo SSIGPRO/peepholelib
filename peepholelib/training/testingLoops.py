@@ -1,7 +1,8 @@
 # peepholelib/training/testingLoops.py
 import torch
 
-def DefaultTestLoop(trainer):
+def DefaultTestLoop(**kwargs):
+    trainer = kwargs['trainer']
     trainer.model._model.eval()
     loss_acc = 0.0
     acc_acc = 0.0
