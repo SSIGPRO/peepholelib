@@ -200,19 +200,3 @@ class AwA(DatasetWrap):
         #         'AwA-val': _ds.id_to_class,
         #         }
 
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
-    

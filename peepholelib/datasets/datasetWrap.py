@@ -25,7 +25,3 @@ class DatasetWrap(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def __load_data__(self):
         raise NotImplementedError()
-    
-    @abc.abstractmethod
-    def get(self, ds_key, idx):
-        raise NotImplementedError()

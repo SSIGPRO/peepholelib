@@ -12,6 +12,8 @@ def random_subsampling(ds, perc):
     return 
 
 def dist_preserving(data, n, weights='label'):
+    raise RuntimeError('DEPRECATED')
+
     if torch.is_tensor(weights) and len(weights.shape) == 1:
         _w = weights.float()
     elif type(weights) == str:

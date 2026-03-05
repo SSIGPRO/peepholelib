@@ -155,19 +155,3 @@ class Cifar100(DatasetWrap):
                 17: 'trees',
                 18: 'vehicles 1',
                 19: 'vehicles 2'}
-    
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]

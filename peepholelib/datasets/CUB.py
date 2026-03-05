@@ -298,19 +298,3 @@ class CUB(DatasetWrap):
         self.__dataset__['CUB-val'] = val_ds
         self.__dataset__['CUB-train'] = train_ds
         self.__dataset__['CUB-test'] = test_ds
-
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
