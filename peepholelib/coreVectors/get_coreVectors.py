@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 
 # our stuff
 from peepholelib.models.model_wrap import get_in_activations
-from peepholelib.models.prediction_fns import multilabel_classification
 
 def get_coreVectors(self, **kwargs):
     '''
@@ -73,6 +72,7 @@ def get_coreVectors(self, **kwargs):
             self._corevds[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
             n_samples = len(self._corevds[ds_key])
             if verbose: print('loaded n_samples: ', n_samples)
+            # this is a workaround for when loading PTDs with already populated MMTs
             self._corevds[ds_key].batch_size = torch.Size((n_samples,)) 
         else:
             n_samples = len(datasets._dss[ds_key])
