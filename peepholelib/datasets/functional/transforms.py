@@ -34,6 +34,20 @@ stds = {
         'ImageNet': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1),
         'SVHN': torch.tensor([0.198, 0.201, 0.197]).view(1,3,1,1),
         }
+    
+#-----------------------------
+# ConvNeXt_base on CIFAR100 
+#-----------------------------
+
+convnext_base_cifar100 = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+])
+
+convnext_base_cifar100_augmentations = transforms.Compose([
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
+    convnext_base_cifar100
+])
 
 #-----------------------------
 # VGG16 Augmentations
