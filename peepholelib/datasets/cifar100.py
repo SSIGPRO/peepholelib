@@ -3,7 +3,6 @@ import pickle
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16
 
 # torch stuff
 import torch
@@ -77,7 +76,7 @@ class Cifar100(DatasetWrap):
             - a thumbs up
         '''
         
-        self.transform = kwargs.get('std_transform', vgg16)
+        self.transform = kwargs.get('std_transform')
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 

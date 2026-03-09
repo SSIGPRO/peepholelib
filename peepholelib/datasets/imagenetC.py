@@ -6,7 +6,6 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 class CustomDS(Dataset):
     def __init__(self, samples, synset_to_label, transform):
@@ -72,8 +71,7 @@ class ImageNetC(DatasetWrap):
         Returns:
             - a thumbs up
         """
-        if "transform" not in kwargs:
-            kwargs["transform"] = transform
+        self.transform = kwargs.get('std_transform')
         self.corruptions = kwargs.get("corruptions", None)
         DatasetWrap.__init__(self, **kwargs)
 

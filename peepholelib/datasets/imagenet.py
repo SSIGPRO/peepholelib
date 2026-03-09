@@ -12,13 +12,11 @@ from pathlib import Path
 
 # torch stuff
 import torch
-from torch.utils.data import DataLoader
 from torchvision.datasets import ImageNet as IN1K
 from torch.utils.data import Subset, random_split
 
 # peepholelib imports
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 class ImageNetCustom(IN1K):
 
@@ -53,10 +51,8 @@ class ImageNet(DatasetWrap):
         """
 
         # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = transform
-
-        self.augmentation = kwargs.get('augmentation', None)
+        self.transform = kwargs.get('std_transform')
+        self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 
         DatasetWrap.__init__(self, **kwargs)

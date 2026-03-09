@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16
+
 # torch stuff
 import torch
 from torch.utils.data import Dataset
@@ -34,6 +34,7 @@ class CustomDS(Dataset):
             'saturate', 
             'motion_blur'
             ]
+        self.transform = transform
 
         self.mapping = {c: i for i, c in enumerate(p)}
         
@@ -48,7 +49,6 @@ class CustomDS(Dataset):
         if unknown:
             raise ValueError(f'Unknown corruption names found: {unknown}')
         self.corruptions = torch.tensor([self.mapping[c] for c in corruptions], dtype=torch.long)
-        self.transform = transform
         self.len = labels.shape[0]
         return
 
@@ -80,9 +80,7 @@ class CifarC(DatasetWrap):
             - a thumbs up
         '''
 
-        # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16
+        self.transform = kwargs.get('std_transform')
 
         DatasetWrap.__init__(self, **kwargs)
         
