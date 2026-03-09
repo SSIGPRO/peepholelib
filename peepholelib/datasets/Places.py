@@ -1,6 +1,5 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16
 from torchvision.datasets import Places365 as torchPlaces
 
 # torch stuff
@@ -34,8 +33,8 @@ class Places(DatasetWrap):
         '''
 
         # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16
+        self.transform = kwargs.get('std_transfrom')
+        
 
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
 
@@ -51,17 +50,10 @@ class Places(DatasetWrap):
         - a thumbs up
         '''
 
-        transform = self.transform
-        target_transform = self.target_transform
-        seed = self.seed              
-
-        # set torch seed
-        torch.manual_seed(seed)
-
         _data = PlacesCustom(
                 root = self.path,
                 split = 'val',
-                transform = transform,
+                transform = self.transform,
                 small = True,
                 download = True
                 )
@@ -69,8 +61,8 @@ class Places(DatasetWrap):
         # split to get 10000 samples for val and test
         _, val_dataset, test_dataset = random_split(
                 _data,
-                self.splitting_ratio, # to get exactly 10000 samples
-                generator=torch.Generator().manual_seed(seed)
+                self.splitting_ratio, 
+                generator=torch.Generator().manual_seed(self.seed)
                 )
                     
         self.__dataset__ = {

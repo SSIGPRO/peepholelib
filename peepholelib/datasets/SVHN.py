@@ -1,6 +1,5 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16 as transform 
 from torchvision.datasets import SVHN as torchSVHN
 
 # torch stuff
@@ -34,8 +33,7 @@ class SVHN(DatasetWrap):
         '''
         
         # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = transform
+        self.transform = kwargs.get('std_transfrom')
 
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
@@ -55,32 +53,26 @@ class SVHN(DatasetWrap):
         Returns:
         - a thumbs up
         '''
-        transform = self.transform
-        target_transform = self.target_transform
-        seed = self.seed 
-
-        # set torch seed
-        torch.manual_seed(seed)
 
         # split to get 10000 samples for test
         _test_data = SVHNCustom(
             root = self.path,
             split = 'test',
-            transform = transform,
+            transform = self.transform,
             download = True
         )
 
         _, test_dataset = random_split(
                 _test_data,
                 [1 - self.test_ratio, self.test_ratio],
-                generator=torch.Generator().manual_seed(seed)
+                generator=torch.Generator().manual_seed(self.seed)
                 )
         
         # split to get 10000 samples for val
         _train_data = SVHNCustom( 
             root = self.path,
             split = 'train',
-            transform = transform,
+            transform = self.transform,
             download = True
         )
         

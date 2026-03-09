@@ -6,7 +6,6 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 # torch stuff
 import torch
@@ -18,7 +17,7 @@ def onehot_to_index(bits):
             return torch.tensor([i])
     return torch.tensor([0])
 
-class CustomDS(Dataset):
+class CUBCustom(Dataset):
 
     def __init__(self, **kwargs):
         """
@@ -282,7 +281,7 @@ class CUB(DatasetWrap):
             - a thumbs up
         '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('std_transform', transform)
+        self.transform = kwargs.get('std_transform')
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
@@ -297,7 +296,7 @@ class CUB(DatasetWrap):
         """
         self.__dataset__ = {}
 
-        base_ds = CustomDS(
+        base_ds = CUBCustom(
             path=self.path,
             transform=self.transform,
             reference_ds=self.reference_ds,
@@ -315,7 +314,7 @@ class CUB(DatasetWrap):
 
         train_source_ds = base_ds
         if self.augmentation is not None:
-            train_source_ds = CustomDS(
+            train_source_ds = CUBCustom(
                 path=self.path,
                 transform=self.augmentation,
                 reference_ds=self.reference_ds,

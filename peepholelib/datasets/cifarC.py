@@ -15,14 +15,36 @@ class CustomDS(Dataset):
     def __init__(self, data, labels, corruptions, transform):
         Dataset.__init__(self) 
 
-        p = ['defocus_blur', 'glass_blur', 'spatter', 'contrast', 'fog', 'speckle_noise', 'shot_noise', 'impulse_noise', 'pixelate', 'snow', 'zoom_blur', 'gaussian_blur', 'jpeg_compression', 'gaussian_noise', 'frost', 'saturate', 'motion_blur']
+        p = [
+            'defocus_blur', 
+            'glass_blur', 
+            'spatter', 
+            'contrast', 
+            'fog', 
+            'speckle_noise', 
+            'shot_noise', 
+            'impulse_noise', 
+            'pixelate', 
+            'snow', 
+            'zoom_blur', 
+            'gaussian_blur', 
+            'jpeg_compression', 
+            'gaussian_noise', 
+            'frost', 
+            'saturate', 
+            'motion_blur'
+            ]
 
         self.mapping = {c: i for i, c in enumerate(p)}
+        
         self.data = []
         for d in tqdm(data, disable=True):
             self.data.append(Image.fromarray(d))
         self.labels = labels
-        unknown = sorted(set(corruptions) - set(self.mapping.keys()))
+
+        name_corruptions = set(corruptions)
+    
+        unknown = sorted(name_corruptions - set(self.mapping.keys()))
         if unknown:
             raise ValueError(f'Unknown corruption names found: {unknown}')
         self.corruptions = torch.tensor([self.mapping[c] for c in corruptions], dtype=torch.long)
@@ -73,12 +95,9 @@ class CifarC(DatasetWrap):
         Returns:
         - a thumbs up
         '''
-
-        transform = self.transform
-        seed = self.seed 
             
         # set torch seed
-        torch.manual_seed(seed)
+        torch.manual_seed(self.seed)
 
         c_levels = 5
         label_file = list(self.path.glob('labels.npy'))[0]
@@ -130,14 +149,14 @@ class CifarC(DatasetWrap):
                     data = c_images_test[cl],
                     labels = _labels[cl],
                     corruptions = c_corruptions_test,
-                    transform = transform,
+                    transform = self.transform,
                     )
             
             corrupted_datasets_val[cl] = CustomDS(
                     data = c_images_val[cl],
                     labels = _labels[cl],
                     corruptions = c_corruptions_val,
-                    transform = transform,
+                    transform = self.transform,
                     ) 
 
         self.__dataset__ = {}

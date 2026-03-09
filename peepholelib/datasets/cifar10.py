@@ -1,6 +1,5 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16
 
 # torch stuff
 import torch
@@ -44,7 +43,7 @@ class Cifar10(DatasetWrap):
             - a thumbs up
         '''
 
-        self.transform = kwargs.get('std_transform', vgg16)
+        self.transform = kwargs.get('std_transform')
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 
@@ -64,34 +63,31 @@ class Cifar10(DatasetWrap):
         - a thumbs up
         '''
         # accepts custom transform if provided in kwargs
-        transform = self.transform
-        augmentation = self.augmentation
-        seed = self.seed
 
         # Test dataset is loaded directly
         test_ds = CIFAR10Custom(
             root = self.path,
             train = False,
-            transform = transform,
+            transform = self.transform,
             download = True
         )
 
         base_ds = CIFAR10Custom(
                 root=self.path,
                 train=True,
-                transform=transform,
+                transform=self.transform,
                 download=False
             )
         
         train_idx, val_idx = random_split(
                 range(len(base_ds)),
                 [self.train_ratio, 1 - self.train_ratio],
-                generator=torch.Generator().manual_seed(seed)
+                generator=torch.Generator().manual_seed(self.seed)
             )
         
         val_ds = Subset(base_ds, val_idx)
         
-        if augmentation is None:
+        if self.augmentation is None:
                     
             train_ds = Subset(base_ds, train_idx)
 
@@ -99,7 +95,7 @@ class Cifar10(DatasetWrap):
             _train_aug = CIFAR10Custom(
                 root=self.path,
                 train=True,
-                transform=augmentation,
+                transform=self.augmentation,
                 download=True
             )
             train_ds = Subset(_train_aug, train_idx)

@@ -6,7 +6,6 @@ from math import ceil
 # tensordict
 from tensordict import PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
-from torch.utils.data._utils.collate import default_collate
 
 # torch stuff
 import torch
@@ -212,7 +211,6 @@ class ParsedDataset():
         loaders = kwargs.get('loaders')
         mode = kwargs.get('mode', 'r')
         verbose = kwargs.get('verbose', True)
-        if verbose: print(f'Loading datasets {loaders} with mode {mode}. ')
 
         self._dss = {}
         for ds_key in loaders:
@@ -226,7 +224,6 @@ class ParsedDataset():
 
             _n_samples = len(self._dss[ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
-        print('done loading datasets.')
         return
     
     def lazy_stack(self, **kwargs):

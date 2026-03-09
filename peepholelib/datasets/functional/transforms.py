@@ -20,7 +20,7 @@ stds = {
 # VGG16 
 #-----------------------------
 
-vgg16 = transforms.Compose([
+vgg16_transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
 ])
@@ -51,7 +51,7 @@ vgg16_svhn_augmentations = transforms.Compose([
 # ResNet50 on CIFAR100 
 #-----------------------------
 
-resnet50 = transforms.Compose([
+resnet50_transform = transforms.Compose([
     transforms.Resize((232, 232)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
@@ -79,7 +79,7 @@ resnet50_imagenet_augmentations = transforms.Compose([
 # ViT
 #-----------------------------
 
-vit_b_16 = transforms.Compose([
+vit_b_16_transform = transforms.Compose([
     transforms.Resize((256, 256)),
     transforms.CenterCrop((224, 224)),
     transforms.ToTensor(),
@@ -114,7 +114,7 @@ vit_b_16_svhn_augumentations = transforms.Compose([
 # Swin
 #-----------------------------
 
-swin_b = transforms.Compose([
+swin_b_transform = transforms.Compose([
     transforms.Resize(272, interpolation=InterpolationMode.BICUBIC),
     transforms.CenterCrop(256),
     transforms.ToTensor(),
@@ -142,7 +142,7 @@ swin_b_imagenet_augmentations = transforms.Compose([
 # Mobilenet on CIFAR 100
 #-----------------------------
 
-mobilenet_v2 = transforms.Compose([
+mobilenet_v2_transform = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
     transforms.ToTensor(),

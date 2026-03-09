@@ -71,26 +71,22 @@ class ImageNet(DatasetWrap):
         - a thumbs up
         '''
 
-        transform = self.transform
-        augmentation = self.augmentation
-        seed = self.seed
-
         test_ds = ImageNetCustom(
                 root=self.path,
                 split='val',
-                transform=transform
+                transform=self.transform
             )
         
         base_ds = ImageNetCustom(
                 root=self.path,
                 split='train',
-                transform=transform
+                transform=self.transform
             )
         
         train_idx, val_idx = random_split(
                 range(len(base_ds)),
                 [self.train_ratio, 1 - self.train_ratio],
-                generator=torch.Generator().manual_seed(seed)
+                generator=torch.Generator().manual_seed(self.seed)
             )
         
         val_ds = Subset(base_ds, val_idx)
@@ -103,7 +99,7 @@ class ImageNet(DatasetWrap):
             _train_aug = ImageNetCustom(
                 root=self.path,
                 split='train',
-                transform=augmentation,
+                transform=self.augmentation,
                 download=True
             )
             train_ds = Subset(_train_aug, train_idx)

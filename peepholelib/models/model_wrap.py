@@ -230,6 +230,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
             parent, child_name = model, name
         parent._modules[child_name] = new_mod
 
+        return
+
     def update_output(self, **kwargs):
         n_classes = kwargs["to_n_classes"]
         output_layer = kwargs["output_layer"]  

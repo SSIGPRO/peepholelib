@@ -5,14 +5,13 @@ from pathlib import Path
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 # torch stuff
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
 
-class CustomDS(Dataset):
+class AwACustom(Dataset):
     def __init__(self, **kwargs):
         """
         path: path to AwA2 folder containing JPEGImages/, classes.txt, predicate-matrix-binary.txt
@@ -185,7 +184,7 @@ class AwA(DatasetWrap):
             - a thumbs up
         '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('std_transform', transform)
+        self.transform = kwargs.get('std_transform')
         self.augmentation = kwargs.get('aug_transform', None)
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
         self.seed = kwargs.get('seed', 42)
@@ -200,7 +199,7 @@ class AwA(DatasetWrap):
         """
 
         self.__dataset__ = {}
-        _ds = CustomDS(
+        _ds = AwACustom(
                 path=self.path,
                 transform=self.transform,
                 reference_ds=self.reference_ds,
@@ -218,7 +217,7 @@ class AwA(DatasetWrap):
 
         else:
 
-            aug_ds = CustomDS(
+            aug_ds = AwACustom(
                     path=self.path,
                     transform=self.augmentation,      
                     reference_ds=self.reference_ds,
