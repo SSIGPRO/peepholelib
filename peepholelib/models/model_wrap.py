@@ -60,9 +60,9 @@ class Hook:
         return
 
     def __call__(self, module, module_in, module_out):
-        if self._si: 
+        if self._si:
             self.i_act = module_in[0]
-        if self._so: 
+        if self._so:
             self.o_act = module_out
 
         return

@@ -251,5 +251,3 @@ class ParsedDataset():
         if not self._is_contexted:
             raise RuntimeError('Function should be called within context manager')
         return
-
-

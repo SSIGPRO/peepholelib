@@ -1,11 +1,10 @@
 # torch stuff
 import torchattacks
-
+import torch
 # our stuff
 from .attack_base import AttackBase
 
 class myPGD(AttackBase):
-   
     def __init__(self, **kwargs):
         """
         PGD in the paper 'Towards Deep Learning Models Resistant to Adversarial Attacks'
@@ -31,27 +30,22 @@ class myPGD(AttackBase):
     
         """
         AttackBase.__init__(self, **kwargs)
-         
-        self.eps = kwargs.get('eps', 8/255)
-        self.alpha = kwargs.get('alpha', 1/255)
-        self.steps = kwargs.get('steps', 10)
-        self.random_start = kwargs.get('random_start', True)
-        self.mode = kwargs.get('mode', 'random')
-        
-        self.atk = torchattacks.PGD(
-                model=self.model._model, 
-                eps=self.eps, 
-                alpha=self.alpha, 
-                steps=self.steps,
-                random_start=self.random_start
-                )
 
-        if self.mode == 'random':
-            self.atk.set_mode_targeted_random(quiet=False)
-        elif self.mode == 'least-likely':
-            self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
-            self.atk.get_least_likely_label
-        return            
-      
+        self.eps = kwargs.get("eps", 8/255)
+        self.alpha = kwargs.get("alpha", 0.25/255)
+        self.steps = kwargs.get("steps", 100)
+        self.random_start = kwargs.get("random_start", True)
+
+        self.atk = torchattacks.PGD(
+            model=self.model._model,
+            eps=self.eps,
+            alpha=self.alpha,
+            steps=self.steps,
+            random_start=self.random_start,
+        )
+
+        self._set_targeted_mode()
+
     def __call__(self, images, labels):
+        self._get_target_label(images, labels)        
         return self.atk(images, labels)

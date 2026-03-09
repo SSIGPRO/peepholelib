@@ -1,4 +1,5 @@
 # torch stuff
+import torch
 import torchattacks
 
 # our stuff
@@ -29,28 +30,23 @@ class myBIM(AttackBase):
             attack = torchattacks.BIM(model, eps=8/255, alpha=2/255, steps=10)
             adv_images = attack(images, labels)
         """
-
         AttackBase.__init__(self, **kwargs)
 
-        self.eps = kwargs.get('eps', 8/255)
-        self.alpha = kwargs.get('alpha', 2/255)
-        self.steps = kwargs.get('steps', 10)
-        self.mode = kwargs.get('mode', 'random')
+        self.eps = kwargs.get("eps", 8/255)
+        self.alpha = kwargs.get("alpha", 0.25/255)
+        self.steps = kwargs.get("steps", 100)
+        # self.mode = kwargs.get("mode", "random")
+        # self.target_class = kwargs.get("target_class", 5)
 
         self.atk = torchattacks.BIM(
-                model = self.model._model, 
-                eps = self.eps, 
-                alpha = self.alpha, 
-                steps = self.steps
-                )
+            model=self.model._model,
+            eps=self.eps,
+            alpha=self.alpha,
+            steps=self.steps,
+        )
 
-        if self.mode == 'random':
-            self.atk.set_mode_targeted_random(quiet=False)
-        elif self.mode == 'least-likely':
-            self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
-            self.atk.get_least_likely_label
-
-        return
+        self._set_targeted_mode()
 
     def __call__(self, images, labels):
+        self._get_target_label(images, labels)
         return self.atk(images, labels)

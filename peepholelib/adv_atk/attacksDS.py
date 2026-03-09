@@ -83,6 +83,7 @@ class AttacksDS(ParsedDataset):
                         )
 
                 self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))
+                self._dss[tdsk]['y_target'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=torch.long) # by Kami
 
                 # Close PTD create with mode 'w' and re-open it with mode 'r+'
                 # This is done so we can use multiple workers with the dataloaders 
@@ -123,19 +124,35 @@ class AttacksDS(ParsedDataset):
                             images = ori_images,
                             labels = labels 
                             )
+                    # added by Kami
+                    y_target = getattr(atk, "y_target", None)
+                    if y_target is not None:
+                        y_target = y_target.detach().cpu().long()
+                    # added by Kami
                     
                     with torch.no_grad():
                         y_pred_ori = atk.model(ori_images.to(atk.model.device))
                         y_pred_atk = atk.model(atk_images.to(atk.model.device))
-                    pred_labels_ori = y_pred_ori.argmax(axis = 1)
-                    pred_labels_atk = y_pred_atk.argmax(axis = 1)
+                    pred_labels_ori = y_pred_ori.argmax(axis = 1).detach().cpu()
+                    pred_labels_atk = y_pred_atk.argmax(axis = 1).detach().cpu()
+                    y_pred_atk = y_pred_atk.detach().cpu()
 
-                    dt['image'] = atk_images
+                    dt['image'] = atk_images.detach().cpu()
                     dt['output'] = y_pred_atk
                     dt['pred'] = pred_labels_atk
-                    dt['result'] = pred_labels_atk == labels 
-                    dt['attack_success'] = torch.logical_and(pred_labels_ori == labels, pred_labels_atk != pred_labels_ori) 
+                    dt['result'] = pred_labels_atk == dt[label_key]
+                   # added by Kami
+                    clean_correct = (pred_labels_ori == dt[label_key])
+
+                    if y_target is None:
+                    # untargeted success
+                        dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk != pred_labels_ori)
+                    else:
+                    # targeted success
+                        dt['y_target'] = y_target
+                        dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk == y_target)
         return
+                    # added by Kami
 
     def get(self, ds_key, idx):
         '''
