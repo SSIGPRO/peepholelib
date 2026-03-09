@@ -1,6 +1,6 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_imagenet
+from torchvision.datasets import Places365 as torchPlaces
 
 # torch stuff
 import torch
@@ -8,6 +8,18 @@ from torch.utils.data import random_split
 
 # Places365 from torchvision
 from torchvision import datasets
+
+class PlacesCustom(torchPlaces):
+
+    def __init__(self, **kwargs):
+        torchPlaces.__init__(self, **kwargs)
+
+    def __getitem__(self, index):
+        img, label = super().__getitem__(index)
+
+        return {'image': img,
+                'label': torch.tensor(label),
+                }  
 
 class Places(DatasetWrap):
     def __init__(self, **kwargs):
@@ -21,12 +33,10 @@ class Places(DatasetWrap):
         '''
 
         # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_imagenet
+        self.transform = kwargs.get('std_transfrom')
+        
 
-        # make labels tensors unless caller explicitly overrides
-        if 'target_transform' not in kwargs:
-            kwargs['target_transform'] = lambda y: torch.as_tensor(y, dtype=torch.long)
+        self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
 
         DatasetWrap.__init__(self, **kwargs)
 
@@ -40,18 +50,10 @@ class Places(DatasetWrap):
         - a thumbs up
         '''
 
-        transform = self.transform
-        target_transform = self.target_transform
-        seed = self.seed              
-
-        # set torch seed
-        torch.manual_seed(seed)
-
-        _data = datasets.__dict__['Places365'](
+        _data = PlacesCustom(
                 root = self.path,
                 split = 'val',
-                transform = transform,
-                target_transform = target_transform,
+                transform = self.transform,
                 small = True,
                 download = True
                 )
@@ -59,8 +61,8 @@ class Places(DatasetWrap):
         # split to get 10000 samples for val and test
         _, val_dataset, test_dataset = random_split(
                 _data,
-                [0.45205478, 0.27397261, 0.27397261], # to get exactly 10000 samples
-                generator=torch.Generator().manual_seed(seed)
+                self.splitting_ratio, 
+                generator=torch.Generator().manual_seed(self.seed)
                 )
                     
         self.__dataset__ = {

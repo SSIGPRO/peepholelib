@@ -17,7 +17,7 @@ def onehot_to_index(bits):
             return torch.tensor([i])
     return torch.tensor([0])
 
-class CustomDS(Dataset):
+class CUBCustom(Dataset):
 
     def __init__(self, **kwargs):
         """
@@ -258,8 +258,31 @@ class CustomDS(Dataset):
 class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
+        '''
+        CUB loader (train & val & test). Train/val are created from the official
+        CUB training split using `train_ratio`, while test uses the official CUB
+        test split.
+
+        Args:
+            path (str): Path to the `CUB_200_2011` folder containing dataset files
+                (e.g. `images/`, `attributes/`, `parts/`, and split/label `.txt`
+                metadata files).
+            transform (callable, optional): Transform applied to validation/test
+                images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the
+                training split.
+            train_ratio (float, optional): Fraction of official training samples
+                used for train (remainder goes to val). Must be in (0, 1).
+            seed (int, optional): Random seed used for deterministic train/val
+                splitting.
+            reference_ds (str, optional): Reserved optional argument for
+                compatibility with other dataset loaders.
+        Returns:
+            - a thumbs up
+        '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('transform')
+        self.transform = kwargs.get('std_transform')
+        self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -273,28 +296,31 @@ class CUB(DatasetWrap):
         """
         self.__dataset__ = {}
 
-        # Load train split
-        _ds = CustomDS(
+        base_ds = CUBCustom(
             path=self.path,
             transform=self.transform,
             reference_ds=self.reference_ds,
             seed=self.seed
         )
 
-        self.__dataset__ = {}
-        
-        train_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 1]
-        test_indices = [i for i, flag in enumerate(_ds.is_train) if flag == 0]
+        train_indices_all = [i for i, flag in enumerate(base_ds.is_train) if flag == 1]
+        test_indices = [i for i, flag in enumerate(base_ds.is_train) if flag == 0]
 
-        train_ds = Subset(_ds, train_indices)
-        test_ds = Subset(_ds, test_indices)
+        train_indices, val_indices = random_split(
+                train_indices_all,
+                [self.train_ratio, 1.0 - self.train_ratio],
+                generator=torch.Generator().manual_seed(self.seed)
+                )
 
-        train_ds, val_ds = random_split(
-                                train_ds,
-                                [0.8, 0.2],
-                                generator=torch.Generator().manual_seed(self.seed)
-                            )
-        
-        self.__dataset__['CUB-val'] = val_ds
-        self.__dataset__['CUB-train'] = train_ds
-        self.__dataset__['CUB-test'] = test_ds
+        train_source_ds = base_ds
+        if self.augmentation is not None:
+            train_source_ds = CUBCustom(
+                path=self.path,
+                transform=self.augmentation,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
+
+        self.__dataset__['CUB-train'] = Subset(train_source_ds, train_indices)
+        self.__dataset__['CUB-val'] = Subset(base_ds, val_indices)
+        self.__dataset__['CUB-test'] = Subset(base_ds, test_indices)

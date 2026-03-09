@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 class ParsedDataset():
+
     def __init__(self, **kwargs):
         '''
         Creates instance of a parsed dataset.
@@ -27,7 +28,7 @@ class ParsedDataset():
         self._classes = None
         
         # used in the contexted manager
-        self._is_contexted = None 
+        self._is_contexted = None
         return
 
     def get(self, ds_key, idx):
@@ -209,7 +210,7 @@ class ParsedDataset():
 
         loaders = kwargs.get('loaders')
         mode = kwargs.get('mode', 'r')
-        verbose = kwargs.get('verbose', False)
+        verbose = kwargs.get('verbose', True)
 
         self._dss = {}
         for ds_key in loaders:
@@ -223,7 +224,6 @@ class ParsedDataset():
 
             _n_samples = len(self._dss[ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
-
         return
     
     def lazy_stack(self, **kwargs):
