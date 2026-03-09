@@ -49,12 +49,11 @@ class CustomDS(Dataset):
         if unknown:
             raise ValueError(f'Unknown corruption names found: {unknown}')
         self.corruptions = torch.tensor([self.mapping[c] for c in corruptions], dtype=torch.long)
-        self.transform = transform
         self.len = labels.shape[0]
         return
 
     def __len__(self):
-        return len(self.labels)
+        return self.len
 
     def __getitem__(self, idx):
         sample = {
