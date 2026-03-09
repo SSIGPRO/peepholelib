@@ -37,17 +37,9 @@ def get_coreVectors(self, **kwargs):
     activations_parser = kwargs.get('activations_parser', get_in_activations)
     bs = kwargs.get('batch_size', 64) 
     n_threads = kwargs.get('n_threads', 1) 
-
+    save_input = kwargs.get('save_input', True)
+    save_output = kwargs.get('save_output', False) 
     verbose = kwargs.get('verbose', False) 
-
-    # check for activations in all cv._dss
-    has_acts = True
-    for _ds in datasets._dss.values():
-        has_acts = has_acts and ('in_activations' in _ds) or ('out_activations' in _ds)
-
-    if not has_acts:
-        save_input = kwargs.get('save_input', True)
-        save_output = kwargs.get('save_output', False) 
 
     model = self._model 
     device = self._model.device 
@@ -56,8 +48,7 @@ def get_coreVectors(self, **kwargs):
         raise RuntimeError(f'Keys inconsistency between reducers and target_modules \n reducers keys: {reducers.keys()} \n target_modules: {model._target_modules.keys()}')
 
     # set the model to get activations
-    if not has_acts:
-        model.set_activations(save_input=save_input, save_output=save_output)
+    model.set_activations(save_input=save_input, save_output=save_output)
 
     self._corevds = {}
     for ds_key in datasets._dss:
@@ -84,15 +75,10 @@ def get_coreVectors(self, **kwargs):
         # check if module in and out activations exist
         _modules_to_save = []
 
-        # get sample activation
-        if has_acts:
-            # from dataset
-            _act0 = activations_parser(datasets._dss[ds_key][0:1])
-        else:
-            # from a model with a dry run
-            with torch.no_grad():
-                model(datasets._dss[ds_key][0:1][input_key].to(device))
-                _act0 = activations_parser(model._acts)
+        # sample for dry run
+        with torch.no_grad():
+            model(datasets._dss[ds_key][0:1][input_key].to(device))
+            _act0 = activations_parser(model._acts)
 
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
@@ -122,27 +108,17 @@ def get_coreVectors(self, **kwargs):
 
         cvs_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads) 
 
-        if has_acts:
-            if verbose: print('Using saved activations')
+        if verbose: print('Getting activations from model')
 
-            act_dl = DataLoader(datasets._actds[ds_key], batch_size=bs, collate_fn=activations_parser, shuffle=False, num_workers = n_threads)
+        ds_dl = DataLoader(datasets._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
 
-            for cvs_data, act_data in tqdm(zip(cvs_dl, act_dl), disable=not verbose, total=len(cvs_dl)):
-                for mk in _modules_to_save:
-                    cvs_data[mk] = reducers[mk](act_data=act_data[mk]).cpu()
-            
-        else:
-            if verbose: print('Getting activations from model')
-
-            ds_dl = DataLoader(datasets._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
-
-            for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
-                with torch.no_grad():
-                    model(ds_data[input_key].to(device))
-                    
-                for mk in _modules_to_save:
-                    act_data = activations_parser(model._acts)
-                    cvs_data[mk] = reducers[mk](act_data=act_data[mk]).cpu()
+        for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
+            with torch.no_grad():
+                model(ds_data[input_key].to(device))
+                
+            for mk in _modules_to_save:
+                act_data = activations_parser(model._acts)
+                cvs_data[mk] = reducers[mk](act_data=act_data[mk])
 
     # reset the model to NOT get activations
     model.set_activations(save_input=False, save_output=False)

@@ -114,27 +114,27 @@ class AttacksDS(ParsedDataset):
 
                 for di, dt in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
                     ori_images = di['image'].to(atk.model.device)
-
+                    labels = di[label_key].to(atk.model.device)
 
                     for key in keys_to_copy:
                         dt[key] = di[key]
                     
                     atk_images = atk(
                             images = ori_images,
-                            labels = di[label_key].to(atk.model.device)
+                            labels = labels 
                             )
                     
                     with torch.no_grad():
                         y_pred_ori = atk.model(ori_images.to(atk.model.device))
                         y_pred_atk = atk.model(atk_images.to(atk.model.device))
-                    pred_labels_ori = y_pred_ori.argmax(axis = 1).cpu()
-                    pred_labels_atk = y_pred_atk.argmax(axis = 1).cpu()
+                    pred_labels_ori = y_pred_ori.argmax(axis = 1)
+                    pred_labels_atk = y_pred_atk.argmax(axis = 1)
 
-                    dt['image'] = atk_images.cpu()
-                    dt['output'] = y_pred_atk.cpu()
+                    dt['image'] = atk_images
+                    dt['output'] = y_pred_atk
                     dt['pred'] = pred_labels_atk
-                    dt['result'] = pred_labels_atk == dt[label_key]
-                    dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk != pred_labels_ori) 
+                    dt['result'] = pred_labels_atk == labels 
+                    dt['attack_success'] = torch.logical_and(pred_labels_ori == labels, pred_labels_atk != pred_labels_ori) 
         return
 
     def get(self, ds_key, idx):
