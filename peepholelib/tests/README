@@ -1,0 +1,21 @@
+This folder contains basic tests used to learn the fundamentals of libraries and methods before incorporating them to the library.
+
+Therefore, it is a grate place to understand the library's mechanics.
+
+In the fodlers you will find:
+
+# basics
+Python's basics
+
+#model 
+Handling torch's models
+
+# methods 
+Different methods used in the library, e.g., GMM, dim reduction
+
+#PTD 
+Handling `tensordict.PersistentTensorDicts` and their friends
+
+
+#viz
+Visualizing results

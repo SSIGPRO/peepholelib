@@ -1,5 +1,4 @@
 # general python stuff
-from tqdm import tqdm
 from PIL import Image
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
+from torchvision.transforms import ToTensor 
 
 class AwACustom(Dataset):
     def __init__(self, **kwargs):
@@ -22,8 +22,8 @@ class AwACustom(Dataset):
 
         self.path = Path(kwargs['path'])
         self.reference_ds = kwargs['reference_ds']
-        self.transform = kwargs['transform']        
         self.seed = kwargs['seed']
+        self._to_tensor = ToTensor()
 
         # ---- Load class names ----
         classes_file = self.path / "classes.txt"
@@ -72,57 +72,57 @@ class AwACustom(Dataset):
             if self.reference_ds == 'ImageNet':
 
                 self.mapping_AwA_ImageNet = {
-                                                0: [351, 352, 353],
-                                                1: [294, 295, 297],
-                                                2: [148],
-                                                3: [337],
-                                                4: [251],
-                                                5: [283],
-                                                6: [339],
-                                                7: [235],
-                                                8: [147],
-                                                9: [284],
-                                                10: [361],
-                                                # 11 no match
-                                                12: [292],
-                                                13: [344],
-                                                14: [288, 289],
-                                                # 15 no match
-                                                16: [381],
-                                                17: [147],
-                                                18: [385, 386, 101],
-                                                19: [366],
-                                                20: [345, 346],
-                                                21: [277, 278, 279, 280],
-                                                22: [348, 349],
-                                                23: [150],
-                                                24: [367],
-                                                25: [333],
-                                                26: [335],
-                                                # 27 no match
-                                                28: [330, 331, 332],
-                                                # 29 no match
-                                                # 30 no match
-                                                31: [269, 270, 271, 272],
-                                                32: [151],
-                                                # 33 no match
-                                                34: [356],
-                                                35: [360],
-                                                36: [346],
-                                                37: [340],
-                                                38: [388],
-                                                # 39 no match 
-                                                40: [287],
-                                                41: [341],
-                                                42: [291],
-                                                # 43 no match
-                                                44: [296], 
-                                                45: [231, 232],
-                                                # 46 no match
-                                                # 47 no match
-                                                48: [345, 346],
-                                                # 49 no match
-                                            }
+                        0: [351, 352, 353],
+                        1: [294, 295, 297],
+                        2: [148],
+                        3: [337],
+                        4: [251],
+                        5: [283],
+                        6: [339],
+                        7: [235],
+                        8: [147],
+                        9: [284],
+                        10: [361],
+                        # 11 no match
+                        12: [292],
+                        13: [344],
+                        14: [288, 289],
+                        # 15 no match
+                        16: [381],
+                        17: [147],
+                        18: [385, 386, 101],
+                        19: [366],
+                        20: [345, 346],
+                        21: [277, 278, 279, 280],
+                        22: [348, 349],
+                        23: [150],
+                        24: [367],
+                        25: [333],
+                        26: [335],
+                        # 27 no match
+                        28: [330, 331, 332],
+                        # 29 no match
+                        # 30 no match
+                        31: [269, 270, 271, 272],
+                        32: [151],
+                        # 33 no match
+                        34: [356],
+                        35: [360],
+                        36: [346],
+                        37: [340],
+                        38: [388],
+                        # 39 no match 
+                        40: [287],
+                        41: [341],
+                        42: [291],
+                        # 43 no match
+                        44: [296], 
+                        45: [231, 232],
+                        # 46 no match
+                        # 47 no match
+                        48: [345, 346],
+                        # 49 no match
+                }
 
                 self.M = torch.zeros((len(self.id_to_class.keys()), 1000), dtype=torch.uint8)
 
@@ -137,8 +137,6 @@ class AwACustom(Dataset):
         img_path, class_id = self.samples[idx]
 
         img = Image.open(img_path).convert("RGB")
-        if self.transform:
-            img = self.transform(img)
 
         attr_tensor = self.attributes[class_id]
 
@@ -153,7 +151,7 @@ class AwACustom(Dataset):
             label = torch.tensor(class_id)
 
         sample = {
-            'image': img,
+            'image': self._to_tensor(img),
             'label': label,
             **attr_dict
         }
@@ -164,28 +162,18 @@ class AwA(DatasetWrap):
 
     def __init__(self, **kwargs): 
         '''
-        AwA loader (train & val & test). Splits are created from the full dataset
-        according to `splitting_ratio` (default: 0.6 train, 0.2 val, 0.2 test).
+        AwA loader (train & val & test). Splits are created from the full dataset according to `splitting_ratio` (default: 0.6 train, 0.2 val, 0.2 test).
 
         Args:
-            path (str): Path to the AwA2 folder containing dataset files
-                (e.g. `JPEGImages`, `classes.txt`, `predicates.txt`,
-                `predicate-matrix-binary.txt`).
-            transform (callable, optional): Transform applied to validation/test
-                images. Defaults to `vgg16`.
-            augmentation (callable, optional): If provided, applied only to the
-                training split.
-            splitting_ratio (list[float], optional): Ratios for
-                [train, val, test]. Must sum to 1.0.
+            path (str): Path to the AwA2 folder containing dataset files (e.g. `JPEGImages`, `classes.txt`, `predicates.txt`, `predicate-matrix-binary.txt`).
+            augmentation (callable, optional): If provided, applied only to the training split.
+            splitting_ratio (list[float], optional): Ratios for [train, val, test]. Must sum to 1.0.
             seed (int, optional): Random seed used for deterministic splits.
-            reference_ds (str, optional): Optional reference dataset name for
-                label remapping (currently supports `'ImageNet'`).
+            reference_ds (str, optional): Optional reference dataset name for label remapping (currently supports `'ImageNet'`).
         Returns:
             - a thumbs up
         '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('std_transform')
-        self.augmentation = kwargs.get('aug_transform', None)
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -201,36 +189,20 @@ class AwA(DatasetWrap):
         self.__dataset__ = {}
         _ds = AwACustom(
                 path=self.path,
-                transform=self.transform,
                 reference_ds=self.reference_ds,
                 seed=self.seed
             )
 
-        if self.augmentation is None:
-            
-            # split train into train and test
-            train_ds, val_ds, test_ds = torch.utils.data.random_split(
-                                                            _ds,
-                                                            self.splitting_ratio,
-                                                            generator = torch.Generator().manual_seed(self.seed)
-                                                    )
-
-        else:
-
-            aug_ds = AwACustom(
-                    path=self.path,
-                    transform=self.augmentation,      
-                    reference_ds=self.reference_ds,
-                    seed=self.seed
+        # split train into train and test
+        train_ds, val_ds, test_ds = torch.utils.data.random_split(
+                _ds,
+                self.splitting_ratio,
+                generator = torch.Generator().manual_seed(self.seed)
                 )
 
-            train_idx, val_idx, test_idx = torch.utils.data.random_split(
-                                range(len(_ds)), self.splitting_ratio, generator=torch.Generator().manual_seed(self.seed)
-                            )
-
-            train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
-            val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
-            test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
+        train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
+        val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
+        test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
 
         # 4) Save
         self.__dataset__ = {

@@ -1,5 +1,4 @@
 # general python stuff
-import os
 from collections import defaultdict
 from PIL import Image
 from pathlib import Path
@@ -10,6 +9,7 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 # torch stuff
 import torch
 from torch.utils.data import Dataset, Subset, random_split
+from torchvision.transforms import ToTensor 
 
 def onehot_to_index(bits):
     for i, b in enumerate(bits):
@@ -25,7 +25,7 @@ class CUBCustom(Dataset):
         """
         Dataset.__init__(self) 
         self.path = Path(kwargs['path'])
-        self.transform = kwargs['transform']
+        self._to_tensor = ToTensor()
 
         # ---- 1) basic files ----
         images_file = self.path / "images.txt"
@@ -52,7 +52,6 @@ class CUBCustom(Dataset):
                 self.id_to_label[int(img_id)] = torch.tensor(int(class_id) - 1, dtype=torch.int64)
 
         # ---- 4) img ids ----
-       
         self.img_ids = []
         self.is_train = []
         with open(split_file, "r") as f:
@@ -222,32 +221,32 @@ class CUBCustom(Dataset):
         parts_categorical = self.id_to_parts_categorical.get(img_id, [])
         attributes_categorical = self.id_to_attributes_categorical.get(img_id, [])
 
-        if self.transform is not None:
+        # TODO: move this to transform
+        '''
+        x, y, w, h = bbox.tolist()
 
-            x, y, w, h = bbox.tolist()
+        W_orig, H_orig = img.size
+        
+        img = self.transform(img)
 
-            W_orig, H_orig = img.size
+        _, W_new, H_new = img.shape
 
-            img = self.transform(img)
+        scale_x = W_new / W_orig
+        scale_y = H_new / H_orig
 
-            _, W_new, H_new = img.shape
+        bbox = torch.tensor([x * scale_x, y * scale_y, w  * scale_x, h * scale_y])
 
-            scale_x = W_new / W_orig
-            scale_y = H_new / H_orig
+        scaled_parts = {}
+        for name, t in parts_categorical.items():
+            x, y, vis = t.tolist()
+            x *= scale_x
+            y *= scale_y
+            scaled_parts[name] = torch.tensor([x, y, vis])
 
-            bbox = torch.tensor([x * scale_x, y * scale_y, w  * scale_x, h * scale_y])
-
-            scaled_parts = {}
-            for name, t in parts_categorical.items():
-                x, y, vis = t.tolist()
-                x *= scale_x
-                y *= scale_y
-                scaled_parts[name] = torch.tensor([x, y, vis])
-
-            parts_categorical = scaled_parts
-            
+        parts_categorical = scaled_parts
+        ''' 
         sample = {
-            "image": img,
+            "image": self._to_tensor(img),
             "label": label,
             "bbox": bbox,
             **attributes_categorical,
@@ -259,30 +258,18 @@ class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
         '''
-        CUB loader (train & val & test). Train/val are created from the official
-        CUB training split using `train_ratio`, while test uses the official CUB
-        test split.
+        CUB loader (train & val & test). Train/val are created from the official CUB training split using `train_ratio`, while test uses the official CUB test split.
 
         Args:
-            path (str): Path to the `CUB_200_2011` folder containing dataset files
-                (e.g. `images/`, `attributes/`, `parts/`, and split/label `.txt`
-                metadata files).
-            transform (callable, optional): Transform applied to validation/test
-                images. Defaults to `vgg16`.
-            augmentation (callable, optional): If provided, applied only to the
-                training split.
-            train_ratio (float, optional): Fraction of official training samples
-                used for train (remainder goes to val). Must be in (0, 1).
-            seed (int, optional): Random seed used for deterministic train/val
-                splitting.
-            reference_ds (str, optional): Reserved optional argument for
-                compatibility with other dataset loaders.
+            path (str): Path to the `CUB_200_2011` folder containing dataset files (e.g. `images/`, `attributes/`, `parts/`, and split/label `.txt` metadata files).
+            augmentation (callable, optional): If provided, applied only to the training split.
+            train_ratio (float, optional): Fraction of official training samples used for train (remainder goes to val). Must be in (0, 1).
+            seed (int, optional): Random seed used for deterministic train/val splitting.
+            reference_ds (str, optional): Reserved optional argument for compatibility with other dataset loaders.
         Returns:
             - a thumbs up
         '''
         self.path = kwargs.get('path')
-        self.transform = kwargs.get('std_transform')
-        self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
@@ -297,10 +284,9 @@ class CUB(DatasetWrap):
         self.__dataset__ = {}
 
         base_ds = CUBCustom(
-            path=self.path,
-            transform=self.transform,
-            reference_ds=self.reference_ds,
-            seed=self.seed
+            path = self.path,
+            reference_ds = self.reference_ds,
+            seed = self.seed
         )
 
         train_indices_all = [i for i, flag in enumerate(base_ds.is_train) if flag == 1]
@@ -312,15 +298,6 @@ class CUB(DatasetWrap):
                 generator=torch.Generator().manual_seed(self.seed)
                 )
 
-        train_source_ds = base_ds
-        if self.augmentation is not None:
-            train_source_ds = CUBCustom(
-                path=self.path,
-                transform=self.augmentation,
-                reference_ds=self.reference_ds,
-                seed=self.seed
-            )
-
-        self.__dataset__['CUB-train'] = Subset(train_source_ds, train_indices)
+        self.__dataset__['CUB-train'] = Subset(base_ds, train_indices)
         self.__dataset__['CUB-val'] = Subset(base_ds, val_indices)
         self.__dataset__['CUB-test'] = Subset(base_ds, test_indices)

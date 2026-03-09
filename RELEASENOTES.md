@@ -1,6 +1,8 @@
 # DEVEL
 
 ## Datasets
+- Move transforms for `parsedDatase` class. Dataset values are saved raw.
+- Separate the parsed dataset and inference values into different `PTD`s. Add `parse_dataset()` and `parse_inference()` functions for each.
 - Add `inference_fn` for parsing datasets.
 - Implement AWA e CUB wrappers
 

@@ -5,6 +5,7 @@ from torchvision.datasets import Places365 as torchPlaces
 # torch stuff
 import torch
 from torch.utils.data import random_split
+from torchvision.transforms import ToTensor 
 
 # Places365 from torchvision
 from torchvision import datasets
@@ -13,11 +14,13 @@ class PlacesCustom(torchPlaces):
 
     def __init__(self, **kwargs):
         torchPlaces.__init__(self, **kwargs)
+        self._to_tensor = ToTensor()
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
 
-        return {'image': img,
+        return {
+                'image': self._to_tensor(img),
                 'label': torch.tensor(label),
                 }  
 
@@ -31,11 +34,6 @@ class Places(DatasetWrap):
         Returns:
             - a thumbs up
         '''
-
-        # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom')
-        
-
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
 
         DatasetWrap.__init__(self, **kwargs)
@@ -53,7 +51,6 @@ class Places(DatasetWrap):
         _data = PlacesCustom(
                 root = self.path,
                 split = 'val',
-                transform = self.transform,
                 small = True,
                 download = True
                 )

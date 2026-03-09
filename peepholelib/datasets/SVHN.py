@@ -8,16 +8,19 @@ from torch.utils.data import random_split
 
 # SVHN from torchvision
 from torchvision import datasets
+from torchvision.transforms import ToTensor 
 
 class SVHNCustom(torchSVHN):
 
     def __init__(self, **kwargs):
         torchSVHN.__init__(self, **kwargs)
+        self._to_tensor = ToTensor()
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
 
-        return {'image': img,
+        return {
+                'image': self._to_tensor(img),
                 'label': torch.tensor(label),
                 }  
 
@@ -31,10 +34,6 @@ class SVHN(DatasetWrap):
         Returns:
             - a thumbs up
         '''
-        
-        # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom')
-
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
 
@@ -48,7 +47,6 @@ class SVHN(DatasetWrap):
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
@@ -58,7 +56,6 @@ class SVHN(DatasetWrap):
         _test_data = SVHNCustom(
             root = self.path,
             split = 'test',
-            transform = self.transform,
             download = True
         )
 
@@ -72,7 +69,6 @@ class SVHN(DatasetWrap):
         _train_data = SVHNCustom( 
             root = self.path,
             split = 'train',
-            transform = self.transform,
             download = True
         )
         
