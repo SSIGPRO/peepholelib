@@ -26,7 +26,7 @@ class myDeepFool(AttackBase):
         """
         AttackBase.__init__(self, **kwargs)
          
-        self.steps = kwargs.get('steps', 50)
+        self.steps = kwargs.get('steps', 300)
         self.overshoot = kwargs.get('overshoot', 0.02)
 
         self.atk = torchattacks.DeepFool(

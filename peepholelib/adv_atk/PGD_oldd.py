@@ -1,6 +1,6 @@
 # torch stuff
 import torchattacks
-import torch
+
 # our stuff
 from .attack_base import AttackBase
 
@@ -10,8 +10,8 @@ class PGDStoreTarget(torchattacks.PGD):
         self.y_target = y_t.detach().clone()
         return y_t
 
-
 class myPGD(AttackBase):
+   
     def __init__(self, **kwargs):
         """
         PGD in the paper 'Towards Deep Learning Models Resistant to Adversarial Attacks'
@@ -37,48 +37,27 @@ class myPGD(AttackBase):
     
         """
         AttackBase.__init__(self, **kwargs)
-
-        self.eps = kwargs.get("eps", 1/255)
-        self.alpha = kwargs.get("alpha", 0.25/255)
-        self.steps = kwargs.get("steps", 300)
-        self.random_start = kwargs.get("random_start", True)
-        self.mode = kwargs.get("mode", "random")
-        self.target_class = kwargs.get("target_class", 5)
-        self.custom_target_labels = kwargs.get("custom_target_labels", None)
-
+         
+        self.eps = kwargs.get('eps', 8/255)
+        self.alpha = kwargs.get('alpha', 0.05/255)
+        self.steps = kwargs.get('steps', 100)
+        self.random_start = kwargs.get('random_start', True)
+        self.mode = kwargs.get('mode', 'random')
+        
         self.atk = PGDStoreTarget(
-            model=self.model._model,
-            eps=self.eps,
-            alpha=self.alpha,
-            steps=self.steps,
-            random_start=self.random_start,
-        )
+                model=self.model._model, 
+                eps=self.eps, 
+                alpha=self.alpha, 
+                steps=self.steps,
+                random_start=self.random_start
+                )
 
-        if self.mode == "random":
+        if self.mode == 'random':
             self.atk.set_mode_targeted_random(quiet=False)
-
-        elif self.mode == "least-likely":
+        elif self.mode == 'least-likely':
             self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
-
-        elif self.mode == "fixed":
-            tc = int(self.target_class)
-
-            def fixed_target_fn(inputs, labels):
-                y_t = torch.full_like(labels, tc)
-                same = (y_t == labels)
-                if same.any():
-                    with torch.no_grad():
-                        num_classes = self.atk.get_output_with_eval_nograd(inputs).shape[1]
-                    y_t[same] = (y_t[same] + 1) % num_classes
-                return y_t
-
-            self.atk.set_mode_targeted_by_function(fixed_target_fn, quiet=False)
-
-        elif self.mode == "custom":
-            def custom_target_fn(inputs, labels):
-                y_t = self.custom_target_labels.to(labels.device).long()
-                return y_t
-            self.atk.set_mode_targeted_by_function(custom_target_fn, quiet=False)
-
+        #     self.atk.get_least_likely_label
+        # return            
+      
     def __call__(self, images, labels):
         return self.atk(images, labels)

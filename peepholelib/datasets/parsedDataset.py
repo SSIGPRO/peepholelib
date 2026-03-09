@@ -199,6 +199,7 @@ class ParsedDataset():
                             for key in out_ktc:
                                 data_t[key] = _res[key]
 
+        cls_inst._dss = None
         return cls_inst
 
     def load_only(self, **kwargs):
