@@ -3,12 +3,12 @@ import pickle
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_cifar100
+from peepholelib.datasets.functional.transforms import vgg16
 
 # torch stuff
 import torch
 from torchvision.datasets import CIFAR100
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Subset
 
 # CIFAR from torchvision
 from torchvision import datasets
@@ -47,29 +47,39 @@ class CIFAR100Custom(CIFAR100):
                 self.M[superc, c] = 1
 
     def __getitem__(self, index):
-        img, target = super().__getitem__(index)
+        img, label = super().__getitem__(index)
 
         sample = {
             "image": img,
-            "label": torch.tensor(target),
-            "coarse_label": self.M[:, int(target)].argmax(),
+            "label": torch.tensor(label),
+            "coarse_label": self.M[:, int(label)].argmax(),
         }
         return sample
 
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Cifar100 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        CIFAR100 loader (train & val & test). Validation is created from the
+        training split according to `train_ratio` (default: 0.8 train, 0.2 val).
 
         Args:
-            path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): CIFAR100 download folder. If not already available, the
+                dataset is downloaded in this folder.
+            transform (callable, optional): Transform applied to validation/test
+                images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the
+                training split.
+            train_ratio (float, optional): Fraction of training samples used for
+                train (remainder goes to val).
+            seed (int, optional): Random seed used for deterministic train/val
+                splitting.
         Returns:
             - a thumbs up
         '''
         
-        # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_cifar100
+        self.transform = kwargs.get('std_transform', vgg16)
+        self.augmentation = kwargs.get('aug_transform', None)
+        self.train_ratio = kwargs.get('train_ratio', 0.8)
 
         DatasetWrap.__init__(self, **kwargs)
 
@@ -82,45 +92,54 @@ class Cifar100(DatasetWrap):
         Returns:
         - a thumbs up
         '''
-        
-        transform = self.transform
-        seed = self.seed
-            
-        # set torch seed
-        torch.manual_seed(seed)
 
         # Test dataset is loaded directly
-        test_dataset = CIFAR100Custom(
+        test_ds = CIFAR100Custom(
             root = self.path,
             train = False,
-            transform = transform,
+            transform = self.transform,
             download = True
-        )
-        
-        # train data will be splitted into training and validation
-        _train_data = CIFAR100Custom( 
-            root = self.path,
-            train = True,
-            transform = None, 
-            download = True
-        )
-        
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
         )
 
-        # Apply the transform 
-        if transform != None:
-            val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform 
+        base_ds = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=self.transform,
+                download=False
+            )
+        
+        if not (0.0 < self.train_ratio < 1.0):
+            raise ValueError(f'train_ratio must be in (0, 1), got {self.train_ratio}.')
+
+        n_total = len(base_ds)
+        n_train = int(round(n_total * self.train_ratio))
+        n_val = n_total - n_train
+
+        train_idx, val_idx = random_split(
+                range(n_total),
+                [n_train, n_val],
+                generator=torch.Generator().manual_seed(self.seed)
+            )
+        
+        val_ds = Subset(base_ds, val_idx)
+        
+        if self.augmentation is None:
+                    
+            train_ds = Subset(base_ds, train_idx)
+        else:
+            _train_aug = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=self.augmentation,
+                download=True
+            )
+            train_ds = Subset(_train_aug, train_idx)
     
         # Save datasets as objects in the class
         self.__dataset__ = {
-                'CIFAR100-train': train_dataset,
-                'CIFAR100-val': val_dataset,
-                'CIFAR100-test': test_dataset
+                'CIFAR100-train': train_ds,
+                'CIFAR100-val': val_ds,
+                'CIFAR100-test': test_ds
                 }
         
         return 

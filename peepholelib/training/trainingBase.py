@@ -1,23 +1,26 @@
 #general python stuff
 from pathlib import Path as Path
+import abc 
 from math import ceil
 from time import time
 from math import isinf
-from functools import partial
-import re
 
 # torch stuff
 import torch
 from torch.utils.data import DataLoader
 
-from peepholelib.training.train_loops import default_train_loop 
-from peepholelib.training.val_loops import default_val_loop 
-from peepholelib.training.test_loops import default_test_loop 
-from peepholelib.training.save_fns import default_save 
-from peepholelib.training.load_fns import default_load 
-from peepholelib.training.accuracy_fns import img_classification_acc
+from peepholelib.training.trainingLoops import DefaultTrainLoop
+from peepholelib.training.validationLoops import DefaultValidationLoop
+from peepholelib.training.testingLoops import DefaultTestLoop
+from peepholelib.training.savingLoops import DefaultSavingLoop
 
-class Trainer():
+def img_classification_acc(pred, target):
+    
+    pred_idx = torch.argmax(pred, dim=1)
+    return (pred_idx == target).sum()
+
+class Trainer(metaclass=abc.ABCMeta):
+
     def __init__(self, **kwargs):
         """
         Base trainer that owns the full training state and orchestrates the
@@ -26,31 +29,30 @@ class Trainer():
         It builds dataloaders, tracks losses/accuracies, handles checkpoint
         resume, early stopping, and scheduler stepping. The actual per-epoch
         logic is delegated to `train_loop`, `validation_loop`, and
-        `save_fn`, which can be swapped to customize behavior without
+        `saving_loop`, which can be swapped to customize behavior without
         rewriting the whole trainer.
 
         Args:
-        - model (peepholelib.models.model_wrap.modelWrap): model wrapper to train/evaluate.
-        - path (str|pathlib.Path): directory where checkpoints and plots are stored.
-        - name (str): base filename for checkpoints
-        - verbose (bool): log progress to stdout
+        - model (modelWrap): model wrapper to train/evaluate
+        - path: directory where checkpoints and plots are stored
+        - name: base filename for checkpoints
+        - verbose: log progress to stdout
 
-        - dataset (peepholelib.datasetWrap.DatasetWrap): wrapped dataset with `__dataset__` dict.
-        - train_key (str): key for train split in `__dataset__`
-        - val_key (str): key for validation split in `__dataset__`
-        - in_parser (callable): function to map raw batch -> dict with tensors
-        - out_parser (callable): function to map model output -> prediction tensor
-        - batch_size (int): batch size for train/val loaders
-        - dataloader_kwargs (dict): extra kwargs for `torch.utils.data.DataLoader`
-        - iterations (int|"full"): number of iterations per epoch. If `"full"` is given, each training step iterates over the whole dataset (will likely to overflow GPU memory).
-        - loss_fn (callable)/loss_kwargs (dict): loss class and kwargs
-        - acc_fn (callable): accuracy function
-        - optimizer (torch.optim.<optimizer>): torch optimizer instance.
-        - scheduler (torch.optim.lr_scheduler.<scheduler>): optional LR scheduler instance.
-        - max_epochs (int): maximum number of epochs to run. Default to `1000`.
-        - early_stopping_patience (int): stops the training if the validation loss does not improve for this amnount of epochs. Defaults to `inf`. 
-        - train_loop/validation_loop/save_fn/load_fn: pluggable loop functions. Examples at `peepholelib.training.<train|val|test>_loops.py`. 
-        - save_every (int): save the model every `save_every` training epochs. If `None` (Default) intermediate checkpoints are not saved.
+        - dataset: dataset container with `__dataset__` dict
+        - train_key: key for train split in `__dataset__`
+        - val_key: key for validation split in `__dataset__`
+        - in_parser: function to map raw batch -> dict with tensors
+        - out_parser: function to map model output -> prediction tensor
+        - batch_size: batch size for train/val loaders
+        - dataloader_kwargs: extra kwargs for `torch.utils.data.DataLoader`
+        - iterations: "full" or int number of iterations per epoch
+        - loss_fn/loss_kwargs: loss class and kwargs
+        - acc_fn: accuracy function
+        - optimizer: torch optimizer
+        - scheduler: optional LR scheduler
+        - max_epochs: maximum number of epochs to run
+        - early_stopping: enable early stopping when scheduler supports it
+        - train_loop/validation_loop/saving_loop: pluggable loop objects
         """
 
         # Preliminaries
@@ -58,7 +60,9 @@ class Trainer():
         self.device = self.model.device
         self.path = Path(kwargs['path'])
         self.name = kwargs['name']
-        self.verbose = kwargs.get('verbose', False)
+        self.verbose = kwargs.get('verbose', True)
+
+        self.file = self.path/self.name
 
         # Dataset
         self.ds = kwargs['dataset']
@@ -75,87 +79,62 @@ class Trainer():
 
         # Loss function
         _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
-        loss_kwargs = kwargs.get('loss_kwargs', dict(reduction='sum'))
+        loss_kwargs = kwargs.get('loss_kwargs', dict())
         self.acc_fn = kwargs.get('acc_fn', img_classification_acc)
 
         self.loss_fn = _l(**loss_kwargs)
 
         # Training artifacts
         self.max_epochs = kwargs.get('max_epochs', 1000)
+        self.early_stopping = kwargs.get('early_stopping', True)
         self.optim = kwargs['optimizer']
         self.scheduler = kwargs.get('scheduler', None)
-
-        # training functions
-        self.train_loop = partial(
-                kwargs.get("train_loop", default_train_loop),
-                self = self
-                )
-        self.validation_loop = partial(
-                kwargs.get("val_loop", default_val_loop),
-                self = self
-                )
-        self.test_loop = partial(
-                kwargs.get("test_loop", default_test_loop),
-                self = self
-                )
-        self.save_fn = partial(
-                kwargs.get("save_fn", default_save),
-                self = self
-                )
-        self.load_fn = partial(
-                kwargs.get("load_fn", default_load),
-                self = self
-                )
-        self.save_every = kwargs.get("save_every", None)
+        self.train_loop = kwargs.get("train_loop", DefaultTrainLoop)
+        self.validation_loop = kwargs.get("validation_loop", DefaultValidationLoop)
+        self.test_loop = kwargs.get("test_loop", DefaultTestLoop)
+        self.saving_loop = kwargs.get("saving_loop", DefaultSavingLoop)
+        self.save_every = kwargs.get("save_every", 10)
+        self.phase_num = kwargs.get("phase_num", None)
         self.early_stopping_patience = kwargs.get("early_stopping_patience", float('inf'))
+        self._plot_archived = False
+        self.no_training = False
 
-        # set file names
-        self.file = self.path/self.name
-        self.best_model_file = self.path/'best_model'/(self.name+'.pt')
-
-        # check if there are previous trainings and compute the phase num
-        _prev_plots = list(self.path.glob(self.name+'.phase_*.losses.png'))
-        if len(_prev_plots) > 0:
-            _phase_nums = [int(re.search(r'\d+', p.name)[0]) for p in _prev_plots]
-            self.phase_num = max(_phase_nums) + 1 
-        else:
-            self.phase_num = 0
-        self.loss_plot_file = self.path/(self.name+f'.phase_{self.phase_num}.losses.png')
-        if self.verbose: print(f'Loss plot will be saved as \'{self.loss_plot_file}\'.')
-
-        # create dirs
-        self.path.mkdir(parents=True, exist_ok=True)
-        self.best_model_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # dataloaders
         self.train_dl = DataLoader(
-                dataset = self.ds.__dataset__[self.train_key],
-                batch_size = bs,
-                shuffle = True,
-                **dl_kwargs,
-                )
+                                dataset=self.ds.__dataset__[self.train_key],
+                                batch_size=bs,
+                                shuffle=True,
+                                **dl_kwargs,
+                            )
 
         self.val_dl = DataLoader(
-                dataset = self.ds.__dataset__[self.val_key],
-                batch_size = bs,
-                shuffle = False,
-                **dl_kwargs,
-                ) 
+                                dataset=self.ds.__dataset__[self.val_key],
+                                batch_size=bs,
+                                shuffle=False,
+                                **dl_kwargs,
+                            ) 
         
         self.test_dl = DataLoader(
-                dataset = self.ds.__dataset__[self.test_key],
-                batch_size = bs,
-                shuffle = False,
-                **dl_kwargs,
-                ) 
+                                dataset=self.ds.__dataset__[self.test_key],
+                                batch_size=bs,
+                                shuffle=False,
+                                **dl_kwargs,
+                            ) 
         
         if iterations == 'full': 
-            if self.verbose: print('Using the whole dataset every iteration. Your GPU might explode; not out fault though.')
+            if self.verbose: print('using the whole dataset every iteration')
             self.iter_train = ceil(len(self.ds.__dataset__[self.train_key])/bs)
             self.iter_val = ceil(len(self.ds.__dataset__[self.val_key])/bs) 
         else:
             self.iter_train = iterations 
             self.iter_val = iterations 
+
+        if self.early_stopping:
+            if self.scheduler is None:
+                raise ValueError('early_stopping=True requires a scheduler.')
+            else:
+                self.num_bad_epochs = 0
+                if isinf(self.early_stopping_patience):
+                    raise ValueError("early_stopping_patience cannot be infinite.")
 
         # Pre-allocate training history buffers
         self.train_losses = torch.zeros(self.max_epochs, requires_grad=False)
@@ -164,9 +143,56 @@ class Trainer():
         self.val_acc = torch.zeros(self.max_epochs, requires_grad=False)
 
         # Check model existance
-        if self.best_model_file.exists():
-            if self.verbose: print(f'Found best_model file {self.best_model_file.as_posix()}. Resume training')
-            self.load_fn(file = self.best_model_file)
+        ckps = sorted(list(self.path.glob('*.pt')))
+        if self.path.exists() and len(ckps) > 0:
+            ckps_n = [int(ckp.as_posix().replace(self.file.as_posix()+'.','').replace('/', '').replace('.pt','')) for ckp in ckps]
+            trained_for = max(ckps_n)+1
+            
+            if trained_for >= self.max_epochs:
+                print(f'Already trained for {trained_for} epochs, not doing anything.')
+                self.no_training = True
+                return
+            else:
+                if self.verbose: print(f'Found latest checkpoint for epoch {trained_for}. Resume training')
+            
+            _f = (self.path / 'best_model' / 'best_model_config.pt').as_posix()
+            if self.verbose: print(f'Loading best model config from {_f}')
+            if not Path(_f).exists():
+                raise FileNotFoundError(
+                    f'Checkpoint files found in {self.path} but no best model config at {_f}. '
+                    'Training state may be corrupted.'
+                )
+            data = torch.load(_f, weights_only=False) 
+            
+            # to save accuracies and losses
+            saved_len = len(data['train_losses'])
+            self.train_losses[:saved_len] = data['train_losses']
+            self.val_losses[:saved_len] = data['val_losses'] 
+            self.train_acc[:saved_len] = data['train_accuracy']
+            self.val_acc[:saved_len] = data['val_accuracy'] 
+            self.best_epoch = data['best_epoch']
+            self.best_val_loss = data['best_val_loss']
+            self.num_bad_epochs = data['num_bad_epochs']
+
+            self.model.load_checkpoint(
+                    path = self.path,
+                    name = _f,
+                    verbose =self. verbose
+                    )
+            
+            # resume from the checkpoint we loaded
+            self.initial_epoch = int(data.get('best_epoch', trained_for-1)) + 1
+            
+            try:
+                self.optim.load_state_dict(data['optimizer'])
+            except (ValueError, KeyError):
+                if self.verbose: print('Optimizer state incompatible with checkpoint, starting fresh.')
+
+            if self.scheduler is not None and 'scheduler' in data and data['scheduler'] is not None:
+                try:
+                    self.scheduler.load_state_dict(data['scheduler'])
+                except (ValueError, KeyError):
+                    if self.verbose: print('Scheduler state incompatible with checkpoint, starting fresh.')
             
         else:
             if self.verbose: print('No training ongoing, starting anew.')
@@ -174,56 +200,58 @@ class Trainer():
             self.best_val_loss = float('inf')
             self.best_epoch = 0
 
-        self.num_bad_epochs = 0
-        return
-   
-    def _train_epoch(self, epoch):
-        t0 = time()
-        self.train_loop(epoch=epoch)
-        stop = self.validation_loop(epoch=epoch)
+        self.path.mkdir(parents=True, exist_ok=True)
+        best_model_path = self.path/'best_model'
+        best_model_path.mkdir(parents=True, exist_ok=True)
 
-        if self.save_every != None:
-            if (epoch + 1) % self.save_every == 0:
-                self.save_fn(
-                        epoch = epoch,
-                        file = self.file.as_posix()+f'.{epoch}.pt',
-                        plot = True
-                        )
-
-        if self.verbose: 
-            print(
-                f'epoch {epoch} - train loss: {self.train_losses[epoch]:.4f} - '
-                f'val loss: {self.val_losses[epoch]:.4f} - '
-                f'train acc: {self.train_acc[epoch]*100:.2f} - '
-                f'val acc: {self.val_acc[epoch]*100:.2f} - '
-                f'time: {time()-t0:.2f}'
-            )
-
-        return stop 
-
+        if self.phase_num is None:
+            # Auto-increment phase based on existing archived plots.
+            try:
+                phase_glob = f"{self.name}.losses.prev.phase_*.png"
+                existing = list(self.path.glob(phase_glob))
+                if existing:
+                    nums = []
+                    for p in existing:
+                        stem = p.stem  # e.g. name.losses.prev.phase_3
+                        if "phase_" in stem:
+                            try:
+                                nums.append(int(stem.split("phase_")[-1]))
+                            except ValueError:
+                                pass
+                    self.phase_num = (max(nums) + 1) if nums else 1
+                else:
+                    self.phase_num = 1
+            except Exception:
+                self.phase_num = 1
+    
     def fit(self):
-        if self.initial_epoch >= self.max_epochs:
-            print(f'Already trained for {self.initial_epoch} epochs, not training.')
-            return
+        if self.no_training: return
 
         if self.verbose: print('----- Training Model ----- ')
 
         for epoch in range(self.initial_epoch, self.max_epochs):
-            stop = self._train_epoch(epoch)
-            if stop: break
 
-        return
+            t0 = time()
+            self.train_loop(trainer=self, epoch=epoch)
+            stop = self.validation_loop(trainer=self, epoch=epoch, t0=t0)
+            if stop:
+                break
+            if (epoch + 1) % self.save_every == 0:
+                self.saving_loop(trainer=self, epoch=epoch)
                 
     def test(self):
         if self.verbose: print('----- Testing Model ----- ')
 
-        if self.verbose: print(f'Loading best model config from {self.best_model_file.as_posix()}')
-        self.model.load_checkpoint(
-                path = self.best_model_file.parent,
-                name = self.best_model_file.name,
-                verbose = self.verbose,
-                )
 
-        return self.test_loop()
+        best_model_file = self.path / 'best_model' / 'best_model_config.pt'
+        
+        if self.verbose: print(f'Loading best model config from {best_model_file.as_posix()}')
+        self.model.load_checkpoint(
+                            path=best_model_file.parent,
+                            name=best_model_file.name,
+                            verbose=self.verbose,
+                        )
+
+        return self.test_loop(trainer=self)
 
     

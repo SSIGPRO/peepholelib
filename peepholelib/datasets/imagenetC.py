@@ -6,7 +6,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from torchvision.transforms import ToTensor, Resize, Compose
+from peepholelib.datasets.functional.transforms import vgg16 as transform
 
 class CustomDS(Dataset):
     def __init__(self, samples, synset_to_label, transform):
@@ -48,7 +48,6 @@ class CustomDS(Dataset):
         image = Image.open(image_path).convert("RGB")
         image = self.transform(image)
         label = torch.tensor(self.synset_to_label[synset], dtype=torch.long)
-
         return {
             "image": image,
             "label": label,
@@ -73,19 +72,10 @@ class ImageNetC(DatasetWrap):
         Returns:
             - a thumbs up
         """
-        DatasetWrap.__init__(self, **kwargs)
-
-        self.transform = kwargs.get('std_transform', None)
+        if "transform" not in kwargs:
+            kwargs["transform"] = transform
         self.corruptions = kwargs.get("corruptions", None)
-
-        # append ToTensor to the transform
-        if self.transform != None:
-            self.transform.transforms.append(ToTensor())
-        else:
-            self.transform = Compose([ToTensor(), Resize((224, 224))])
-        
-        return
-
+        DatasetWrap.__init__(self, **kwargs)
 
     def __load_data__(self):
         """
@@ -168,8 +158,6 @@ class ImageNetC(DatasetWrap):
             c_idx = severity - 1
             self.__dataset__[f"ImageNet-C-val-c{c_idx}"] = ds_val
             self.__dataset__[f"ImageNet-C-test-c{c_idx}"] = ds_test
-
-        return
 
     def get(self, ds_key, idx):
         if not self.__dataset__:
