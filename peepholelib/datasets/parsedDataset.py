@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, Subset
 from peepholelib.utils.ptd_wraps import _ShardedPTD, _StackedDS 
 
 class ParsedDataset():
+
     def __init__(self, **kwargs):
         '''
         Creates instance of a parsed dataset.
