@@ -133,11 +133,12 @@ class AttacksDS(ParsedDataset):
                     with torch.no_grad():
                         y_pred_ori = atk.model(ori_images.to(atk.model.device))
                         y_pred_atk = atk.model(atk_images.to(atk.model.device))
-                    pred_labels_ori = y_pred_ori.argmax(axis = 1)
-                    pred_labels_atk = y_pred_atk.argmax(axis = 1)
+                    pred_labels_ori = y_pred_ori.argmax(axis = 1).detach().cpu()
+                    pred_labels_atk = y_pred_atk.argmax(axis = 1).detach().cpu()
+                    y_pred_atk = y_pred_atk.detach().cpu()
 
-                    dt['image'] = atk_images.cpu() # dt['image'] = atk_images.detach().cpu() in case we fuck it up
-                    dt['output'] = y_pred_atk.cpu()
+                    dt['image'] = atk_images.detach().cpu()
+                    dt['output'] = y_pred_atk
                     dt['pred'] = pred_labels_atk
                     dt['result'] = pred_labels_atk == dt[label_key]
                    # added by Kami

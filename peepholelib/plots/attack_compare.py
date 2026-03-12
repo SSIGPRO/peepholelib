@@ -49,23 +49,6 @@ class ThreatModelComparator:
             return None
         return float(m.float().mean().item())
 
-    # def _conditional_asr(self, clean, adv):
-    #     """
-    #     ASR
-    #     """
-    #     clean_corr = self._correct_mask(clean)
-    #     if clean_corr is None:
-    #         return None
-
-    #     adv_corr = self._correct_mask(adv)
-    #     if adv_corr is not None:
-    #         return float((~adv_corr[clean_corr]).float().mean().item())
-
-    #     adv_succ = self._attack_success_mask(adv)
-    #     if adv_succ is not None:
-    #         return float(adv_succ[clean_corr].float().mean().item())
-
-    #     return None
     def _conditional_misclf(self, clean, adv):
         """
         Misclassification rate | clean-correct (untargeted)

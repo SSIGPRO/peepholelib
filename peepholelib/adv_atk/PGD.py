@@ -44,7 +44,6 @@ class myPGD(AttackBase):
         self.random_start = kwargs.get("random_start", True)
         self.mode = kwargs.get("mode", "random")
         self.target_class = kwargs.get("target_class", 5)
-        self.custom_target_labels = kwargs.get("custom_target_labels", None)
 
         self.atk = PGDStoreTarget(
             model=self.model._model,
@@ -73,12 +72,6 @@ class myPGD(AttackBase):
                 return y_t
 
             self.atk.set_mode_targeted_by_function(fixed_target_fn, quiet=False)
-
-        elif self.mode == "custom":
-            def custom_target_fn(inputs, labels):
-                y_t = self.custom_target_labels.to(labels.device).long()
-                return y_t
-            self.atk.set_mode_targeted_by_function(custom_target_fn, quiet=False)
 
     def __call__(self, images, labels):
         return self.atk(images, labels)

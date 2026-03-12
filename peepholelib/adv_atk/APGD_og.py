@@ -1,4 +1,5 @@
 import torch
+import time
 import math
 from autoattack.autopgd_base import APGDAttack, APGDAttack_targeted
 from .attack_base import AttackBase
@@ -40,6 +41,9 @@ class APGDTnew(APGDAttack_targeted):
         x_best_adv = x_adv.clone()
         loss_steps = torch.zeros([self.n_iter, x.shape[0]]
             ).to(self.device)
+        loss_best_steps = torch.zeros([self.n_iter + 1, x.shape[0]]
+            ).to(self.device)
+        acc_steps = torch.zeros_like(loss_best_steps)
 
         if not self.is_tf_model:
             if self.loss == 'ce':
@@ -90,10 +94,14 @@ class APGDTnew(APGDAttack_targeted):
         if self.loss in ['dlr', 'dlr-targeted']:
             # check if there are zero gradients
             check_zero_gradients(grad, logger=self.logger)
-        # first time comparison
+        # again KAMI commented following two lines
+        # acc = logits.detach().max(1)[1] == y
+        # acc_steps[0] = acc + 0
         pred0 = logits.detach().max(1)[1]
         success0 = (pred0 == self.y_target)
         acc = (~success0).float()
+        acc_steps[0] = acc + 0
+        # up to here was changed
 
         loss_best = loss_indiv.detach().clone()
 
@@ -101,6 +109,7 @@ class APGDTnew(APGDAttack_targeted):
         step_size = alpha * self.eps * torch.ones([x.shape[0], *(
             [1] * self.ndims)]).to(self.device).detach()
         x_adv_old = x_adv.clone()
+        counter = 0
         k = self.n_iter_2 + 0
         n_fts = math.prod(self.orig_dim)
         if self.norm == 'L1':
@@ -119,6 +128,7 @@ class APGDTnew(APGDAttack_targeted):
 
         loss_best_last_check = loss_best.clone()
         reduced_last_check = torch.ones_like(loss_best)
+        n_reduced = 0
 
         u = torch.arange(x.shape[0], device=self.device)
         for i in range(self.n_iter):
@@ -182,15 +192,25 @@ class APGDTnew(APGDAttack_targeted):
                     grad += grad_curr
             
             grad /= float(self.eot_iter)
-            # Comparison
+            # KAMI commented following to enable targer comparison
             pred_label = logits.detach().max(1)[1]
             success = (pred_label == self.y_target)
 
             acc = torch.min(acc, (~success).float())
+            acc_steps[i + 1] = acc + 0
 
             ind_succ = success.nonzero(as_tuple=False).view(-1)
             if ind_succ.numel() > 0:
                 x_best_adv[ind_succ] = x_adv[ind_succ].detach()
+            # pred_label = logits.detach().max(1)[1]
+            # success = (pred_label == self.y_target)
+            # new_succ = success & (acc > 0.5)            
+            # acc = torch.min(acc, (~success).float())
+            # acc_steps[i + 1] = acc + 0
+            # ind_succ = new_succ.nonzero(as_tuple=False).view(-1)
+            # if ind_succ.numel() > 0:
+            #     x_best_adv[ind_succ] = x_adv[ind_succ].detach()
+            # up to here was changed
 
             if self.verbose:
                 str_stats = ' - step size: {:.5f} - topk: {:.2f}'.format(
@@ -207,6 +227,7 @@ class APGDTnew(APGDAttack_targeted):
               x_best[ind] = x_adv[ind].clone()
               grad_best[ind] = grad[ind].clone()
               loss_best[ind] = y1[ind] + 0
+              loss_best_steps[i + 1] = loss_best + 0
 
               counter3 += 1
 
@@ -224,6 +245,7 @@ class APGDTnew(APGDAttack_targeted):
                       if fl_oscillation.sum() > 0:
                           ind_fl_osc = (fl_oscillation > 0).nonzero().squeeze()
                           step_size[ind_fl_osc] /= 2.0
+                          n_reduced = fl_oscillation.sum()
     
                           x_adv[ind_fl_osc] = x_best[ind_fl_osc].clone()
                           grad[ind_fl_osc] = grad_best[ind_fl_osc].clone()
@@ -246,8 +268,9 @@ class APGDTnew(APGDAttack_targeted):
                   #k = max(k - self.size_decr, self.n_iter_min)
 
         #
-
+        
         return (x_best, acc, loss_best, x_best_adv)
+class perturbnew(APGDTnew): # APGDAttack_targeted was OG
     def perturb(self, x, y=None, x_init=None):
         """
         :param x:           clean images
@@ -272,6 +295,7 @@ class APGDTnew(APGDAttack_targeted):
             y = y.detach().clone().long().to(self.device)
 
         adv = x.clone()
+        # acc = y_pred == y
         acc = torch.ones_like(y_pred).float() # assume none has hit target in the begining
         if self.verbose:
             print('-------------------------- ',
@@ -279,6 +303,8 @@ class APGDTnew(APGDAttack_targeted):
                 self.norm, self.eps),
                 '--------------------------')
             print('initial accuracy: {:.2%}'.format(acc.float().mean()))
+
+        startt = time.time()
         
         if self.use_largereps:
             epss = [3. * self.eps_orig, 2. * self.eps_orig, 1. * self.eps_orig]
@@ -302,11 +328,11 @@ class APGDTnew(APGDAttack_targeted):
                 full_target = self.y_target # slice to match the ones unfooled, otherwise dimensions disagree
                 self.y_target = full_target[ind_to_fool].detach().clone() 
 
-                _, _, _, adv_curr = self.attack_single_run(
+                best_curr, acc_curr, loss_curr, adv_curr = self.attack_single_run(
                     x_to_fool, y_to_fool, x_init=x_init
                 )
                 
-                # what samples succeeded in the current restart
+                # trial, what was I even trialing?
                 with torch.no_grad():
                     logits = self.model(adv_curr)
                     pred = logits.argmax(1)
@@ -349,7 +375,7 @@ class myAPGD(AttackBase):
         self.target_class = kwargs.get('target_class', None)
 
         if self.targeted:
-            self.atk = APGDTnew(
+            self.atk = perturbnew(
                 self.model._model,
                 norm=self.norm,
                 eps=self.eps,
@@ -377,13 +403,20 @@ class myAPGD(AttackBase):
         # Untargeted
         if not self.targeted:
             return self.atk.perturb(images, labels)
-        
-        # getting number of classes and the logits
+
+        # ---- force deterministic logits for target selection ---- I should remove this part in future, wasnt needed I am sure
+        was_training = self.model._model.training
+        self.model._model.eval()
         with torch.no_grad():
             logits = self.model._model(images)
+        if was_training:
+            self.model._model.train()
+        # ----------------------------------------------------------
+
         num_classes = logits.shape[1]
 
         # targeted
+
         if self.target_mode == "least_likely":
             sorted_idx = logits.sort(dim=1)[1]
             y_target = sorted_idx[:, 0]
@@ -407,9 +440,6 @@ class myAPGD(AttackBase):
 
         elif self.target_mode == "fixed":
             y_target = torch.full_like(labels, self.target_class)
-            mask = y_target == labels
-            if mask.any():
-                y_target[mask] = (self.target_class + 1) % num_classes
 
         self.atk.y_target = y_target
 
