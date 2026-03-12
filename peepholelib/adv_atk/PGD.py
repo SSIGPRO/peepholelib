@@ -6,6 +6,9 @@ from .attack_base import AttackBase
 
 class PGDStoreTarget(torchattacks.PGD):
     def get_target_label(self, inputs, labels=None):
+        """
+        A useful way to store the target labels since the original one does not store them, just uses them
+        """
         y_t = super().get_target_label(inputs, labels)
         self.y_target = y_t.detach().clone()
         return y_t
@@ -60,6 +63,7 @@ class myPGD(AttackBase):
             self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
 
         elif self.mode == "fixed":
+            # save the target
             tc = int(self.target_class)
 
             def fixed_target_fn(inputs, labels):
@@ -67,7 +71,9 @@ class myPGD(AttackBase):
                 same = (y_t == labels)
                 if same.any():
                     with torch.no_grad():
+                        # run model to get number of classes
                         num_classes = self.atk.get_output_with_eval_nograd(inputs).shape[1]
+                    # if class and label are the same, go to next class
                     y_t[same] = (y_t[same] + 1) % num_classes
                 return y_t
 

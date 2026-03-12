@@ -8,9 +8,13 @@ from .attack_base import AttackBase
 
 class BIMStoreTarget(torchattacks.BIM):
     def get_target_label(self, inputs, labels=None):
+        """
+        same as PGD to store targets
+        """
         y_t = super().get_target_label(inputs, labels)
         self.y_target = y_t.detach().clone()
         return y_t
+        
 
 
 class myBIM(AttackBase):

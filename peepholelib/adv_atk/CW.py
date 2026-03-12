@@ -615,7 +615,6 @@ class myCW(AttackBase):
         self.max_steps = kwargs.get('max_steps', 1000)
         self.optimizer_lr = kwargs.get('optimizer_lr', 1e-2)
         self.mode = kwargs.get('mode', 'random')
-        self.n_classes = kwargs.get("n_classes", 100)   # for CIFAR-100 obv
             
         targeted = False if self.mode == 'random' else True
         
@@ -632,47 +631,7 @@ class myCW(AttackBase):
                 optimizer_lr = self.optimizer_lr, 
                 init_rand = False
                 )
-        return   
-    # I added these, we can remove later
-    @torch.no_grad()
-    def _targets_random(self, true_labels: torch.Tensor) -> torch.Tensor:
-        """
-        Sample a random target label != true label for each sample.
-        """
-        true_labels = true_labels.long()
-        r = torch.randint(0, self.n_classes - 1, size=true_labels.shape, device=true_labels.device)
-        targets = r + (r >= true_labels).long()
-        return targets
+        return        
 
-    @torch.no_grad()
-    def _targets_least_likely(self, images: torch.Tensor, true_labels: torch.Tensor) -> torch.Tensor:
-        """
-        Least-likely target under current model, excluding the true label.
-        """
-        logits = self.model._model(images)
-        # exclude true label from being selected
-        idx = true_labels.long().view(-1, 1)
-        logits = logits.clone()
-        logits.scatter_(1, idx, float("inf"))  # inf so argmin won't pick true label
-        targets = torch.argmin(logits, dim=1)
-        return targets
-
-    def __call__(self, images: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        """
-        In the pipeline `labels` are ground-truth. We convert to target labels depending on mode,
-        then run CW with those targets.
-        """
-        images = images.to(self.model.device)
-        labels = labels.to(self.model.device).long()
-
-        if self.mode in ["by-label", "by_label", "given"]:
-            target_labels = labels  # interpret passed labels as targets
-        elif self.mode in ["random", "targeted-random", "targeted_random"]:
-            target_labels = self._targets_random(labels)
-        elif self.mode in ["least-likely", "least_likely", "least"]:
-            target_labels = self._targets_least_likely(images, labels)
-
-        return self.atk(images, target_labels)     
-    # up until here
-    # def __call__(self, images, labels):
-    #     return self.atk(images, labels)
+    def __call__(self, images, labels):
+        return self.atk(images, labels)

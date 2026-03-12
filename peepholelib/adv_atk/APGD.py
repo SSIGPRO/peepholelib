@@ -345,7 +345,7 @@ class myAPGD(AttackBase):
         self.eot_iter = kwargs.get('eot_iter', 1)
 
         self.targeted = kwargs.get('targeted', False)
-        self.target_mode = kwargs.get('target_mode', None)
+        self.mode = kwargs.get('mode', None)
         self.target_class = kwargs.get('target_class', None)
 
         if self.targeted:
@@ -384,7 +384,7 @@ class myAPGD(AttackBase):
         num_classes = logits.shape[1]
 
         # targeted
-        if self.target_mode == "least_likely":
+        if self.mode == "least-likely":
             sorted_idx = logits.sort(dim=1)[1]
             y_target = sorted_idx[:, 0]
 
@@ -393,7 +393,7 @@ class myAPGD(AttackBase):
             if mask.any():
                 y_target[mask] = sorted_idx[mask, 1]
 
-        elif self.target_mode == "random":
+        elif self.mode == "random":
             y_target = torch.randint(
                 0, num_classes, labels.shape, device=labels.device
             )
@@ -405,7 +405,7 @@ class myAPGD(AttackBase):
                 )
                 mask = y_target == labels
 
-        elif self.target_mode == "fixed":
+        elif self.mode == "fixed":
             y_target = torch.full_like(labels, self.target_class)
             mask = y_target == labels
             if mask.any():
