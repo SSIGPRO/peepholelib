@@ -28,10 +28,6 @@ class APGDTnew(APGDAttack_targeted):
             t = torch.randn(x.shape).to(self.device).detach()
             delta = L1_projection(x, t, self.eps)
             x_adv = x + t + delta
-            
-        
-        
-        
         
         if not x_init is None:
             x_adv = x_init.clone()
@@ -366,7 +362,7 @@ class myAPGD(AttackBase):
         AttackBase.__init__(self, **kwargs)
 
         self.norm = kwargs.get('norm', 'Linf')
-        self.eps = kwargs.get('eps', 1 / 255) # 0.5/255
+        self.eps = kwargs.get('eps', 8 / 255) # 0.5/255
         self.steps = kwargs.get('steps', 300) # 100
         self.n_restarts = kwargs.get('n_restarts', 20) #1
         self.loss = kwargs.get('loss', 'dlr') #ce

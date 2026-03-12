@@ -7,10 +7,6 @@ from tensordict import PersistentTensorDict
 class ThreatModelComparator:
     """
     Compare attacks within each threat model and save plots.
-
-    Expected files:
-        Clean vs Attack obv
-
     Example:
       threat_models = {
           "Linf": ["BIM", "APGD", "PGD"],

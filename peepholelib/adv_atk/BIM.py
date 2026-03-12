@@ -40,8 +40,8 @@ class myBIM(AttackBase):
         """
         AttackBase.__init__(self, **kwargs)
 
-        self.eps = kwargs.get("eps", 1/255)
-        self.alpha = kwargs.get("alpha", 0.25/255)
+        self.eps = kwargs.get("eps", 8/255)
+        self.alpha = kwargs.get("alpha", 2/255)
         self.steps = kwargs.get("steps", 300)
         self.mode = kwargs.get("mode", "random")
         self.target_class = kwargs.get("target_class", 5)

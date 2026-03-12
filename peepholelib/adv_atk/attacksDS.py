@@ -136,30 +136,20 @@ class AttacksDS(ParsedDataset):
                     pred_labels_ori = y_pred_ori.argmax(axis = 1)
                     pred_labels_atk = y_pred_atk.argmax(axis = 1)
 
-<<<<<<< HEAD
-                    dt['image'] = atk_images
-                    dt['output'] = y_pred_atk
-                    dt['pred'] = pred_labels_atk
-                    dt['result'] = pred_labels_atk == labels 
-                    dt['attack_success'] = torch.logical_and(pred_labels_ori == labels, pred_labels_atk != pred_labels_ori) 
-=======
-                    #og dt['image'] = atk_images.cpu() changed because APGD could not save images or data in general
-                    dt['image'] = atk_images.detach().cpu()
+                    dt['image'] = atk_images.cpu() # dt['image'] = atk_images.detach().cpu() in case we fuck it up
                     dt['output'] = y_pred_atk.cpu()
                     dt['pred'] = pred_labels_atk
                     dt['result'] = pred_labels_atk == dt[label_key]
-                   # dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk != pred_labels_ori) # commented by Kami
                    # added by Kami
                     clean_correct = (pred_labels_ori == dt[label_key])
 
                     if y_target is None:
-                    # untargeted success | clean-correct
-                        dt['attack_success'] = clean_correct & (pred_labels_atk != pred_labels_ori)
+                    # untargeted success
+                        dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk != pred_labels_ori)
                     else:
-                    # targeted success | clean-correct
+                    # targeted success
                         dt['y_target'] = y_target
-                        dt['attack_success'] = clean_correct & (pred_labels_atk == y_target)
->>>>>>> 2495d21 (libkamipushj)
+                        dt['attack_success'] = torch.logical_and(pred_labels_ori == dt[label_key], pred_labels_atk == y_target)
         return
                     # added by Kami
 
