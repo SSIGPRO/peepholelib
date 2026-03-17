@@ -236,7 +236,7 @@ class ParsedDataset():
         Args:
         - name (str): name to append to the file storing the parsed inference values.
         - inference_fn (callable): Inference function that returns a dictionary of outputs to be saved with the parsed dataset. This is useful if the model does not return a dictionary or to add extra computation to its outputs, e.g. One might pass a function which returns just `image` and `label`, so the parsed dataset can be used for training a model; another example is to add `result` and `output` for havin the model's logits or a correct classification.
-        - transforms (dict{str: callable}): Dictionary with keys matching the loaders and transforms as values. A transorm takes as input a sample from the parsed dataset (`self._dss`) and edits its values. If `None`, uses `lambda x: x`. Defaults to `None`. 
+        - transforms (dict{str: callable}): Dictionary with keys matching the loaders and transforms as values. A transorm takes as input a sample from the parsed dataset (`self._dss`) and edits its values. If `None` or in case of missing keys, uses `lambda x: x`. Defaults to `None`. 
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
         - verbose (bool): print progress messages.
@@ -253,7 +253,7 @@ class ParsedDataset():
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             file_path = self.path/f'dss.{ds_key}.{name}' 
 
-            self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+            self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
             
             if file_path.exists():
                 if verbose: print(f'File {file_path} exists. Loading from disk.')
