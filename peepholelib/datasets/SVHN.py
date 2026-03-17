@@ -75,7 +75,7 @@ class SVHN(DatasetWrap):
         train_dataset, val_dataset = random_split(
                 _train_data,
                 [self.train_ratio, 1 - self.train_ratio],
-                generator=torch.Generator().manual_seed(seed)
+                generator=torch.Generator().manual_seed(self.seed)
                 )
 
         self.__dataset__ = {
