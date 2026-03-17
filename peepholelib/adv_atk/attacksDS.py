@@ -72,14 +72,12 @@ class AttacksDS(ParsedDataset):
                 if verbose: print(f' Got {n_samples} samples from {ds_key}')
 
                 self._dss[tdsk] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode = 'w')
-
-                for key in ds._dss[ds_key].keys():
-                    key_sample = ds._dss[ds_key][key][0:1]
-                    key_shape = key_sample.shape[1:]
+                
+                sample = ds._dss[ds_key][0:1]
+                for key in sample.keys():
                     self._dss[tdsk][key] = MMT.empty(
-                        shape=torch.Size((n_samples,)+key_shape), 
-                        dtype=key_sample.dtype,
-                        device=key_sample.device
+                        shape = torch.Size((n_samples,)+sample[key].shape[1:]), 
+                        dtype = sample[key].dtype,
                         )
 
                 self._dss[tdsk]['attack_success'] = MMT.empty(shape=torch.Size((n_samples,)))

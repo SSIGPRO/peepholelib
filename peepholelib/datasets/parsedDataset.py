@@ -188,43 +188,40 @@ class ParsedDataset():
                 # only copy the keys that are not already within the PTD
                 in_ktc  = list(set(keys_to_copy) - set(ptd.keys()))
 
-                if len(in_ktc) == 0:
-                    if verbose: print(f'Nothing to parse. Skipping.')
-                    continue
+                if len(in_ktc) > 0:
+                    for key in in_ktc:
+                        if verbose: print(f'Allocating {key}')
+                        ptd[key] = MMT.empty(
+                                shape = torch.Size((n_samples,)+sample[key].shape[1:]),
+                                dtype = sample[key].dtype
+                                )
 
-                for key in in_ktc:
-                    if verbose: print(f'Allocating {key}')
-                    ptd[key] = MMT.empty(
-                            shape = torch.Size((n_samples,)+sample[key].shape[1:]),
-                            dtype = sample[key].dtype
+                    # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                    # This is done so we can use multiple workers with the dataloaders 
+                    ptd.close()
+                    ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+                    #-----------------------------------
+                    # copy values from original dataset 
+                    #-----------------------------------
+                    dl_ori = DataLoader(
+                            dataset = ds_wrap.__dataset__[ds_key],
+                            batch_size = bs,
+                            shuffle = False
+                            ) 
+
+                    dl_dst = DataLoader(
+                            ptd,
+                            batch_size = bs,
+                            collate_fn = lambda x:x,
+                            shuffle = False,
+                            num_workers = n_threads
                             )
 
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                ptd.close()
-                ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
-
-                #-----------------------------------
-                # copy values from original dataset 
-                #-----------------------------------
-                dl_ori = DataLoader(
-                        dataset = ds_wrap.__dataset__[ds_key],
-                        batch_size = bs,
-                        shuffle = False
-                        ) 
-
-                dl_dst = DataLoader(
-                        ptd,
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
-
-                if verbose: print(f'Parsing {ds_key}')
-                for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
-                    for key in in_ktc:
-                        data_t[key] = data_in[key]
+                    if verbose: print(f'Parsing {ds_key}')
+                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
+                        for key in in_ktc:
+                            data_t[key] = data_in[key]
 
                 self._dss[ds_key] = _StackedDS(ori=ptd)
         return
