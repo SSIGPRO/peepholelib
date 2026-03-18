@@ -30,15 +30,14 @@ def img_classification_atks(**kwargs):
     model = atk.model
     device = model.device
 
-    imgs_ori = data['image'].to(device).requires_grad_(True)
-    labels = data[label_key].to(device)
-    print("AAAAAAAAAAAA: ", imgs_ori)
-    print("AAAAAAAAAAAA: ", labels)
+    with torch.enable_grad():
+        imgs_ori = data['image'].to(device)
+        labels = data[label_key].to(device)
 
-    imgs_atk = atk(
-            images = imgs_ori,
-            labels = labels 
-            )
+        imgs_atk = atk(
+                images = imgs_ori,
+                labels = labels 
+                )
 
     with torch.no_grad():
         out_ori = model(imgs_ori) 
@@ -48,7 +47,7 @@ def img_classification_atks(**kwargs):
     pred_atk = out_atk.argmax(axis=1)
 
     ret = {
-            'image': atk_imgs,
+            'image': imgs_atk,
             'output': out_atk,
             'pred': pred_atk,
             'result': pred_atk == labels, 
