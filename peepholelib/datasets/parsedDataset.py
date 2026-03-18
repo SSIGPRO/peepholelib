@@ -228,25 +228,27 @@ class ParsedDataset():
 
     def parse_inference(self, **kwargs):
         '''
-        Parse inference results, e.g., output, 'result' (1 if samples are correctly classified, 0 otherwise) into 'tensordict.PersistentTensorDict's at 'path/dss.<loader>'.`name`, with 'loader' being the loaders keys (see peepholelib.datasets). Already existing keys are skipped.
+        Parse inference results, e.g., output, `result` (1 if samples are correctly classified, 0 otherwise) into `tensordict.PersistentTensorDict`s at `path/dss.<loader>.<name>`, with 'loader' being the loaders keys (see `self._dss.keys()` in `self.parse_dataset()`) and `name` is the key from the dictionary passed in the `inference_fns` argument. Already existing keys are skipped.
 
         Args:
-        - name (str): name to append to the file storing the parsed inference values.
-        - inference_fn (callable): Inference function that returns a dictionary of outputs to be saved with the parsed dataset. This is useful if the model does not return a dictionary or to add extra computation to its outputs, e.g. One might pass a function which returns just `image` and `label`, so the parsed dataset can be used for training a model; another example is to add `result` and `output` for havin the model's logits or a correct classification.
+        - loaders (list[str]): list of keys from `self._dss` to apply the inference. If `None` apply the inference for all keys within `self._dss.keys()`. Defaults to `None`. 
+        - inference_fns (dict{str: callable}): Inference functions that return a dictionary of outputs to be saved with the parsed dataset. This is useful if the model does not return a dictionary or to add extra computation to its outputs.
         - transforms (dict{str: callable}): Dictionary with keys matching the loaders and transforms as values. A transorm takes as input a sample from the parsed dataset (`self._dss`) and edits its values. If `None` or in case of missing keys, uses `lambda x: x`. Defaults to `None`. 
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
         - verbose (bool): print progress messages.
         '''
         
-        name = kwargs['name']
-        inference_fn = kwargs.get('inference_fn')
+        loaders = kwargs.get('loaders', None)
+        inference_fns = kwargs['inference_fns']
         transforms = kwargs.get('transforms', None)
         bs = kwargs.get('batch_size', 64) 
         n_threads = kwargs.get('n_threads', 1) 
         verbose = kwargs.get('verbose', False) 
 
-        for ds_key in self._dss.keys():
+        if loaders == None: loaders = self._dss.keys()
+
+        for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             file_path = self.path/f'dss.{ds_key}.{name}' 
 
@@ -343,7 +345,7 @@ class ParsedDataset():
             if verbose: print(f'Loading files {_dfp_ori} from disk. ')
             ptd = PersistentTensorDict.from_h5(_dfp_ori, mode=mode)
 
-            self._dss[ds_key] = _StackedDS(ori = tdd)
+            self._dss[ds_key] = _StackedDS(ori = ptd)
             self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
 
             if name != None: 

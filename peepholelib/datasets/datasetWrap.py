@@ -6,7 +6,7 @@ class DatasetWrap(metaclass=abc.ABCMeta):
 
     def __init__(self, **kwargs):
         '''
-        Creates instance of dataset base. For base datasets, `Transform` is mandatory.
+        Creates instance of dataset base. For base datasets.
 
         Args:
         - path (str): Path for dataset. 
