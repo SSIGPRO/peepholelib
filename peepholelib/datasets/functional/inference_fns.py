@@ -30,8 +30,10 @@ def img_classification_atks(**kwargs):
     model = atk.model
     device = model.device
 
-    imgs_ori = data['image'].to(device)
-    labels = data[label_key].to(device) 
+    imgs_ori = data['image'].to(device).requires_grad_(True)
+    labels = data[label_key].to(device)
+    print("AAAAAAAAAAAA: ", imgs_ori)
+    print("AAAAAAAAAAAA: ", labels)
 
     imgs_atk = atk(
             images = imgs_ori,

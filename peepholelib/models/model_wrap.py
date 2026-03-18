@@ -74,20 +74,17 @@ class ModelWrap(metaclass=abc.ABCMeta):
     def __init__(self, **kwargs):
         # check and set model
         self._model = kwargs['model']
+        tm = kwargs.get('target_modules', None)
+        self.device = kwargs.get('device', 'cpu')
+
         assert(issubclass(type(self._model), torch.nn.Module))
-
         # impose requirse_grad = False for all parameters
-
         self.set_requires_grad(requires_grad=False, layer_names=None)
 
         # set target modules
         self._target_modules = None
-        tm = kwargs.get('target_modules', None)
         if tm != None:
             self.set_target_modules(target_modules=tm) 
-
-        # device for NN
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
         # send model to device
         self._model = self._model.to(self.device)
@@ -131,11 +128,10 @@ class ModelWrap(metaclass=abc.ABCMeta):
             _hooks = {}
             for key in self._target_modules:
                 if verbose: print('Adding hook to module: ', key)
-                                                                       
+
                 module = self._target_modules[key]
                 hook = Hook(save_input=self._si, save_output=self._so)
                 handle = hook.register(module)
-                                                                       
                 _hooks[key] = hook
             
             self._hooks = _hooks
@@ -182,12 +178,12 @@ class ModelWrap(metaclass=abc.ABCMeta):
         if layer_names is None:
             # Affect all parameters
             for param in self._model.parameters():
-                param.requires_grad = requires_grad
+                param.requires_grad_(requires_grad)
         else:
             # Affect only specified layers
             for name, param in self._model.named_parameters():
                 if any(layer_name in name for layer_name in layer_names):
-                    param.requires_grad = requires_grad
+                    param.requires_grad_(requires_grad)
 
     def get_trainable_parameters(self, **kwargs):
         layers_to_train = kwargs.get('layers_to_train', None)
@@ -199,9 +195,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
             self.set_requires_grad(requires_grad = True, layer_names = layers_to_train)
 
             trainable_params = [
-                            p for name, p in self._model.named_parameters()
-                            if p.requires_grad and any(layer_name in name for layer_name in layers_to_train)
-                        ]
+                    p for name, p in self._model.named_parameters() if p.requires_grad and any(layer_name in name for layer_name in layers_to_train)
+                    ]
         else:
             self.set_requires_grad(requires_grad = True, layer_names = None)
             trainable_params = [p for p in self._model.parameters() if p.requires_grad]

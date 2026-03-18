@@ -372,10 +372,14 @@ class L2Adversary(object):
             # for each value of c on which we perform the binary search 
             # we have to perfomr an optimization step over the perturbation
             for optim_step in range(self.max_steps):
-                batch_loss, pert_norms_np, pert_outputs_np, advxs_np = \
-                    self._optimize(model, optimizer, inputs_tanh_var,
-                                   pert_tanh_var, targets_oh_var,
-                                   scale_consts_var)
+                batch_loss, pert_norms_np, pert_outputs_np, advxs_np = self._optimize(
+                        model,
+                        optimizer,
+                        inputs_tanh_var,
+                        pert_tanh_var,
+                        targets_oh_var,
+                        scale_consts_var
+                        )
                 # if optim_step % 10 == 0: print('batch [{}] loss: {}'.format(optim_step, batch_loss))  # FIXME
 
                 if self.abort_early and not optim_step % (self.max_steps // 10):
@@ -386,9 +390,13 @@ class L2Adversary(object):
                 # update best attack found during optimization
                 pert_predictions_np = np.argmax(pert_outputs_np, axis=1)
                 comp_pert_predictions_np = np.argmax(
-                        self._compensate_confidence(pert_outputs_np,
-                                                    targets_np),
-                        axis=1)
+                        self._compensate_confidence(
+                            pert_outputs_np,
+                            targets_np
+                            ),
+                        axis=1
+                        )
+
                 for i in range(batch_size):
                     l2 = pert_norms_np[i]
                     cppred = comp_pert_predictions_np[i]
@@ -441,8 +449,7 @@ class L2Adversary(object):
         return o_best_advx
 
 
-    def _optimize(self, model, optimizer, inputs_tanh_var, pert_tanh_var,
-                  targets_oh_var, c_var):
+    def _optimize(self, model, optimizer, inputs_tanh_var, pert_tanh_var, targets_oh_var, c_var):
         """
         Optimize for one step.
 
@@ -504,8 +511,7 @@ class L2Adversary(object):
         # print(pert_outputs_var.max(1)[0])
         assert (pert_outputs_var.max(1)[0] >= -inf).all(), 'assumption failed'
         # noinspection PyArgumentList
-        maxother_activ_var = torch.max(((1 - targets_oh_var) * pert_outputs_var
-                                        - targets_oh_var * inf), 1)[0]
+        maxother_activ_var = torch.max(((1 - targets_oh_var) * pert_outputs_var - targets_oh_var * inf), 1)[0]
 
         # Compute $f(x')$, where $x'$ is the adversarial example in image space.
         # The result `f_var` should be of dimension [B]
@@ -514,16 +520,14 @@ class L2Adversary(object):
             # `maxother_activ_var` by `self.confidence`
             #
             # noinspection PyArgumentList
-            f_var = torch.clamp(maxother_activ_var - target_activ_var
-                                + self.confidence, min=0.0)
+            f_var = torch.clamp(maxother_activ_var - target_activ_var + self.confidence, min=0.0)
         else:
             # if not targeted, optimize to make `maxother_activ_var` larger than
             # `target_activ_var` (the ground truth image labels) by
             # `self.confidence`
             #
             # noinspection PyArgumentList
-            f_var = torch.clamp(target_activ_var - maxother_activ_var
-                                + self.confidence, min=0.0)
+            f_var = torch.clamp(target_activ_var - maxother_activ_var + self.confidence, min=0.0)
         # the total loss of current batch, should be of dimension [1]
         batch_loss_var = torch.sum(perts_norm_var + c_var * f_var)  # type: Variable
 
