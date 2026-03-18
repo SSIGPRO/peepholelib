@@ -20,7 +20,6 @@ class _StackedDS:
         '''
         Args:
         - ori (tensordict.PersistentTensorDict | peepholelib.datasets.datasetWrap.DatasetWrap): Original dataset wrapped or a PTD. Both are supported since sampling from both return a dictionary.
-        - inf (tensordict.PersistentTensorDict): PTD storing parsed values from inference.
         '''
         self.ori = kwargs['ori']
         self.transform = lambda x: x
@@ -30,7 +29,8 @@ class _StackedDS:
 
         s_ori = self.ori[0]
 
-        self.k = list(s_ori.keys())
+        self.k_ori = list(s_ori.keys())
+        self.k_inf = [] 
         self.len = len(self.ori)
         return
     
@@ -43,14 +43,12 @@ class _StackedDS:
         s_ori = self.ori[0]
         s_inf = inf[0]
 
-        if len(set(s_ori.keys()) & set(s_inf.keys())) > 0:
-            raise RuntimeError('Original dataset and parsed inference values should have exclusive sets of keys.')
-
         if len(self.ori) != len(inf):
             raise RuntimeError('Original dataset has {len(self.ori)} samples, parsed inference values have {len(inf)} samples. They should have the same number of samples.')
 
-        # update keys list
-        self.k = list(s_ori.keys()) + list(s_inf.keys())
+        # if keys appear in both, we ignore it from the original
+        self.k_ori = list(set(s_ori.keys()) - set(s_inf.keys())) 
+        self.k_inf = list(s_inf.keys()) 
 
         # save the inf
         self.inf = inf
@@ -60,24 +58,28 @@ class _StackedDS:
     def __getitem__(self, idx):
         r = {}
 
-        for k, v in self.ori[idx].items():
-            r[k] = v 
+        print('item from ori: ', self.k_ori)
+        for k in self.k_ori:
+            r[k] = self.ori[idx][k] 
 
         if self.inf != None:
-            for k, v in self.inf[idx].items():
-                r[k] = v 
+            print('item from inf: ', self.k_inf)
+            for k in self.k_inf:
+                r[k] = self.inf[idx][k] 
 
         return self.transform(r) 
     
     def __getitems__(self, idx):
         r = TensorDict({}, batch_size=len(idx))
 
-        for k, v in self.ori[idx].items():
-            r[k] = v 
+        print('items from ori: ', self.k_ori)
+        for k in self.k_ori:
+            r[k] = self.ori[idx][k] 
 
         if self.inf != None:
-            for k, v in self.inf[idx].items():
-                r[k] = v 
+            print('items from inf: ', self.k_inf)
+            for k in self.k_inf:
+                r[k] = self.inf[idx][k] 
 
         return self.transform(r) 
 
@@ -85,7 +87,7 @@ class _StackedDS:
         return self.len
 
     def keys(self):
-        return self.k
+        return self.k_ori + self.k_inf
 
     def close(self):
         if self.inf != None:
@@ -107,6 +109,7 @@ class ParsedDataset():
 
         # set in parsed_dataset(), parse_inference(), load_only()
         self._dss = None # this is the parsed datasets as PTD
+        self._dss_ori = {} 
 
         # used in the contexted manager
         self._is_contexted = None
@@ -246,75 +249,84 @@ class ParsedDataset():
         n_threads = kwargs.get('n_threads', 1) 
         verbose = kwargs.get('verbose', False) 
 
-        if loaders == None: loaders = self._dss.keys()
+        if loaders == None: loaders = list(self._dss.keys())
 
         for ds_key in loaders:
-            if verbose: print(f'\n ---- Getting data from {ds_key}\n')
-            file_path = self.path/f'dss.{ds_key}.{name}' 
+            # save the pointers for the original stackedDSs
+            if (not (ds_key in self._dss_ori.keys())) and (ds_key in self._dss.keys()):
+                self._dss_ori[ds_key] = self._dss.pop(ds_key)
 
-            self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
-            
-            if file_path.exists():
-                if verbose: print(f'File {file_path} exists. Loading from disk.')
-
-                ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
-                n_samples = len(ptd)
-                # this is a workaround for when loading PTDs with already populated MMTs
-                ptd.batch_size = torch.Size((n_samples,))
+            for inf_name, inf_fn in inference_fns.items():
+                if verbose: print(f'\n ---- Getting data from {ds_key}\n')
+                file_path = self.path/f'dss.{ds_key}.{inf_name}' 
+                inf_ds_key = ds_key + '-' + inf_name
+             
+                # create a new StackedDS copying the pointer to the original parsed DS
+                # keys in self._dss are altered
+                self._dss[inf_ds_key] = _StackedDS(ori=self._dss_ori[ds_key].ori)
+                self._dss[inf_ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
                 
-                if verbose: print('loaded n_samples: ', n_samples)
-            else:
-                n_samples = len(self._dss[ds_key])
-                if verbose: print('Creating dataset with n_samples: ', n_samples)
-                ptd = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+                if file_path.exists():
+                    if verbose: print(f'File {file_path} exists. Loading from disk.')
 
-            # sample for dry run to get shapes
-            sample = self._dss[ds_key][0:1]
-            with torch.no_grad():
-                _res = inference_fn(data = sample)
+                    ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
+                    n_samples = len(ptd)
+                    # this is a workaround for when loading PTDs with already populated MMTs
+                    ptd.batch_size = torch.Size((n_samples,))
+                    
+                    if verbose: print('loaded n_samples: ', n_samples)
+                else:
+                    n_samples = len(self._dss[inf_ds_key])
+                    if verbose: print('Creating dataset with n_samples: ', n_samples)
+                    ptd = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
 
-            out_ktc = list(set(_res.keys())-set(ptd.keys()))
-            
-            if len(out_ktc) > 0:
-                for key in out_ktc:
-                    if verbose: print(f'Allocating {key}')
-                    ptd[key] = MMT.empty(
-                            shape = torch.Size((n_samples,)+_res[key].shape[1:]),
-                            dtype = _res[key].dtype
+                # sample for dry run to get shapes
+                sample = self._dss[inf_ds_key][0:1]
+                with torch.no_grad():
+                    _res = inf_fn(data = sample)
+
+                out_ktc = list(set(_res.keys())-set(ptd.keys()))
+                
+                if len(out_ktc) > 0:
+                    for key in out_ktc:
+                        if verbose: print(f'Allocating {key}')
+                        ptd[key] = MMT.empty(
+                                shape = torch.Size((n_samples,)+_res[key].shape[1:]),
+                                dtype = _res[key].dtype
+                                )
+
+                    # Close PTD create with mode 'w' and re-open it with mode 'r+'
+                    # This is done so we can use multiple workers with the dataloaders 
+                    ptd.close()
+                    ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+                    #------------------------
+                    # copy images and labels
+                    #------------------------
+                    dl_ori = DataLoader(
+                            dataset = self._dss[inf_ds_key],
+                            batch_size = bs,
+                            collate_fn = lambda x:x,
+                            shuffle = False,
+                            num_workers = n_threads
                             )
 
-                # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                # This is done so we can use multiple workers with the dataloaders 
-                ptd.close()
-                ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
+                    dl_dst = DataLoader(
+                            dataset = ptd,
+                            batch_size = bs,
+                            collate_fn = lambda x:x,
+                            shuffle = False,
+                            num_workers = n_threads
+                            )
+                    
+                    if verbose: print(f'Parsing inference for {inf_ds_key}')
+                    with torch.no_grad():
+                        for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
+                            _res = inf_fn(data = data_in)
+                            for key in out_ktc:
+                                data_t[key] = _res[key]
 
-                #------------------------
-                # copy images and labels
-                #------------------------
-                dl_ori = DataLoader(
-                        dataset = self._dss[ds_key],
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
-
-                dl_dst = DataLoader(
-                        dataset = ptd,
-                        batch_size = bs,
-                        collate_fn = lambda x:x,
-                        shuffle = False,
-                        num_workers = n_threads
-                        )
-                
-                if verbose: print(f'Parsing inference for {ds_key}')
-                with torch.no_grad():
-                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
-                        _res = inference_fn(data = data_in)
-                        for key in out_ktc:
-                            data_t[key] = _res[key]
-
-            self._dss[ds_key].stack_inference(inf=ptd)
+                self._dss[inf_ds_key].stack_inference(inf=ptd)
         return 
 
     def load_only(self, **kwargs):

@@ -24,10 +24,10 @@ def img_classification_full(**kwargs):
 
 def img_classification_atks(**kwargs):
     data = kwargs['data']
-    model = kwargs['model']
     atk = kwargs['attack']
     label_key = kwargs.get('label_key', 'label')
     
+    model = atk.model
     device = model.device
 
     imgs_ori = data['image'].to(device)
@@ -46,10 +46,10 @@ def img_classification_atks(**kwargs):
     pred_atk = out_atk.argmax(axis=1)
 
     ret = {
-            'atk_image': atk_imgs
+            'image': atk_imgs,
             'output': out_atk,
             'pred': pred_atk,
-            'result': pred_atk == labels 
+            'result': pred_atk == labels, 
             'attack_success': torch.logical_and(pred_ori == labels, pred_atk != pred_ori)
             }
 
