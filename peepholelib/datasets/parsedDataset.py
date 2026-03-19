@@ -56,14 +56,19 @@ class _StackedDS:
         return
 
     def __getitem__(self, idx):
+        # this offers the ptd['key'] interface
+        if type(idx) == str:
+            if idx in self.k_ori:
+                return self.ori[idx]
+            elif idx in self.k_inf:
+                return self.inf[idx]
+
         r = {}
 
-        print('item from ori: ', self.k_ori)
         for k in self.k_ori:
             r[k] = self.ori[idx][k] 
 
         if self.inf != None:
-            print('item from inf: ', self.k_inf)
             for k in self.k_inf:
                 r[k] = self.inf[idx][k] 
 
@@ -72,12 +77,10 @@ class _StackedDS:
     def __getitems__(self, idx):
         r = TensorDict({}, batch_size=len(idx))
 
-        print('items from ori: ', self.k_ori)
         for k in self.k_ori:
             r[k] = self.ori[idx][k] 
 
         if self.inf != None:
-            print('items from inf: ', self.k_inf)
             for k in self.k_inf:
                 r[k] = self.inf[idx][k] 
 
@@ -108,7 +111,7 @@ class ParsedDataset():
         self.path = Path(kwargs.get('path'))
 
         # set in parsed_dataset(), parse_inference(), load_only()
-        self._dss = None # this is the parsed datasets as PTD
+        self._dss = {} # this is the parsed datasets as PTD
         self._dss_ori = {} 
 
         # used in the contexted manager
@@ -141,7 +144,6 @@ class ParsedDataset():
         verbose = kwargs.get('verbose', False) 
 
         self.path.mkdir(parents=True, exist_ok=True)
-        self._dss = {}
 
         # enter the context manager
         for ds_name, ds_wrap in ds_wraps.items():
@@ -261,7 +263,7 @@ class ParsedDataset():
                 file_path = self.path/f'dss.{ds_key}.{inf_name}' 
                 inf_ds_key = ds_key + '-' + inf_name
              
-                # create a new StackedDS copying the pointer to the original parsed DS
+                # create new StackedDS copying the pointer to the original parsed DS
                 # keys in self._dss are altered
                 self._dss[inf_ds_key] = _StackedDS(ori=self._dss_ori[ds_key].ori)
                 self._dss[inf_ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
@@ -331,24 +333,28 @@ class ParsedDataset():
 
     def load_only(self, **kwargs):
         '''
-        Load already computed dataset.
+        Load already parsed dataset, sets transforms, and load inference values. Parsed datasets are saved on `self._dss[<loader>]` for each `loader` within `loaders`. If `inference_names` is passed, the function backs up the parsed dataset in `self._dss_ori`, and instead saves `self._dss[<loader>-<inf_name>] = _StackedDS(ori=self._dss[<loader>])` for each `inf_name` in `inference_names[<loader>]`, stacking the respective inference values. As such, all inferences will point to the same original parsed dataset (the one computed with `self.parse_dataset()`). 
 
         Args:
         - loaders (list[str]): load the specified loaders.
-        - inference_name: Name given to `parse_inference()` for loading its data. If `None` no inference values are loaded. Defaults to `None`. 
-        - transforms (dict{str: callable}): Dictionary with keys matching the loaders and transforms as values. It should be same as the ones used in `self.parse_inference()`. A transorm takes as input a sample from the parsed dataset (`self._dss`) and edits its values. If `None`, uses `lambda x: x`. Defaults to `None`. 
+        - transforms (dict{str: callable}): Dictionary with keys matching `loaders` and callable transforms as values (e.g., `peepholelib.datasets.functional.transforms.TransformWrap`). Transforms should be same as the ones used in `self.parse_inference()`. A transorm takes as input a sample from the parsed dataset (`self._dss`) and edits its values. If `None`, uses `lambda x: x`. Defaults to `None`. 
+        - inference_names (dict{str:list[str]}): Inference names given as the keys of `inference_fns` to `self.parse_inference()`. Empty lists (`[]`) will result in no inference for a given `loader`. If `None` no inference values are loaded for all `loaders`. Defaults to `None`. 
         - mode (str): Opens the file with the specified mode. See 'tensordict.PersistentTensorDict.from_h5()' for details. Defaults to 'r'.
         - verbose (bool): print progress messages.
         '''
         self.check_uncontexted()
 
         loaders = kwargs.get('loaders')
-        name = kwargs.get('inference_name', None)
         transforms = kwargs.get('transforms', None)
+        inf_names = kwargs.get('inference_names', None)
         mode = kwargs.get('mode', 'r')
         verbose = kwargs.get('verbose', True)
 
+        # TODO: Should we try to close any eventually loaded PTD?
+        self.__exit__(None, None, None)
         self._dss = {}
+        self._dss_ori = {}
+
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
             
@@ -357,17 +363,35 @@ class ParsedDataset():
             if verbose: print(f'Loading files {_dfp_ori} from disk. ')
             ptd = PersistentTensorDict.from_h5(_dfp_ori, mode=mode)
 
-            self._dss[ds_key] = _StackedDS(ori = ptd)
-            self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+            self._dss[ds_key] = _StackedDS(ori=ptd)
 
-            if name != None: 
-                _dfp_inf = self.path/f'dss.{ds_key}.{name}'
-                if verbose: print(f'Loading files {_dfp_inf} from disk. ')
-                _td = PersistentTensorDict.from_h5(_dfp_inf, mode=mode)
-                
-                self._dss[ds_key].stack_inference(inf=_td) 
+            if inf_names == None:
+                self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+                _n_samples = len(self._dss[ds_key])
 
-            _n_samples = len(self._dss[ds_key])
+            else: 
+                if len(inf_names[ds_key]) == 0:
+                    self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+                    _n_samples = len(self._dss[ds_key])
+                else:
+                    for inf_name in inf_names[ds_key]:
+                        # back up the pointer to the original ds
+                        if (not (ds_key in self._dss_ori.keys())) and (ds_key in self._dss.keys()):
+                            self._dss_ori[ds_key] = self._dss.pop(ds_key)
+                        
+                        _dfp_inf = self.path/f'dss.{ds_key}.{inf_name}'
+                        inf_ds_key = ds_key + '-' + inf_name
+
+                        # create new StackedDS copying the pointer to the original parsed DS
+                        self._dss[inf_ds_key] = _StackedDS(ori=self._dss_ori[ds_key].ori)
+                        self._dss[inf_ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
+
+                        # stack inference values
+                        if verbose: print(f'Loading files {_dfp_inf} from disk. ')
+                        _td = PersistentTensorDict.from_h5(_dfp_inf, mode=mode)
+                        self._dss[inf_ds_key].stack_inference(inf=_td)
+
+                    _n_samples = len(self._dss[inf_ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
         return
     
@@ -378,12 +402,13 @@ class ParsedDataset():
     def __exit__(self, exc_type, exc_val, exc_tb):
         verbose = True 
 
-        if self._dss == None:
-            if verbose: print('no dss to close.')
-        else:
-            for ds_key in self._dss:
-                if verbose: print(f'closing {ds_key}')
-                self._dss[ds_key].close()
+        for ds_key in self._dss_ori:
+            if verbose: print(f'closing {ds_key}')
+            self._dss_ori[ds_key].close()
+
+        for ds_key in self._dss:
+            if verbose: print(f'closing {ds_key}')
+            self._dss[ds_key].close()
 
         self._is_contexted = False 
         return

@@ -55,7 +55,7 @@ def conceptogram_protoclass_score(**kwargs):
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
     nc = cpss[loaders[0]].shape[2] # number of classes
-    
+
     if proto == None:
         cps = cpss[proto_key]
         results = dss._dss[proto_key]['result']
