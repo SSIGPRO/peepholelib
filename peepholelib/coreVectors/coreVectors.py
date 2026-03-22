@@ -10,6 +10,7 @@ from tqdm import tqdm
 class CoreVectors():
      
     from .get_coreVectors import get_coreVectors
+    from .get_coreVectors_pred import get_coreVectors_pred
 
     def __init__(self, **kwargs):
         '''

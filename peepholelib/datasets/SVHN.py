@@ -88,7 +88,7 @@ class SVHN(DatasetWrap):
                 )
 
         self.__dataset__ = {
-                'SVHN-train': train_dataset,
+                # 'SVHN-train': train_dataset,
                 'SVHN-val': val_dataset,
                 'SVHN-test': test_dataset
                 }

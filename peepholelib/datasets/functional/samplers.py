@@ -6,9 +6,20 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 def random_subsampling(ds, perc):
     assert(isinstance(ds, DatasetWrap))
-    
-    for k in ds.__dataset__:
-        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [perc, 1.0-perc])
+
+    ds_keys = list(ds.__dataset__.keys())
+
+    if isinstance(perc, (list, tuple)):
+        if len(perc) != len(ds_keys):
+            raise RuntimeError(
+                f'Expected `perc` to have length {len(ds_keys)} to match ds.__dataset__.keys(), got {len(perc)}.'
+            )
+        percs = perc
+    else:
+        percs = [perc] * len(ds_keys)
+
+    for k, k_perc in zip(ds_keys, percs):
+        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [k_perc, 1.0-k_perc])
     return 
 
 def dist_preserving(data, n, weights='label'):

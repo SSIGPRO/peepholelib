@@ -31,7 +31,6 @@ def get_coreVectors(self, **kwargs):
     self.check_uncontexted()
     
     datasets = kwargs.get('datasets')
-    loaders = kwargs.get('loaders', None)
     input_key = kwargs.get('input_key','image')
     reducers = kwargs.get('reducers')
     activations_parser = kwargs.get('activations_parser', get_in_activations)
