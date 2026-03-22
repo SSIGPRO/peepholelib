@@ -24,8 +24,7 @@ class ViTTokenWiseMean(DRB):
         # Assuming the input is of shape (batch_size, num_tokens, num_channels)
 
         act_data = kwargs['act_data'] 
-        act_data = act_data[:, 1:, :]  # Exclude the class token
-        cvs = torch.mean(act_data, dim=2)  # Mean across tokens
+        cvs = act_data.mean(dim=(1, 2))
         return cvs
 
     def parser(self, **kwargs):

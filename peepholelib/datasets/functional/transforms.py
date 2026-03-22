@@ -79,6 +79,24 @@ resnet50_imagenet_augmentations = transforms.Compose([
 ])
 
 #-----------------------------
+# WRN-28-10 on CIFAR100
+#-----------------------------
+
+wrn_cifar100_transform = transforms.Compose([
+    transforms.ToTensor(),
+])
+
+#-----------------------------
+# WRN-28-10 Augmentations
+#-----------------------------
+
+wrn_cifar100_augmentations = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+])
+
+#-----------------------------
 # ViT Augmentations
 #-----------------------------
 
@@ -140,3 +158,21 @@ mobilenet_v2_cifar10_augumentations = transforms.Compose([
     transforms.CenterCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     ])
+
+#-----------------------------
+# WRN-28-10 on CIFAR100
+#-----------------------------
+
+wrn_cifar100_transform = transforms.Compose([
+    transforms.ToTensor(),
+])
+
+#-----------------------------
+# WRN-28-10 Augmentations
+#-----------------------------
+
+wrn_cifar100_augmentations = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+])

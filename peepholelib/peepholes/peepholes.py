@@ -90,6 +90,8 @@ class Peepholes:
                     _cv = cvds[module][0:1]
                     _d = dssds[0:1] 
                     _ph = self._drillers[module](cvs=_cv, dss=_d)
+                    print(_ph.shape)
+                    quit()
 
                     if verbose: print('allocating peepholes for module: ', module)
                     self._phs[ds_key][module] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
