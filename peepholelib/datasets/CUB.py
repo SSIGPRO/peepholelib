@@ -217,7 +217,7 @@ class CUBCustom(Dataset):
         img = Image.open(img_path).convert("RGB")
 
         label = self.id_to_label[img_id]
-        bbox = self.id_to_bbox.get(img_id, None)
+        #bbox = self.id_to_bbox.get(img_id, None)
         parts_categorical = self.id_to_parts_categorical.get(img_id, [])
         attributes_categorical = self.id_to_attributes_categorical.get(img_id, [])
 
@@ -248,7 +248,7 @@ class CUBCustom(Dataset):
         sample = {
             "image": self._to_tensor(img),
             "label": label,
-            "bbox": bbox,
+            #"bbox": bbox,
             **attributes_categorical,
             **parts_categorical
         }

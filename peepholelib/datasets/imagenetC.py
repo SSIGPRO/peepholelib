@@ -47,11 +47,11 @@ class CustomDS(Dataset):
     def __getitem__(self, idx):
         image_path, synset, corruption = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
-        label = torch.tensor(self.synset_to_label[synset], dtype=torch.long)
+        label = torch.tensor(self.synset_to_label[synset])
         return {
             "image": self._to_tensor(image),
             "label": label,
-            "corruption": torch.tensor(self.mapping[corruption], dtype=torch.long),
+            "corruption": torch.tensor(self.mapping[corruption]),
         }
 
 class ImageNetC(DatasetWrap):
