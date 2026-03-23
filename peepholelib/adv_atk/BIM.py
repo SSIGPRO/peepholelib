@@ -46,9 +46,9 @@ class myBIM(AttackBase):
 
         self.eps = kwargs.get("eps", 8/255)
         self.alpha = kwargs.get("alpha", 2/255)
-        self.steps = kwargs.get("steps", 300)
-        self.mode = kwargs.get("mode", "random")
-        self.target_class = kwargs.get("target_class", 5)
+        self.steps = kwargs.get("steps", 100)
+        # self.mode = kwargs.get("mode", "random")
+        # self.target_class = kwargs.get("target_class", 5)
 
         self.atk = BIMStoreTarget(
             model=self.model._model,
@@ -57,25 +57,26 @@ class myBIM(AttackBase):
             steps=self.steps,
         )
 
-        if self.mode == "random":
-            self.atk.set_mode_targeted_random(quiet=False)
+        # if self.mode == "random":
+        #     self.atk.set_mode_targeted_random(quiet=False)
 
-        elif self.mode == "least-likely":
-            self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
+        # elif self.mode == "least-likely":
+        #     self.atk.set_mode_targeted_least_likely(kth_min=1, quiet=False)
 
-        elif self.mode == "fixed":
-            tc = int(self.target_class)
+        # elif self.mode == "fixed":
+        #     tc = int(self.target_class)
 
-            def fixed_target_fn(inputs, labels):
-                y_t = torch.full_like(labels, tc)
-                same = (y_t == labels)
-                if same.any():
-                    with torch.no_grad():
-                        num_classes = self.atk.get_output_with_eval_nograd(inputs).shape[1]
-                    y_t[same] = (y_t[same] + 1) % num_classes
-                return y_t
+        #     def fixed_target_fn(inputs, labels):
+        #         y_t = torch.full_like(labels, tc)
+        #         same = (y_t == labels)
+        #         if same.any():
+        #             with torch.no_grad():
+        #                 num_classes = self.atk.get_output_with_eval_nograd(inputs).shape[1]
+        #             y_t[same] = (y_t[same] + 1) % num_classes
+        #         return y_t
 
-            self.atk.set_mode_targeted_by_function(fixed_target_fn, quiet=False)
+        #     self.atk.set_mode_targeted_by_function(fixed_target_fn, quiet=False)
+        self._set_targeted_mode()
 
     def __call__(self, images, labels):
         return self.atk(images, labels)

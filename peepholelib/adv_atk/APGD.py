@@ -337,8 +337,8 @@ class myAPGD(AttackBase):
 
         self.norm = kwargs.get('norm', 'Linf')
         self.eps = kwargs.get('eps', 8 / 255) # 0.5/255
-        self.steps = kwargs.get('steps', 300) # 100
-        self.n_restarts = kwargs.get('n_restarts', 20) #1
+        self.steps = kwargs.get('steps', 100) # 100
+        self.n_restarts = kwargs.get('n_restarts', 1) #1
         self.loss = kwargs.get('loss', 'dlr') #ce
         self.verbose = kwargs.get('verbose', False)
         self.rho = kwargs.get('rho', 0.75)
