@@ -52,7 +52,7 @@ convnext_base_cifar100_augmentations = transforms.Compose([
     transforms.Resize((232,232)),
     transforms.CenterCrop((224,224)),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
-    
+    transforms.ToTensor(),
 ])
 
 #-----------------------------
