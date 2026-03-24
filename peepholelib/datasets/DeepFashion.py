@@ -110,6 +110,10 @@ class CustomDS(Dataset):
             self._drop_samples_without_attributes()
 
     def _configure_attribute_subset(self):
+        '''
+        Configures the subset of attributes to return based on top_k_attributes.
+        If top_k_attributes is None, all attributes are kept. Otherwise, only the k most frequent attributes are kept.
+        '''
         if self.top_k_attributes is not None:
             if self.top_k_attributes == 0:
                 selected = []
@@ -135,6 +139,9 @@ class CustomDS(Dataset):
         self.n_attributes = len(self._attribute_indices)
 
     def _select_attributes(self, raw_attributes):
+        '''
+        Selects a subset of attributes from raw_attributes based on top_k_attributes configuration.
+        '''
         if self.top_k_attributes is None:
             return raw_attributes
         if len(self._attribute_indices) == 0:
