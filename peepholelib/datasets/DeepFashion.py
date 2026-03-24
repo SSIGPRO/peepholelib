@@ -231,7 +231,7 @@ class CustomDS(Dataset):
                 bbox[1] = bbox[1] * scale_y
                 bbox[3] = bbox[3] * scale_y
 
-        attributes = self._select_attributes(raw_attributes)
+        attributes = (self._select_attributes(raw_attributes) > 0).to(torch.float32)
 
         sample = {
             "image": img,
@@ -258,8 +258,9 @@ class DeepFashion(DatasetWrap):
         seed (int, optional): Random seed stored with the dataset wrapper.
         top_k_attributes (int, optional): Restrict returned attributes to the k most frequent attributes 
             If None, all attributes are kept (DeepFashion has 1000 attributes originally).
-            Returned attribute values keep the original DeepFashion encoding from
-            `list_attr_img.txt` (typically `-1` and `1`).
+            Returned attribute values are binary indicators, where positive
+            values from `list_attr_img.txt` become `1.0` and non-positive
+            values become `0.0`.
         del_no_attributes_samples (bool, optional): When True, removes samples that have 0 positive attributes.
         min_samples_per_class (int, optional): Minimum number of samples a class must have in each of the train, validation, and test splits
             to be kept. Remaining classes are remapped to contiguous labels.
