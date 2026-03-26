@@ -125,7 +125,7 @@ class AttacksDS(ParsedDataset):
                             labels = labels 
                             )
                     # added by Kami
-                    y_target = getattr(atk.atk, "y_target", None)
+                    y_target = getattr(atk, "y_target", None)
                     if y_target is not None:
                         y_target = y_target.detach().cpu().long()
                     # added by Kami

@@ -11,7 +11,17 @@ class AttackBase(metaclass=abc.ABCMeta):
         self.model = kwargs.get('model')
         self.mode = kwargs.get('mode', 'random')
         self.target_class = kwargs.get('target_class', 5)
+        self.y_target = None
+        self.atk = None
         return
+    
+    def _get_target_label(self, inputs, labels=None):
+        """
+        Get target labels from the attack, and store a detached clone.
+        """
+        y_t = self.atk.get_target_label(inputs, labels)
+        self.y_target = y_t.detach().clone()
+        return y_t
 
     def _fixed_target_fn(self, inputs, labels):
         """
