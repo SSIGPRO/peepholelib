@@ -52,6 +52,7 @@ class Conv2dToeplitzSVD(DRB):
                 raise RuntimeError("Only Conv2D and ConvTranspose2d are suported") 
             
             U, s, Vh = torch.svd_lowrank(W, q=q)
+            U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
             self._svd = {
                     'U': U,
                     's': s,
