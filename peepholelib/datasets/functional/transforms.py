@@ -26,6 +26,7 @@ means = {
         'CIFAR100': torch.tensor([0.438, 0.418, 0.377]).view(1,3,1,1),
         'ImageNet': torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1),
         'SVHN': torch.tensor([0.438, 0.444, 0.473]).view(1,3,1,1)
+        'RestNet50': torch.tensor([0.485, 0.456, 0.406]).view(1,3,1,1)
         }
 
 stds = {
@@ -33,6 +34,7 @@ stds = {
         'CIFAR100': torch.tensor([0.300, 0.287, 0.294]).view(1,3,1,1),
         'ImageNet': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1),
         'SVHN': torch.tensor([0.198, 0.201, 0.197]).view(1,3,1,1),
+        'RestNet50': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
         }
 
 #-----------------------------
