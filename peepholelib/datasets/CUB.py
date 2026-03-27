@@ -217,12 +217,12 @@ class CUBCustom(Dataset):
         img = Image.open(img_path).convert("RGB")
 
         label = self.id_to_label[img_id]
-        #bbox = self.id_to_bbox.get(img_id, None)
+        # TODO: move this to transform
+        '''
+        bbox = self.id_to_bbox.get(img_id, None)
         parts_categorical = self.id_to_parts_categorical.get(img_id, [])
         attributes_categorical = self.id_to_attributes_categorical.get(img_id, [])
 
-        # TODO: move this to transform
-        '''
         x, y, w, h = bbox.tolist()
 
         W_orig, H_orig = img.size
@@ -249,8 +249,8 @@ class CUBCustom(Dataset):
             "image": self._to_tensor(img),
             "label": label,
             #"bbox": bbox,
-            **attributes_categorical,
-            **parts_categorical
+            #**attributes_categorical,
+            #**parts_categorical
         }
         return sample
     
