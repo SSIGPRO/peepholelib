@@ -32,7 +32,7 @@
 ## Model
 - Rework SVDs. SVD functions for each layer are passed to `get_svds()`.
 - add function `update_output` to `model_wrap`.
-- Remove dry_run(). Corevectors run a dry image internally.
+- Remove `dry_run()`. Corevectors run a dry image internally.
 - Remove `add_hooks()`, not it is done in `set_target_modules()`.
 - Add `set_activations()` function, which set the model to save activation in `model._acts` or to not save activations.
 
