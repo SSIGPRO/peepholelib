@@ -24,10 +24,10 @@ def DefaultValidationLoop(**kwargs):
             pred = trainer.out_parser(model_out)
             loss = trainer.loss_fn(pred, labels)
 
-            loss_acc += loss * n_samples
+            loss_acc += loss
             acc_acc += trainer.acc_fn(pred, labels)
 
-        trainer.val_losses[epoch] = (loss_acc / samples_acc).detach().cpu()
+        trainer.val_losses[epoch] = (loss_acc).detach().cpu()
         trainer.val_acc[epoch] = (acc_acc / samples_acc).detach().cpu()
 
     # step the scheduler
@@ -39,6 +39,7 @@ def DefaultValidationLoop(**kwargs):
 
             if old_lr != current_lr and trainer.verbose:
                 print(f'New LR: {current_lr:.6f}')
+                # TODO: should we update num_bad_epochs here?
         else:
             trainer.scheduler.step()
 

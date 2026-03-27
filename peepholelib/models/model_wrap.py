@@ -13,11 +13,11 @@ from torch import Tensor
 
 class InputNormalizer(nn.Module):
 
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, device):
         super(InputNormalizer, self).__init__()
 
-        self.register_buffer('mean', mean)
-        self.register_buffer('std', std)
+        self.mean = mean.to(device)
+        self.std = std.to(device)
 
     def forward(self, input: Tensor) -> Tensor:
         return (input - self.mean) / self.std
@@ -76,6 +76,9 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._model = kwargs['model']
         tm = kwargs.get('target_modules', None)
         self.device = kwargs.get('device', 'cpu')
+
+        # set in prepend_normalize()
+        self._normalizer = lambda x: x
 
         assert(issubclass(type(self._model), torch.nn.Module))
         # impose requirse_grad = False for all parameters
@@ -147,6 +150,8 @@ class ModelWrap(metaclass=abc.ABCMeta):
         Returns:
             res (torch.tensor): the model output
         '''
+
+        x = self._normalizer(x)
         res = self._model(x)
 
         # get activations in a dict (similar to corevectors structure)
@@ -292,9 +297,9 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         return
     
-    def normalize_model(self, **kwargs):
+    def prepend_normalizer(self, **kwargs):
         '''
-        Wrap the model with an InputNormalizer layer at the beginning.
+        Add a normalizer step (see `peepholelib.models.model_wrap.InputNormalizer`) before inputs being passed to the model.
         Args:
         - mean (torch.tensor): mean for each channel
         - std (torch.tensor): std for each channel
@@ -303,13 +308,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         mean = kwargs['mean']
         std = kwargs['std']
 
-        mean = mean.to(self.device)
-        std = std.to(self.device)
-        
-        layers = OrderedDict([('normalizer', InputNormalizer(mean, std)), ('model', self._model)])
-        
-        self._model = nn.Sequential(layers)
-
+        self._normalizer = InputNormalizer(mean, std, self.device)
         return  
     
     def set_target_modules(self, **kwargs):
