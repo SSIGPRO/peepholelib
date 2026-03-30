@@ -6,7 +6,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from torchvision.transforms import ToTensor
+from torchvision.transforms import ToTensor, Resize, Compose
 
 class CustomDS(Dataset):
     def __init__(self, samples, synset_to_label, transform):
@@ -82,7 +82,7 @@ class ImageNetC(DatasetWrap):
         if self.transform != None:
             self.transform.transforms.append(ToTensor())
         else:
-            self.transform = ToTensor()
+            self.transform = Compose([ToTensor(), Resize((224, 224))])
         
         return
 
