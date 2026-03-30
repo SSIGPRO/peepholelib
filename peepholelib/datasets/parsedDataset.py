@@ -145,6 +145,16 @@ class ParsedDataset():
 
         self.path.mkdir(parents=True, exist_ok=True)
 
+        # be sure that the datasets do not have a transform.
+        # transforms should be set in `self.parse_inferece()`
+        has_trans = []
+        for ds_name, ds_wrap in ds_wraps.items():
+            if ds_wrap.has_transforms:
+                has_trans.append(ds_name)
+        if len(has_trans) > 0:
+            raise RuntimeError(f'Found `transforms` within the given `dataset_wraps`: {has_trans}. DatasetWraps are expected to not have transforms at this point since they will be set in `parse_inferece()`')
+
+
         # enter the context manager
         for ds_name, ds_wrap in ds_wraps.items():
             ds_wrap.__load_data__()
