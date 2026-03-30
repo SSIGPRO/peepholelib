@@ -38,7 +38,7 @@ class Cifar10(DatasetWrap):
         '''
         DatasetWrap.__init__(self, **kwargs)
 
-        self.transform = kwargs.get('std_transform')
+        self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 

@@ -263,7 +263,7 @@ class CUB(DatasetWrap):
         Returns:
             - a thumbs up
         '''
-        self.path = kwargs.get('path')
+        self.path = kwargs['path']
         self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)

@@ -174,7 +174,7 @@ class AwA(DatasetWrap):
         Returns:
             - a thumbs up
         '''
-        self.path = kwargs.get('path')
+        self.path = kwargs['path']
         self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
