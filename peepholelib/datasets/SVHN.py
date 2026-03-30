@@ -1,26 +1,23 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from torchvision.datasets import SVHN as torchSVHN
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
 
 # SVHN from torchvision
-from torchvision import datasets
-from torchvision.transforms import ToTensor 
+from torchvision.datasets import SVHN as torchSVHN
+from torchvision.transforms import ToTensor
 
 class SVHNCustom(torchSVHN):
 
     def __init__(self, **kwargs):
         torchSVHN.__init__(self, **kwargs)
-        self._to_tensor = ToTensor()
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
 
-        return {
-                'image': self._to_tensor(img),
+        return {'image': img,
                 'label': torch.tensor(label),
                 }  
 
@@ -34,10 +31,19 @@ class SVHN(DatasetWrap):
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
+        
+        # add a default transform for specific DS
+        self.transform = kwargs.get('std_transfrom')
+
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
 
-        DatasetWrap.__init__(self, **kwargs)
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
 
         return
     
@@ -47,6 +53,7 @@ class SVHN(DatasetWrap):
         
         Args:
         - seed (int): Random seed for reproducibility.
+        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
@@ -56,6 +63,7 @@ class SVHN(DatasetWrap):
         _test_data = SVHNCustom(
             root = self.path,
             split = 'test',
+            transform = self.transform,
             download = True
         )
 
@@ -69,6 +77,7 @@ class SVHN(DatasetWrap):
         _train_data = SVHNCustom( 
             root = self.path,
             split = 'train',
+            transform = self.transform,
             download = True
         )
         

@@ -4,15 +4,13 @@ from math import floor
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.transforms import ToTensor 
 
 from peepholelib.datasets.datasetWrap import DatasetWrap
+from torchvision.transforms import ToTensor
 
 class CustomDS(Dataset):
-    def __init__(self, samples, synset_to_label):
+    def __init__(self, samples, synset_to_label, transform):
         Dataset.__init__(self)
-        self._to_tensor = ToTensor()
-
         p = [
             "brightness",
             "contrast",
@@ -37,6 +35,7 @@ class CustomDS(Dataset):
         self.mapping = {c: i for i, c in enumerate(p)}
         self.samples = samples
         self.synset_to_label = synset_to_label
+        self.transform = transform
         unknown = sorted({corruption for _, _, corruption in samples} - set(self.mapping.keys()))
         if unknown:
             raise ValueError(f"Unknown corruption names found: {unknown}")
@@ -47,27 +46,46 @@ class CustomDS(Dataset):
     def __getitem__(self, idx):
         image_path, synset, corruption = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
-        label = torch.tensor(self.synset_to_label[synset])
+        image = self.transform(image)
+        label = torch.tensor(self.synset_to_label[synset], dtype=torch.long)
+
         return {
-            "image": self._to_tensor(image),
+            "image": image,
             "label": label,
-            "corruption": torch.tensor(self.mapping[corruption]),
+            "corruption": torch.tensor(self.mapping[corruption], dtype=torch.long),
         }
 
 class ImageNetC(DatasetWrap):
     def __init__(self, **kwargs):
         """
-        ImageNet-C loader (val & test). Builds corruption-level datasets from the ImageNet-C directory hierarchy.
+        ImageNet-C loader (val & test). Builds corruption-level datasets from
+        the ImageNet-C directory hierarchy.
 
         Args:
-            path (str): Path to the ImageNet-C root folder organized as `<corruption>/<severity>/<synset>/*.JPEG`.
-            seed (int, optional): Random seed used for reproducible corruption mixing.
-            corruptions (list[str], optional): Optional list of corruptions to consider.
+            path (str): Path to the ImageNet-C root folder organized as
+                `<corruption>/<severity>/<synset>/*.JPEG`.
+            transform (callable, optional): Transform applied to each image.
+                Defaults to `vgg16`.
+            seed (int, optional): Random seed used for reproducible corruption
+                mixing.
+            corruptions (list[str], optional): Optional list of corruptions to
+                consider.
         Returns:
             - a thumbs up
         """
-        self.corruptions = kwargs.get("corruptions", None)
         DatasetWrap.__init__(self, **kwargs)
+
+        self.transform = kwargs.get('std_transform', None)
+        self.corruptions = kwargs.get("corruptions", None)
+
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+        
+        return
+
 
     def __load_data__(self):
         """
@@ -139,15 +157,19 @@ class ImageNetC(DatasetWrap):
             ds_test = CustomDS(
                 samples=mixed_test,
                 synset_to_label=synset_to_label,
+                transform=self.transform,
             )
             ds_val = CustomDS(
                 samples=mixed_val,
                 synset_to_label=synset_to_label,
+                transform=self.transform,
             )
 
             c_idx = severity - 1
             self.__dataset__[f"ImageNet-C-val-c{c_idx}"] = ds_val
             self.__dataset__[f"ImageNet-C-test-c{c_idx}"] = ds_test
+
+        return
 
     def get(self, ds_key, idx):
         if not self.__dataset__:

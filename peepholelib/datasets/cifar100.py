@@ -6,19 +6,15 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-from torchvision.datasets import CIFAR100
 from torch.utils.data import random_split, Subset
-from torchvision.transforms import ToTensor 
 
 # CIFAR from torchvision
-from torchvision import datasets
+from torchvision.datasets import CIFAR100
+from torchvision.transforms import ToTensor
 
 class CIFAR100Custom(CIFAR100):
-
     def __init__(self, **kwargs):
         CIFAR100.__init__(self, **kwargs)
-        self._to_tensor = ToTensor()
-
         self.fine_to_coarse = {
             0: [4, 30, 55, 72, 95],
             1: [32, 1, 67, 73, 91],
@@ -52,7 +48,7 @@ class CIFAR100Custom(CIFAR100):
         img, label = super().__getitem__(index)
 
         sample = {
-            "image": self._to_tensor(img),
+            "image": img,
             "label": torch.tensor(label),
             "coarse_label": self.M[:, int(label)].argmax(),
         }
@@ -64,17 +60,29 @@ class Cifar100(DatasetWrap):
         CIFAR100 loader (train & val & test). Validation is created from the training split according to `train_ratio` (default: 0.8 train, 0.2 val).
 
         Args:
-            path (str): CIFAR100 download folder. If not already available, the dataset is downloaded in this folder. images. Defaults to `vgg16`.
+            path (str): CIFAR100 download folder. If not already available, the dataset is downloaded in this folder.
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
             augmentation (callable, optional): If provided, applied only to the training split.
             train_ratio (float, optional): Fraction of training samples used for train (remainder goes to val).
             seed (int, optional): Random seed used for deterministic train/val splitting.
         Returns:
             - a thumbs up
         '''
-        
-        self.train_ratio = kwargs.get('train_ratio', 0.8)
-
         DatasetWrap.__init__(self, **kwargs)
+        
+        self.transform = kwargs.get('std_transform', None)
+        self.augmentation = kwargs.get('aug_transform', None)
+        self.train_ratio = kwargs.get('train_ratio', 0.8)
+        
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
     
@@ -90,20 +98,43 @@ class Cifar100(DatasetWrap):
         test_ds = CIFAR100Custom(
             root = self.path,
             train = False,
+            transform = self.transform,
             download = True
         )
 
         base_ds = CIFAR100Custom(
                 root=self.path,
                 train=True,
+                transform=self.transform,
                 download=False
             )
         
-        train_ds, val_ds = random_split(
-                base_ds,
-                [self.train_ratio, 1-self.train_ratio],
+        if not (0.0 < self.train_ratio < 1.0):
+            raise ValueError(f'train_ratio must be in (0, 1), got {self.train_ratio}.')
+
+        n_total = len(base_ds)
+        n_train = int(round(n_total * self.train_ratio))
+        n_val = n_total - n_train
+
+        train_idx, val_idx = random_split(
+                range(n_total),
+                [n_train, n_val],
                 generator=torch.Generator().manual_seed(self.seed)
             )
+        
+        val_ds = Subset(base_ds, val_idx)
+        
+        if self.augmentation is None:
+                    
+            train_ds = Subset(base_ds, train_idx)
+        else:
+            _train_aug = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=self.augmentation,
+                download=True
+            )
+            train_ds = Subset(_train_aug, train_idx)
     
         # Save datasets as objects in the class
         self.__dataset__ = {

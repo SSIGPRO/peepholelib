@@ -3,11 +3,10 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-from torchvision.datasets import CIFAR10
 from torch.utils.data import random_split, Subset
 
 # CIFAR from torchvision
-from torchvision import datasets
+from torchvision.datasets import CIFAR10
 from torchvision.transforms import ToTensor 
 
 class CIFAR10Custom(CIFAR10):
@@ -37,12 +36,21 @@ class Cifar10(DatasetWrap):
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
 
         self.transform = kwargs.get('std_transform')
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 
-        DatasetWrap.__init__(self, **kwargs)
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+                                                                          
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
     

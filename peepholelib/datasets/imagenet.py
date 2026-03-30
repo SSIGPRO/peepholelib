@@ -14,21 +14,17 @@ from pathlib import Path
 import torch
 from torchvision.datasets import ImageNet as IN1K
 from torch.utils.data import Subset, random_split
-from torchvision.transforms import ToTensor, Compose, Resize 
+from torchvision.transforms import ToTensor, Resize, Compose
 
 # peepholelib imports
 from peepholelib.datasets.datasetWrap import DatasetWrap
 
 class ImageNetCustom(IN1K):
-    def __init__(self, **kwargs):
-        IN1K.__init__(self, **kwargs)
-        # each image in ImageNet has a differente size and resolution
-        self._to_tensor = Compose([ToTensor(), Resize((224, 224))])
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
         sample = {
-            "image": self._to_tensor(img),
+            "image": img,
             "label": torch.tensor(label),
         }
         return sample
@@ -36,19 +32,33 @@ class ImageNetCustom(IN1K):
 class ImageNet(DatasetWrap):
     def __init__(self, **kwargs):
         """
-        ImageNet-1K loader (train & val & test). A train/val split is created the official ImageNet training split using `train_ratio`, while the official validation split is exposed as `ImageNet-test`.
+        ImageNet-1K loader (train & val & test). A train/val split is created from the official ImageNet training split using `train_ratio`, while the official validation split is exposed as `ImageNet-test`.
 
         Args:
             path (str): Path to the ImageNet-1K root folder containing `train/` and `val/` subfolders.
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
             augmentation (callable, optional): If provided, applied only to the training split.
             train_ratio (float, optional): Fraction of official training samples used for train (remainder goes to val).
             seed (int, optional): Random seed used for deterministic train/val splitting.
         Returns:
             - a thumbs up
         """
+        DatasetWrap.__init__(self, **kwargs)
+
+        # add a default transform for specific DS
+        self.transform = kwargs.get('std_transform', None)
+        self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
 
-        DatasetWrap.__init__(self, **kwargs)
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = Compose([ToTensor(), Resize((224, 224))])
+                                                                          
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
 
@@ -63,18 +73,36 @@ class ImageNet(DatasetWrap):
         test_ds = ImageNetCustom(
                 root=self.path,
                 split='val',
+                transform=self.transform
             )
         
         base_ds = ImageNetCustom(
                 root=self.path,
                 split='train',
+                transform=self.transform
             )
         
-        train_ds, val_ds = random_split(
-                base_ds,
+        train_idx, val_idx = random_split(
+                range(len(base_ds)),
                 [self.train_ratio, 1 - self.train_ratio],
                 generator=torch.Generator().manual_seed(self.seed)
             )
+        
+        val_ds = Subset(base_ds, val_idx)
+
+        if self.augmentation is None:
+
+            train_ds = Subset(base_ds, train_idx)
+            
+        else:
+            _train_aug = ImageNetCustom(
+                root=self.path,
+                split='train',
+                transform=self.augmentation,
+                download=True
+            )
+            train_ds = Subset(_train_aug, train_idx)
+
         
         self.__dataset__ = {
                 "ImageNet-train": train_ds,
