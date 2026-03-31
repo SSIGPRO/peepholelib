@@ -247,10 +247,10 @@ class Trainer(metaclass=abc.ABCMeta):
         
         if self.verbose: print(f'Loading best model config from {best_model_file.as_posix()}')
         self.model.load_checkpoint(
-                            path=best_model_file.parent,
-                            name=best_model_file.name,
-                            verbose=self.verbose,
-                        )
+                path=best_model_file.parent,
+                name=best_model_file.name,
+                verbose=self.verbose,
+                )
 
         return self.test_loop(trainer=self)
 
