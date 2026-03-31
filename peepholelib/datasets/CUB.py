@@ -1,5 +1,4 @@
 # general python stuff
-import os
 from collections import defaultdict
 from PIL import Image
 from pathlib import Path
@@ -10,6 +9,7 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 # torch stuff
 import torch
 from torch.utils.data import Dataset, Subset, random_split
+from torchvision.transforms import ToTensor
 
 def onehot_to_index(bits):
     for i, b in enumerate(bits):
@@ -18,7 +18,6 @@ def onehot_to_index(bits):
     return torch.tensor([0])
 
 class CUBCustom(Dataset):
-
     def __init__(self, **kwargs):
         """
         path: path to CUB_200_2011 (folder that contains images/, attributes/, parts/, *.txt)
@@ -52,7 +51,6 @@ class CUBCustom(Dataset):
                 self.id_to_label[int(img_id)] = torch.tensor(int(class_id) - 1, dtype=torch.int64)
 
         # ---- 4) img ids ----
-       
         self.img_ids = []
         self.is_train = []
         with open(split_file, "r") as f:
@@ -113,11 +111,8 @@ class CUBCustom(Dataset):
                 self.id_to_parts[img_id].append(part_info)
         
         self.id_to_parts_categorical = {}
-
         for sample_id, sample_parts in self.id_to_parts.items():
-
             self.id_to_parts_categorical[sample_id] = {}
-
             for part in sample_parts:
                 
                 self.id_to_parts_categorical[sample_id][part['part_name']] = torch.tensor([part['x'], part['y'], part['visible']])
@@ -138,35 +133,35 @@ class CUBCustom(Dataset):
         self.id_to_attributes = defaultdict(list)
 
         attributes_list = [
-                        'has_bill_shape', 
-                        'has_wing_color',
-                        'has_upperparts_color',
-                        'has_underparts_color',
-                        'has_breast_pattern',
-                        'has_back_color',
-                        'has_tail_shape',
-                        'has_upper_tail_color',
-                        'has_head_pattern',
-                        'has_breast_color',
-                        'has_throat_color',
-                        'has_eye_color',
-                        'has_bill_length',
-                        'has_forehead_color',
-                        'has_under_tail_color',
-                        'has_nape_color',
-                        'has_belly_color',
-                        'has_wing_shape',
-                        'has_size',
-                        'has_shape',
-                        'has_back_pattern',
-                        'has_tail_pattern',
-                        'has_belly_pattern',
-                        'has_primary_color',
-                        'has_leg_color',
-                        'has_bill_color',
-                        'has_crown_color',
-                        'has_wing_pattern'
-                        ]
+                'has_bill_shape', 
+                'has_wing_color',
+                'has_upperparts_color',
+                'has_underparts_color',
+                'has_breast_pattern',
+                'has_back_color',
+                'has_tail_shape',
+                'has_upper_tail_color',
+                'has_head_pattern',
+                'has_breast_color',
+                'has_throat_color',
+                'has_eye_color',
+                'has_bill_length',
+                'has_forehead_color',
+                'has_under_tail_color',
+                'has_nape_color',
+                'has_belly_color',
+                'has_wing_shape',
+                'has_size',
+                'has_shape',
+                'has_back_pattern',
+                'has_tail_pattern',
+                'has_belly_pattern',
+                'has_primary_color',
+                'has_leg_color',
+                'has_bill_color',
+                'has_crown_color',
+                'has_wing_pattern'
+                ]
 
         with open(image_attr_file, "r") as f:
             for line in f:
@@ -193,16 +188,13 @@ class CUBCustom(Dataset):
         self.id_to_attributes_categorical = {}
 
         for sample_id, sample_attributes in self.id_to_attributes.items():
-
             self.id_to_attributes_categorical[sample_id] = {}
 
             for attribute in attributes_list:
-
                 encoding = []
-
                 for sa in sample_attributes:
-
-                    if attribute in sa['attribute_name']: encoding.append(sa['is_present'])
+                    if attribute in sa['attribute_name']:
+                        encoding.append(sa['is_present'])
                 
                 self.id_to_attributes_categorical[sample_id][attribute] = onehot_to_index(encoding)
 
@@ -259,35 +251,37 @@ class CUB(DatasetWrap):
 
     def __init__(self, **kwargs):
         '''
-        CUB loader (train & val & test). Train/val are created from the official
-        CUB training split using `train_ratio`, while test uses the official CUB
-        test split.
+        CUB loader (train & val & test). Train/val are created from the official CUB training split using `train_ratio`, while test uses the official CUB test split.
 
         Args:
-            path (str): Path to the `CUB_200_2011` folder containing dataset files
-                (e.g. `images/`, `attributes/`, `parts/`, and split/label `.txt`
-                metadata files).
-            transform (callable, optional): Transform applied to validation/test
-                images. Defaults to `vgg16`.
-            augmentation (callable, optional): If provided, applied only to the
-                training split.
-            train_ratio (float, optional): Fraction of official training samples
-                used for train (remainder goes to val). Must be in (0, 1).
-            seed (int, optional): Random seed used for deterministic train/val
-                splitting.
-            reference_ds (str, optional): Reserved optional argument for
-                compatibility with other dataset loaders.
+            path (str): Path to the `CUB_200_2011` folder containing dataset files (e.g. `images/`, `attributes/`, `parts/`, and split/label `.txt` metadata files).
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the training split.
+            train_ratio (float, optional): Fraction of official training samples used for train (remainder goes to val). Must be in (0, 1).
+            seed (int, optional): Random seed used for deterministic train/val splitting.
+            reference_ds (str, optional): Reserved optional argument for compatibility with other dataset loaders.
         Returns:
             - a thumbs up
         '''
-        self.path = kwargs.get('path')
-        self.transform = kwargs.get('std_transform')
+        self.path = kwargs['path']
+        self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
 
         assert 0.0 < self.train_ratio < 1.0
+
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+                                                                          
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
+
         return
 
     def __load_data__(self, **kwargs):

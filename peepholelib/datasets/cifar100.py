@@ -6,14 +6,13 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-from torchvision.datasets import CIFAR100
 from torch.utils.data import random_split, Subset
 
 # CIFAR from torchvision
-from torchvision import datasets
+from torchvision.datasets import CIFAR100
+from torchvision.transforms import ToTensor
 
 class CIFAR100Custom(CIFAR100):
-
     def __init__(self, **kwargs):
         CIFAR100.__init__(self, **kwargs)
         self.fine_to_coarse = {
@@ -58,29 +57,32 @@ class CIFAR100Custom(CIFAR100):
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        CIFAR100 loader (train & val & test). Validation is created from the
-        training split according to `train_ratio` (default: 0.8 train, 0.2 val).
+        CIFAR100 loader (train & val & test). Validation is created from the training split according to `train_ratio` (default: 0.8 train, 0.2 val).
 
         Args:
-            path (str): CIFAR100 download folder. If not already available, the
-                dataset is downloaded in this folder.
-            transform (callable, optional): Transform applied to validation/test
-                images. Defaults to `vgg16`.
-            augmentation (callable, optional): If provided, applied only to the
-                training split.
-            train_ratio (float, optional): Fraction of training samples used for
-                train (remainder goes to val).
-            seed (int, optional): Random seed used for deterministic train/val
-                splitting.
+            path (str): CIFAR100 download folder. If not already available, the dataset is downloaded in this folder.
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the training split.
+            train_ratio (float, optional): Fraction of training samples used for train (remainder goes to val).
+            seed (int, optional): Random seed used for deterministic train/val splitting.
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
         
-        self.transform = kwargs.get('std_transform')
+        self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
         self.train_ratio = kwargs.get('train_ratio', 0.8)
+        
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
 
-        DatasetWrap.__init__(self, **kwargs)
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
     

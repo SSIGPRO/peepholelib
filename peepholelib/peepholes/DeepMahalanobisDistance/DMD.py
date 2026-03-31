@@ -139,7 +139,8 @@ class DeepMahalanobisDistance(DrillBase):
         for i in range(self.nl_model):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-            gaussian_score[:,i] = term_gau
+
+            gaussian_score[:,i] = term_gau.detach()
 
         if magnitude != 0:
             # Input_processing

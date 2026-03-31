@@ -1,13 +1,13 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from torchvision.datasets import SVHN as torchSVHN
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
 
 # SVHN from torchvision
-from torchvision import datasets
+from torchvision.datasets import SVHN as torchSVHN
+from torchvision.transforms import ToTensor
 
 class SVHNCustom(torchSVHN):
 
@@ -31,14 +31,19 @@ class SVHN(DatasetWrap):
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
         
         # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom')
+        self.transform = kwargs.get('std_transfrom', None)
 
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
 
-        DatasetWrap.__init__(self, **kwargs)
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
 
         return
     
@@ -79,7 +84,7 @@ class SVHN(DatasetWrap):
         train_dataset, val_dataset = random_split(
                 _train_data,
                 [self.train_ratio, 1 - self.train_ratio],
-                generator=torch.Generator().manual_seed(seed)
+                generator=torch.Generator().manual_seed(self.seed)
                 )
 
         self.__dataset__ = {
