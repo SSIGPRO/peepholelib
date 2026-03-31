@@ -104,21 +104,18 @@ def get_coreVectors(self, **kwargs):
         if len(_modules_to_save) == 0:
             print(f'No new core vectors for {ds_key}, skipping')
             continue
+
         if verbose: print(f'\n ---- Getting corevectors for {ds_key}\n')
 
+        ds_dl = DataLoader(datasets._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
         cvs_dl = DataLoader(self._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads) 
 
-        if verbose: print('Getting activations from model')
-
-        ds_dl = DataLoader(datasets._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, shuffle=False, num_workers = n_threads)
-
-        for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
-            with torch.no_grad():
+        with torch.no_grad():
+            for cvs_data, ds_data in tqdm(zip(cvs_dl, ds_dl), disable=not verbose, total=len(cvs_dl)):
                 model(ds_data[input_key].to(device))
-                
-            for mk in _modules_to_save:
-                act_data = activations_parser(model._acts)
-                cvs_data[mk] = reducers[mk](act_data=act_data[mk])
+                for mk in _modules_to_save:
+                    act_data = activations_parser(model._acts)
+                    cvs_data[mk] = reducers[mk](act_data=act_data[mk])
 
     # reset the model to NOT get activations
     model.set_activations(save_input=False, save_output=False)
