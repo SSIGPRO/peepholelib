@@ -36,20 +36,20 @@ stds = {
         }
     
 #-----------------------------
-# ConvNeXt_base Transform for CIFAR100 
+# ConvNeXt_small Transform for CIFAR100 
 #-----------------------------
 
 convnext_base_cifar100 = transforms.Compose([
-    transforms.Resize((232,232)),
+    transforms.Resize((230,230)),
     transforms.CenterCrop((224,224)),
     transforms.ToTensor(),
 ])
 
 #-----------------------------
-# ConvNeXt_base Augmentation for CIFAR100 
+# ConvNeXt_small Augmentation for CIFAR100 
 #-----------------------------
 convnext_base_cifar100_augmentations = transforms.Compose([
-    transforms.Resize((232,232)),
+    transforms.Resize((230,230)),
     transforms.CenterCrop((224,224)),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
     transforms.ToTensor(),
