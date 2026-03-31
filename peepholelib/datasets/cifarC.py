@@ -4,16 +4,17 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 # torch stuff
 import torch
 from torch.utils.data import Dataset
+from torchvision.transforms import ToTensor 
 
 # CIFAR from torchvision
 from PIL import Image
-from tqdm import tqdm
 import numpy as np
 from math import floor
 
 class CustomDS(Dataset):
-    def __init__(self, data, labels, corruptions, transform):
+    def __init__(self, data, labels, corruptions):
         Dataset.__init__(self) 
+        self._to_tensor = ToTensor()
 
         p = [
             'defocus_blur', 
@@ -34,12 +35,11 @@ class CustomDS(Dataset):
             'saturate', 
             'motion_blur'
             ]
-        self.transform = transform
 
         self.mapping = {c: i for i, c in enumerate(p)}
         
         self.data = []
-        for d in tqdm(data, disable=True):
+        for d in data:
             self.data.append(Image.fromarray(d))
         self.labels = labels
 
@@ -57,7 +57,7 @@ class CustomDS(Dataset):
 
     def __getitem__(self, idx):
         sample = {
-            "image": self.transform(self.data[idx]),
+            "image": self._to_tensor(self.data[idx]),
             "label": self.labels[idx],
             "corruption": self.corruptions[idx],
         }
@@ -66,21 +66,14 @@ class CustomDS(Dataset):
 class CifarC(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        CIFAR-C loader (val & test). Builds corruption-level datasets from
-        precomputed `.npy` corruption files and `labels.npy`.
+        CIFAR-C loader (val & test). Builds corruption-level datasets from precomputed `.npy` corruption files and `labels.npy`.
 
         Args:
-            path (str): Path to the CIFAR-C folder containing `labels.npy` and
-                corruption `.npy` files.
-            transform (callable, optional): Transform applied to each image.
-                Defaults to `vgg16`.
-            seed (int, optional): Random seed used to sample corruption mixes
-                reproducibly.
+            path (str): Path to the CIFAR-C folder containing `labels.npy` and corruption `.npy` files.
+            seed (int, optional): Random seed used to sample corruption mixes reproducibly.
         Returns:
             - a thumbs up
         '''
-
-        self.transform = kwargs.get('std_transform')
 
         DatasetWrap.__init__(self, **kwargs)
         
@@ -147,14 +140,12 @@ class CifarC(DatasetWrap):
                     data = c_images_test[cl],
                     labels = _labels[cl],
                     corruptions = c_corruptions_test,
-                    transform = self.transform,
                     )
             
             corrupted_datasets_val[cl] = CustomDS(
                     data = c_images_val[cl],
                     labels = _labels[cl],
                     corruptions = c_corruptions_val,
-                    transform = self.transform,
                     ) 
 
         self.__dataset__ = {}

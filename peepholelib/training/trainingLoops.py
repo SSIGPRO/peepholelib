@@ -22,9 +22,9 @@ def DefaultTrainLoop(**kwargs):
         loss.backward()
         trainer.optim.step()
 
-        loss_acc += loss * n_samples
+        loss_acc += loss
         acc_acc += trainer.acc_fn(pred, labels)
 
-    trainer.train_losses[epoch] = (loss_acc / samples_acc).detach().cpu()
+    trainer.train_losses[epoch] = (loss_acc).detach().cpu()
     trainer.train_acc[epoch] = (acc_acc / samples_acc).detach().cpu()
     return
