@@ -48,4 +48,5 @@ class myBIM(AttackBase):
         self._set_targeted_mode()
 
     def __call__(self, images, labels):
+        self._get_target_label(images, labels)
         return self.atk(images, labels)

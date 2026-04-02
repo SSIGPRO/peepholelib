@@ -313,9 +313,9 @@ class myAPGD(AttackBase):
         AttackBase.__init__(self, **kwargs)
 
         self.norm = kwargs.get('norm', 'Linf')
-        self.eps = kwargs.get('eps', 8 / 255) # 0.5/255
-        self.steps = kwargs.get('steps', 100) # 100
-        self.n_restarts = kwargs.get('n_restarts', 1) #1
+        self.eps = kwargs.get('eps', 8 / 255)
+        self.steps = kwargs.get('steps', 100)
+        self.n_restarts = kwargs.get('n_restarts', 1)
         self.loss = kwargs.get('loss', 'dlr') #ce
         self.verbose = kwargs.get('verbose', False)
         self.rho = kwargs.get('rho', 0.75)
@@ -387,5 +387,6 @@ class myAPGD(AttackBase):
                 y_target[mask] = (self.target_class + 1) % num_classes
 
         self.atk.y_target = y_target
+        self.y_target = y_target
 
         return self.atk.perturb(images, labels)
