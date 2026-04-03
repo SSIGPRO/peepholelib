@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 
 # Our stuff
-from peepholelib.models.model_wrap import get_in_activations
+from peepholelib.models.model_wrap import get_out_activations
 from .dim_reduction_base import DimReductionBase as DRB 
 from torch.utils.data import DataLoader
 
@@ -18,7 +18,7 @@ class RandomProjection(DRB):
         path (str or Path): Directory used to store the cached projection.
         layer (str): Name of the layer whose activations are projected.
         model: Wrapped model used to infer the activation dimensionality.
-        datasets: Dataset container used to probe one sample activation.
+        sample_in: Sample used to probe one sample activation.
         seed (int): Seed used to generate the random basis.
         rank (int, optional): Projection rank. Defaults to ``300``.
         cv_dim (int, optional): Number of components kept by :meth:`parser`.
@@ -33,15 +33,14 @@ class RandomProjection(DRB):
         path = Path(kwargs['path'])
         layer = kwargs['layer']
         model = kwargs['model']
-        datasets = kwargs['datasets']
+        sample_in = kwargs['sample_in']
         self.seed = kwargs['seed']
         self.q = kwargs.get('rank', 300)
         self.cv_dim = kwargs.get('cv_dim', None)
-        sample_in = kwargs.get('sample_in')
         self.verbose = kwargs.get('verbose', False)
-        activations_parser = kwargs.get('activations_parser', get_in_activations)
-        save_input = kwargs.get('save_input', True)
-        save_output = kwargs.get('save_output', False) 
+        activations_parser = kwargs.get('activations_parser', get_out_activations)
+        save_input = kwargs.get('save_input', False)
+        save_output = kwargs.get('save_output', True) 
 
         path.mkdir(parents=True, exist_ok=True)
         self.file_path = path / layer

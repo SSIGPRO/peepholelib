@@ -80,7 +80,7 @@ class ClassDependentGMM(CDCBase):
                     if not converged: print(f'GMM for class {c} failed to converge, retrying. fitting time = {t1-t0}')
                     else: print(f'fitting time = {t1-t0}')
                 t0 = t1
-            self.save_single_class(c=c)
+            self._classifiers[c].save(self._clas_path / f'class_{c}')
         return
 
     def classifier_probabilities(self, **kwargs):
@@ -109,7 +109,9 @@ class ClassDependentGMM(CDCBase):
     def save(self, **kwargs):
         self._clas_path.mkdir(parents=True, exist_ok=True)
         for c, _ in enumerate(self._classifiers):
-            self._classifiers[c].save(self._clas_path / f'class_{c}')
+            class_path = self._clas_path / f'class_{c}'
+            if not class_path.exists():
+                self._classifiers[c].save(class_path)
         return
 
     def load(self, **kwargs):
