@@ -48,7 +48,7 @@ class myAutoAttack(AttackBase):
         self.attack_to_run = kwargs.get('attack_to_run', 'apgd-ce')
 
         adversary = AutoAttack(
-                        model=self.model._model,
+                        model=self.model,
                         norm=self.norm,
                         eps=self.eps,
                         version=self.version,
