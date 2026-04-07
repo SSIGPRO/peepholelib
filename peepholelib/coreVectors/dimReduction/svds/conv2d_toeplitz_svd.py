@@ -39,7 +39,7 @@ class Conv2dToeplitzSVD(DRB):
             
             # Dry run to get shapes
             with torch.no_grad():
-                _in = sample_in.reshape((1,)+sample_in.shape).to(device)
+                _in = sample_in.to(device)
                 model(_in)
             in_shape = model._acts['in_activations'][layer].shape[1:]
             
