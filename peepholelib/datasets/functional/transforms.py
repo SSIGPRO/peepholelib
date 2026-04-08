@@ -34,6 +34,21 @@ stds = {
         'ImageNet': torch.tensor([0.229, 0.224, 0.225]).view(1,3,1,1),
         'SVHN': torch.tensor([0.198, 0.201, 0.197]).view(1,3,1,1),
         }
+    
+#-----------------------------
+# ConvNeXt_small Transforms  
+#-----------------------------
+
+convnext_small_transform = transforms.Compose([
+    transforms.Resize((230,230)),
+    transforms.CenterCrop((224,224)),
+])
+
+convnext_small_augmentations = transforms.Compose([
+    transforms.Resize((230,230)),
+    transforms.CenterCrop((224,224)),
+    transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 
+])
 
 #-----------------------------
 # VGG16 Augmentations
