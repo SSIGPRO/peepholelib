@@ -71,7 +71,7 @@ class Peepholes:
             # create/load PersistentTensorDict file
             if file_path.exists():
                 if verbose: print(f'File {file_path} exists. Loading from disk.')
-                self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+                self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
                 n_samples = len(self._phs[ds_key])
                 if verbose: print('loaded n_samples: ', n_samples)
             else:
@@ -79,7 +79,7 @@ class Peepholes:
                 if verbose: print('loader n_samples: ', n_samples) 
                 self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-            
+
             modules_to_compute = []
             for module in self.target_modules:
                 if not module in self._phs[ds_key]:
@@ -97,6 +97,10 @@ class Peepholes:
                 else:
                     if verbose: print(f'Peepholes for {module} already present. Skipping.')
 
+            if len(modules_to_compute) == 0:
+                if verbose: print(f'No modules to compute for {ds_key}. Skipping.')
+                continue
+
             # Close PTD create with mode 'w' and re-open it with mode 'r+'
             # This is done so we can use multiple workers for reading and writting
             self._phs[ds_key].close()
@@ -109,10 +113,6 @@ class Peepholes:
             dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads)
             dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
             dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
-
-            if len(modules_to_compute) == 0:
-                if verbose: print(f'No modules to compute for {ds_key}. Skipping.')
-                continue
 
             if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
             for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
