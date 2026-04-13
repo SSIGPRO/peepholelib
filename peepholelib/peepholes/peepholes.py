@@ -79,7 +79,7 @@ class Peepholes:
                 if verbose: print('loader n_samples: ', n_samples) 
                 self.path.mkdir(parents=True, exist_ok=True)
                 self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
-            continue 
+
             modules_to_compute = []
             for module in self.target_modules:
                 if not module in self._phs[ds_key]:
