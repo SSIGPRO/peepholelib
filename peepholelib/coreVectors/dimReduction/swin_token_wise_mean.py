@@ -4,7 +4,7 @@ import torch
 # Our stuff
 from .dim_reduction_base import DimReductionBase as DRB 
 
-class ViTTokenWiseMean(DRB):
+class SwinTokenWiseMean(DRB):
     def __init__(self, **kwargs):
         DRB.__init__(self, **kwargs)
         
