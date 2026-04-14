@@ -1,6 +1,6 @@
 # torch stuff
 import torch
-from torch.utils.data import DataLoader 
+from torch.utils.data import DataLoader
 from tensordict import TensorDict, PersistentTensorDict
 
 # generic python stuff
@@ -111,7 +111,7 @@ class CoreVectors():
         self._norm_std = stds
 
         return
-
+    
     def load_only(self, **kwargs):
         '''
         Load already computed corevectors.
