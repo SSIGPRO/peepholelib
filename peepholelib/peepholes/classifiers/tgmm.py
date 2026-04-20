@@ -22,7 +22,7 @@ class GMM(ClassifierBase): # quella buona
                 **cls_kwargs,
                 trainer_params = dict(
                     num_nodes = 1,
-                    max_epochs = 50000,
+                    max_epochs = 5000,
                     accelerator = self.device.type,
                     devices = [self.device.index],
                     enable_progress_bar = False 
@@ -69,6 +69,8 @@ class GMM(ClassifierBase): # quella buona
             self._classifier.fit(fit_data)
             converged = not self._classifier.predict_proba(fit_data[0:1]).isnan().any()
             if verbose and (not converged): print('GMM fail, trying again.')
+
+        self.save()
         
         # compute empirical posteriors
         if _compute_empp:
@@ -76,7 +78,7 @@ class GMM(ClassifierBase): # quella buona
                     datasets = _dss,
                     corevectors = _cvs,
                     loader = loader,
-                    bs = bs,
+                    batch_size = bs,
                     verbose = verbose
                     )
         return
@@ -104,10 +106,10 @@ class GMM(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
-        if self._clas_path.exists(): 
+        if self._clas_path.exists():
             self._classifier = tGMM.load(self._clas_path)
             super().load()
-            ok = True 
+            ok = True
         else:
             ok = False
 
@@ -115,5 +117,4 @@ class GMM(ClassifierBase): # quella buona
     
     def load_without_empp(self, **kwargs):
         self._classifier = tGMM.load(self._clas_path)
-        
         return
