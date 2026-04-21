@@ -19,7 +19,8 @@ class CDCBase(DrillBase, metaclass=abc.ABCMeta):
 
         self.parser = self.reducer.parser 
         # computed in inheriting classes 
-        self._classifier = None
+        self._classifiers = None
+        self._classifiers_test = None
 
         # defined in __init__(), used in save() and load()
         self._clas_path = None
@@ -56,6 +57,6 @@ class CDCBase(DrillBase, metaclass=abc.ABCMeta):
         '''
         cvs = kwargs['cvs']
 
-        data = self.parser(cvs=cvs)
+        data = self.parser(cvs=cvs).to(self.device)
         lp = self.classifier_probabilities(data=data).to(self.device)
         return lp

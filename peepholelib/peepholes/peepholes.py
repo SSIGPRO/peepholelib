@@ -5,6 +5,7 @@ from math import ceil
 
 # torch stuff
 import torch
+import torch.nn.functional as F
 from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
@@ -56,7 +57,7 @@ class Peepholes:
         self._drillers = kwargs['drillers']
 
         bs = kwargs.get('batch_size', 64)
-        n_threads = kwargs.get('n_threads', 1)
+        n_threads = kwargs.get('n_threads', 0)
         verbose = kwargs.get('verbose', False)
 
         if loaders == None: loaders = list(corevectors._corevds.keys())

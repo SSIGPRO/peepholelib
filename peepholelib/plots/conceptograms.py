@@ -1,6 +1,6 @@
 # torch stuff
 import torch
-from torch.nn.functional import softmax
+from torch.nn.functional import softmax, softmin
 from torch.utils.data import DataLoader
 
 # python stuff
@@ -61,6 +61,7 @@ def plot_conceptogram(**kwargs):
 
     for ds_key in loaders:
         conceptos = phs.get_conceptograms(loaders=[ds_key], target_modules=target_modules)[ds_key][samples]
+        conceptos = softmin(conceptos, dim=2)
         
         path.mkdir(parents=True, exist_ok=True)
         for _c, sample in zip(conceptos, samples):

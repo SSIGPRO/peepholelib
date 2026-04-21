@@ -12,6 +12,7 @@ from torchgmm.bayes import GaussianMixture as tGMM
 import logging
 logging.getLogger('pytorch_lightning.utilities.rank_zero').setLevel(logging.CRITICAL)
 logging.getLogger("pytorch_lightning.accelerators.cuda").setLevel(logging.CRITICAL)
+import torch.distributions as D
 
 class ClassDependentGMM(CDCBase):
     def __init__(self, **kwargs):
@@ -80,13 +81,22 @@ class ClassDependentGMM(CDCBase):
                     if not converged: print(f'GMM for class {c} failed to converge, retrying. fitting time = {t1-t0}')
                     else: print(f'fitting time = {t1-t0}')
                 t0 = t1
+
             self._classifiers[c].save(self._clas_path / f'class_{c}')
+
+        weights = torch.stack([self._classifiers[c].model_.component_probs for c in range(self.nl_model)]).to(self.device)
+        means = torch.stack([self._classifiers[c].model_.means for c in range(self.nl_model)]).to(self.device)
+        prec_chol = torch.stack([self._classifiers[c].model_.precisions_cholesky for c in range(self.nl_model)]).to(self.device)
+
+        mix  = D.Categorical(probs=weights)
+        comp = D.Independent(D.Normal(means, 1.0 / prec_chol), 1)
+        self._classifiers_test = D.MixtureSameFamily(mix, comp)
         return
 
     def classifier_probabilities(self, **kwargs):
         '''
         Compute the probability of each sample under each class GMM.
-        Uses per-class log-densities (score_samples), normalized via softmax.
+        Uses per-class log-densities (score_samples).
 
         Args:
         - data (torch.Tensor): Parsed corevectors of shape (N, n_features).
@@ -95,11 +105,9 @@ class ClassDependentGMM(CDCBase):
         - probs (torch.Tensor): Shape (N, nl_model), normalized class probabilities.
         '''
         data = kwargs['data']
-        log_densities = torch.stack(
-            [self._classifiers[c].score_samples(data) for c in range(self.nl_model)],
-            dim=1
-        ) 
-        
+
+        log_densities = -self._classifiers_test.log_prob(data.unsqueeze(1))
+
         return log_densities
 
     def predict(self, data):
@@ -120,6 +128,16 @@ class ClassDependentGMM(CDCBase):
                 tGMM.load(self._clas_path / f'class_{c}')
                 for c in range(self.nl_model)
             ]
+
+            weights = torch.stack([self._classifiers[c].model_.component_probs for c in range(self.nl_model)]).to(self.device)
+            means = torch.stack([self._classifiers[c].model_.means for c in range(self.nl_model)]).to(self.device)
+            prec_chol = torch.stack([self._classifiers[c].model_.precisions_cholesky for c in range(self.nl_model)]).to(self.device)
+            print(self.device)
+
+            mix  = D.Categorical(probs=weights)
+            comp = D.Independent(D.Normal(means, 1.0 / prec_chol), 1)
+            self._classifiers_test = D.MixtureSameFamily(mix, comp)
+
             ok = True
         else:
             ok = False

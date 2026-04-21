@@ -51,6 +51,7 @@ def conceptogram_protoclass_score(**kwargs):
     #-----------
     # get conceptogram 
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+    cpss = {k: torch.nn.functional.softmin(v, dim=2) for k, v in cpss.items()}
 
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)
