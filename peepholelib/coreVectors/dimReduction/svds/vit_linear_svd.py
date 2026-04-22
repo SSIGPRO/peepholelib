@@ -15,6 +15,7 @@ class ViTLinearSVD(DRB):
         layer = kwargs['layer']
         q = kwargs.get('rank',300)
         self.cv_dim = kwargs.get('cv_dim', None)
+        self.token_reduction = kwargs.get('token_reduction', 'first')
         verbose = kwargs.get('verbose', False)
                                                       
         # create folder
@@ -30,13 +31,18 @@ class ViTLinearSVD(DRB):
             self._svd = torch.load(file_path)
         else: 
             # computation
-            W = torch.hstack((_layer.weight, _layer.bias.reshape(-1,1))).to(device)
+            W = _layer.weight
+            use_bias = _layer.bias is not None
+            if use_bias:
+                W = torch.hstack((W, _layer.bias.reshape(-1, 1)))
+            W = W.to(device)
             U, s, Vh = torch.svd_lowrank(W, q)
             U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
             self._svd = {
                     'U': U,
                     's': s,
-                    'Vh': Vh.T
+                    'Vh': Vh.T,
+                    'use_bias': use_bias
                     }
 
             if verbose: print(f'saving {file_path}')
@@ -44,29 +50,70 @@ class ViTLinearSVD(DRB):
 
         # save variables used in the projection a.k.a. "__call__()"
         self.reduct_m = self._svd['Vh'].detach().to(device)
+        in_features = _layer.weight.shape[1]
+        in_dim = self.reduct_m.shape[1]
+        if in_dim == in_features + 1:
+            self.use_bias = True
+        elif in_dim == in_features:
+            self.use_bias = False
+        else:
+            raise RuntimeError(
+                f"Loaded SVD input dimension ({in_dim}) does not match layer input dimension "
+                f"({in_features}) for layer {layer}."
+            )
 
         return
             
     def __call__(self, **kwargs):
         '''
         Applies the SVD projection to `torch.Linear` activations. The output has shape `[ns, q]`, where `ns` is the number of samples in the batch, and `q` the SVD rank.
-        In this case the activations are divided by patchs, we only consider the first patch, which is related to the classification token.
+        For tokenized inputs `[ns, nt, c]`, `token_reduction` controls how tokens are reduced:
+        - 'first': first token (ViT class token style)
+        - 'mean': mean over tokens (useful for models without class token, e.g. Swin)
+        For Swin qkv fallbacks, 4D activations `[ns, h, w, c]` are also supported and
+        converted to `[ns, h*w, c]` before token reduction.
 
         Args:
         - act_data (torch.tensor): batched input activations
-        - svd (dict{torch.tensor}): SVDs of Toeplitz unrolled layer's kernel (see `models.svd_fns.linear_svd()`) 
-        - device (torch.device): device to perform computations
 
         Returns:
         - cvs (torch.tensor) = batched projected activations
         '''
         act_data = kwargs['act_data'] 
-    
+
         n_act = act_data.shape[0]
-        act_data = act_data[:, 0, :] # take 0-th patch
+        if act_data.ndim == 4:
+            # Swin attention inputs are channel-last feature maps [B, H, W, C].
+            # Convert to tokenized form [B, H*W, C].
+            act_data = act_data.flatten(start_dim=1, end_dim=2)
+        if act_data.ndim == 3:
+            if self.token_reduction == 'first':
+                act_data = act_data[:, 0, :]
+            elif self.token_reduction == 'mean':
+                act_data = act_data.mean(dim=1)
+            else:
+                raise RuntimeError(
+                    f"Unknown token_reduction '{self.token_reduction}'. "
+                    "Supported values are 'first' and 'mean'."
+                )
+        elif act_data.ndim != 2:
+            raise RuntimeError(
+                f"Expected 2D, 3D, or Swin-style 4D activations for ViTLinearSVD, got shape {tuple(act_data.shape)}."
+            )
+
         acts_flat = act_data.flatten(start_dim=1)
-        ones = torch.ones(n_act, 1, device=acts_flat.device)
-        _acts = torch.hstack((acts_flat, ones))
+        if self.use_bias:
+            ones = torch.ones(n_act, 1, device=acts_flat.device)
+            _acts = torch.hstack((acts_flat, ones))
+        else:
+            _acts = acts_flat
+
+        if _acts.shape[1] != self.reduct_m.shape[1]:
+            raise RuntimeError(
+                f"SVD projection dimension mismatch: got {_acts.shape[1]} features from activations, "
+                f"expected {self.reduct_m.shape[1]}."
+            )
+
         cvs = (self.reduct_m@_acts.T).T
     
         return cvs
