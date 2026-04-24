@@ -14,85 +14,69 @@ from torch.utils.data import DataLoader, Subset
 
 class _ShardedPTD:
     '''
-    Read-only wrapper over multiple `PersistentTensorDict` shards that presents them as a single dataset.
-    Shard files are named `dss.<ds_key>.chunk_<i>`.
+    Read-only wrapper over multiple `PersistentTensorDict` shards that presents them as a single dataset. Shard files are named `dss.<ds_key>.chunk_<i>`.
     '''
     def __init__(self, shards):
         self.shards = shards
-        lengths = [len(s) for s in shards]
-        self._cum = [0]
-        for l in lengths:
-            self._cum.append(self._cum[-1] + l)
-        self._total = self._cum[-1]
+        self._keys = list(self.shards[0].keys())
+        lengths = torch.tensor([len(s) for s in shards])
+        self._cum = torch.cat([torch.tensor([0]), lengths.cumsum(dim=0)])
+        self._total = lengths.sum().item()
 
     def _resolve(self, idx):
+        if idx >= self._total or idx < -self._total: 
+            raise IndexError(f'Index {idx} out of range for sharded dataset of size {self._total}')
+
         if idx < 0:
             idx = self._total + idx
+
         for i in range(len(self.shards)):
             if idx < self._cum[i + 1]:
-                return i, idx - self._cum[i]
-        raise IndexError(f'Index {idx} out of range for sharded dataset of size {self._total}')
-
+                return i, (idx - self._cum[i]).item()
+        
     def __len__(self):
         return self._total
 
     def keys(self):
-        return self.shards[0].keys()
+        return self._keys
 
     def __getitem__(self, idx):
 
         if isinstance(idx, str):
             return torch.cat([shard[idx] for shard in self.shards])
 
-        if isinstance(idx, int):
+        elif isinstance(idx, int):
             si, li = self._resolve(idx)
             return self.shards[si][li]
 
-        if isinstance(idx, slice):
+        elif isinstance(idx, slice):
             idx = list(range(*idx.indices(self._total)))
 
-        # list / tensor of indices — collect per key then stack
         indices = idx if isinstance(idx, list) else list(idx)
-        ks = list(self.keys())
-        per_key = {k: [] for k in ks}
-        for global_i in indices:
-            si, li = self._resolve(int(global_i))
-            sample = self.shards[si][li]
-            for k in ks:
-                per_key[k].append(sample[k])
-        return TensorDict(
-            {k: torch.stack(v) for k, v in per_key.items()},
-            batch_size=len(indices)
-        )
+        samples = [self.shards[si][li] for si, li in (self._resolve(int(i)) for i in indices)]
+        return torch.stack(samples, dim=0).reshape(len(indices))
     
     def __getitems__(self, indices):
-        ks = list(self.keys())
 
-        # group indices by shard to allow batch reads
-        shard_groups = {}  # si -> list of (result_position, local_idx)
+        shard_groups = {}  
         for pos, global_i in enumerate(indices):
             si, li = self._resolve(int(global_i))
             if si not in shard_groups:
                 shard_groups[si] = []
             shard_groups[si].append((pos, li))
 
-        # pre-allocate result slots
-        per_key = {k: [None] * len(indices) for k in ks}
+        result = [None] * len(indices)
         for si, pos_local_pairs in shard_groups.items():
             positions, local_idxs = zip(*pos_local_pairs)
-            batch = self.shards[si][list(local_idxs)]  # one batched read per shard
-            for k in ks:
-                for pos, val in zip(positions, batch[k]):
-                    per_key[k][pos] = val
-
-        return TensorDict(
-            {k: torch.stack(v) for k, v in per_key.items()},
-            batch_size=len(indices)
-        )
+            batch = self.shards[si][list(local_idxs)]
+            for pos, sample in zip(positions, batch.unbind(dim=0)):
+                result[pos] = sample
+        return torch.stack(result, dim=0).reshape(len(indices))
 
     def close(self):
         for s in self.shards:
             s.close()
+        return
 
 class _StackedDS:
     '''
@@ -176,11 +160,11 @@ class _StackedDS:
         return self.k_ori + self.k_inf
 
     def close(self):
+        self.ori.close()
+
         if self.inf != None:
             self.inf.close()
 
-        if hasattr(self.ori, 'close'):
-            self.ori.close()
 
 class ParsedDataset():
     def __init__(self, **kwargs):
@@ -240,7 +224,6 @@ class ParsedDataset():
         if len(has_trans) > 0:
             raise RuntimeError(f'Found `transforms` within the given `dataset_wraps`: {has_trans}. DatasetWraps are expected to not have transforms at this point since they will be set in `parse_inferece()`')
 
-
         # enter the context manager
         for ds_name, ds_wrap in ds_wraps.items():
             ds_wrap.__load_data__()
@@ -268,32 +251,23 @@ class ParsedDataset():
                 else:
                     _ktc = keys_to_copy
 
-                effective_chunk_size = chunk_size if chunk_size is not None else n_samples
-                n_chunks = ceil(n_samples / effective_chunk_size)
-
-                if verbose: print(f'Splitting {ds_key} into {n_chunks} chunks of up to {effective_chunk_size} samples')
-
                 ds_folder = self.path / f'dss.{ds_key}'
                 shards = []
                 if ds_folder.exists():
-                    existing_chunks = len(list(ds_folder.iterdir()))
-                    if existing_chunks != n_chunks:
-                        raise RuntimeError(
-                            f'Dataset folder {ds_folder} exists but contains {existing_chunks} chunks, expected {n_chunks}.'
-                        )
-                    if verbose: print(f'All {n_chunks} chunks for {ds_key} already exist. Loading from disk.')
-                    for chunk_i in range(n_chunks):
-                        chunk_end = min((chunk_i + 1) * effective_chunk_size, n_samples)
-                        chunk_n = chunk_end - chunk_i * effective_chunk_size
+                    existing_chunks = len(list(ds_folder.glob('chunk_*')))
+            
+                    if verbose: print(f'All {existing_chunks} chunks for {ds_key} already exist. Loading from disk.')
+                    for chunk_i in range(existing_chunks):
                         chunk_path = ds_folder / f'chunk_{chunk_i}'
                         ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
-                        ptd.batch_size = torch.Size((chunk_n,))
+                        ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
                 else:
+                    n_chunks = ceil(n_samples / chunk_size) if chunk_size != None else 1
                     ds_folder.mkdir(parents=True, exist_ok=True)
                     for chunk_i in range(n_chunks):
-                        chunk_start = chunk_i * effective_chunk_size
-                        chunk_end = min(chunk_start + effective_chunk_size, n_samples)
+                        chunk_start = chunk_i * chunk_size
+                        chunk_end = min(chunk_start + chunk_size, n_samples)
                         chunk_n = chunk_end - chunk_start
                         chunk_path = ds_folder / f'chunk_{chunk_i}'
 

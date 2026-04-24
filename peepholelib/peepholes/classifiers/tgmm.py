@@ -69,8 +69,6 @@ class GMM(ClassifierBase): # quella buona
             self._classifier.fit(fit_data)
             converged = not self._classifier.predict_proba(fit_data[0:1]).isnan().any()
             if verbose and (not converged): print('GMM fail, trying again.')
-
-        self.save()
         
         # compute empirical posteriors
         if _compute_empp:

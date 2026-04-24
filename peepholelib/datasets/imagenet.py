@@ -126,7 +126,7 @@ class ImageNet(DatasetWrap):
         else:
             raise ValueError(f"Unsupported ImageNet meta format in '{meta_path}'.")
 
-        train_dir = Path(root) / 'train'
+        train_dir = root / 'train'
 
         # Keep same class order used by torchvision Folder datasets (sorted folder names).
         wnids = sorted([p.name for p in train_dir.iterdir() if p.is_dir()])

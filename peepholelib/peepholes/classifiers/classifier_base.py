@@ -64,7 +64,6 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
         - batch_size: Do the computation in batchs. Defaults to 512.
         - verbose (Bool): Print progress messages. 
-        - label_key (str): key to get labels from
         '''
         
         dss = kwargs['datasets']
