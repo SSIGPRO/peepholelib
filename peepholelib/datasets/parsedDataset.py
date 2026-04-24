@@ -43,10 +43,7 @@ class _ShardedPTD:
 
     def __getitem__(self, idx):
 
-        if isinstance(idx, str):
-            return torch.cat([shard[idx] for shard in self.shards])
-
-        elif isinstance(idx, int):
+        if isinstance(idx, int):
             si, li = self._resolve(idx)
             return self.shards[si][li]
 
@@ -313,12 +310,8 @@ class ParsedDataset():
 
                         shards.append(ptd)
 
-                print(f'Loaded {len(shards)} shards for {ds_key} with total n_samples: {sum(len(s) for s in shards)}')
-
                 self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
-                print(f'Created _StackedDS for {ds_key} with n_samples: {len(self._dss[ds_key])}')
-            print(f'Finished parsing dataset {ds_key}.')
-        print('Finished parsing all datasets.')
+    
         return
     
     def parse_inference(self, **kwargs):
@@ -503,7 +496,6 @@ class ParsedDataset():
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        print('Closing datasets...')
         verbose = True 
 
         for ds_key in self._dss_ori:

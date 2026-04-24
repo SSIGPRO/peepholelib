@@ -74,7 +74,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         _empp = torch.zeros(self.nl_class, self.nl_model, device=self.device)
 
         data = self.parser(cvs=cvs._corevds[loader][self.target_module])
-        label = dss._dss[loader][self.label_key].to(self.device)
+        label = dss._dss[loader][:][self.label_key].to(self.device)
         preds = self.predict(data).to(self.device)
         indices = preds.long() * self.nl_model + label.long()
         _empp = torch.bincount(indices, minlength=self.nl_class * self.nl_model).reshape(self.nl_class, self.nl_model).float()

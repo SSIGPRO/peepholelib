@@ -46,7 +46,7 @@ def DMD_base(**kwargs):
 
     for ds_key in loaders:
 
-        ret[ds_key][score_name] = torch.zeros(len(ds._dss[ds_key]['image']))
+        ret[ds_key][score_name] = torch.zeros(len(ds._dss[ds_key][:]['image']))
 
         dl_dss = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
         
