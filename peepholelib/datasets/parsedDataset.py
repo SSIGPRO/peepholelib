@@ -22,6 +22,7 @@ class _ShardedPTD:
         lengths = torch.tensor([len(s) for s in shards])
         self._cum = torch.cat([torch.tensor([0]), lengths.cumsum(dim=0)])
         self._total = lengths.sum().item()
+        return
 
     def _resolve(self, idx):
         if idx >= self._total or idx < -self._total: 
@@ -52,26 +53,28 @@ class _ShardedPTD:
         elif isinstance(idx, slice):
             idx = list(range(*idx.indices(self._total)))
 
-        indices = idx if isinstance(idx, list) else list(idx)
-        samples = [self.shards[si][li] for si, li in (self._resolve(int(i)) for i in indices)]
-        return torch.stack(samples, dim=0).reshape(len(indices))
-    
+        return self.__getitems__(idx if isinstance(idx, list) else list(idx))
+
     def __getitems__(self, indices):
+        shard_groups = {}
+        for pos, i in enumerate(indices):
+            si, li = self._resolve(int(i))
+            shard_groups.setdefault(si, []).append((pos, li))
 
-        shard_groups = {}  
-        for pos, global_i in enumerate(indices):
-            si, li = self._resolve(int(global_i))
-            if si not in shard_groups:
-                shard_groups[si] = []
-            shard_groups[si].append((pos, li))
+        parts = []
+        flat_positions = []
+        for si in sorted(shard_groups.keys()):
+            positions, local_idxs = zip(*shard_groups[si])
+            parts.append(self.shards[si][list(local_idxs)])
+            flat_positions.extend(positions)
 
-        result = [None] * len(indices)
-        for si, pos_local_pairs in shard_groups.items():
-            positions, local_idxs = zip(*pos_local_pairs)
-            batch = self.shards[si][list(local_idxs)]
-            for pos, sample in zip(positions, batch.unbind(dim=0)):
-                result[pos] = sample
-        return torch.stack(result, dim=0).reshape(len(indices))
+        cat = torch.cat(parts, dim=0)
+
+        inv_perm = [0] * len(indices)
+        for cat_pos, orig_pos in enumerate(flat_positions):
+            inv_perm[orig_pos] = cat_pos
+
+        return cat[inv_perm]
 
     def close(self):
         for s in self.shards:
@@ -300,7 +303,7 @@ class ParsedDataset():
                                     batch_size = bs,
                                     collate_fn = lambda x: x,
                                     shuffle = False,
-                                    num_workers = n_threads
+                                    num_workers = 0 #n_threads
                                     )
 
                             if verbose: print(f'Parsing chunk {chunk_i}')
@@ -310,7 +313,12 @@ class ParsedDataset():
 
                         shards.append(ptd)
 
+                print(f'Loaded {len(shards)} shards for {ds_key} with total n_samples: {sum(len(s) for s in shards)}')
+
                 self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
+                print(f'Created _StackedDS for {ds_key} with n_samples: {len(self._dss[ds_key])}')
+            print(f'Finished parsing dataset {ds_key}.')
+        print('Finished parsing all datasets.')
         return
     
     def parse_inference(self, **kwargs):
@@ -392,7 +400,7 @@ class ParsedDataset():
                             batch_size = bs,
                             collate_fn = lambda x:x,
                             shuffle = False,
-                            num_workers = n_threads
+                            num_workers = 0
                             )
 
                     dl_dst = DataLoader(
@@ -400,7 +408,7 @@ class ParsedDataset():
                             batch_size = bs,
                             collate_fn = lambda x:x,
                             shuffle = False,
-                            num_workers = n_threads
+                            num_workers = 0
                             )
                     
                     if verbose: print(f'Parsing inference for {inf_ds_key}')
@@ -495,6 +503,7 @@ class ParsedDataset():
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        print('Closing datasets...')
         verbose = True 
 
         for ds_key in self._dss_ori:
