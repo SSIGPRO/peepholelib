@@ -61,8 +61,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
-        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
-        - batch_size: Do the computation in batchs. Defaults to 512.
+        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'.
         - verbose (Bool): Print progress messages. 
         '''
         

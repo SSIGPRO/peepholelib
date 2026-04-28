@@ -8,6 +8,12 @@ import torch
 from ..dim_reduction_base import DimReductionBase as DRB 
 
 class ViTLinearSVD(DRB):
+
+    _REDUCTIONS = {
+        'first': lambda act: act[:, 0, :],
+        'mean':  lambda act: act.mean(dim=1),
+    }
+
     def __init__(self, **kwargs):
         DRB.__init__(self, **kwargs)
         path = Path(kwargs['path'])
@@ -15,7 +21,11 @@ class ViTLinearSVD(DRB):
         layer = kwargs['layer']
         q = kwargs.get('rank',300)
         self.cv_dim = kwargs.get('cv_dim', None)
-        self.token_reduction = kwargs.get('token_reduction', 'first')
+        token_reduction = kwargs.get('token_reduction', 'first')
+        if token_reduction not in self._REDUCTIONS:
+            raise RuntimeError(f"Unknown token_reduction '{token_reduction}'. Supported: {list(self._REDUCTIONS)}")
+        self.red_fn = self._REDUCTIONS[token_reduction]
+
         verbose = kwargs.get('verbose', False)
                                                       
         # create folder
@@ -57,12 +67,10 @@ class ViTLinearSVD(DRB):
         elif in_dim == in_features:
             self.use_bias = False
         else:
-            raise RuntimeError(
-                f"Loaded SVD input dimension ({in_dim}) does not match layer input dimension "
-                f"({in_features}) for layer {layer}."
-            )
-
+            raise RuntimeError(f"Loaded SVD input dimension ({in_dim}) does not match layer input dimension ({in_features}) for layer {layer}.")
+        
         return
+        
             
     def __call__(self, **kwargs):
         '''
@@ -70,8 +78,7 @@ class ViTLinearSVD(DRB):
         For tokenized inputs `[ns, nt, c]`, `token_reduction` controls how tokens are reduced:
         - 'first': first token (ViT class token style)
         - 'mean': mean over tokens (useful for models without class token, e.g. Swin)
-        For Swin qkv fallbacks, 4D activations `[ns, h, w, c]` are also supported and
-        converted to `[ns, h*w, c]` before token reduction.
+        For Swin qkv fallbacks, 4D activations `[ns, h, w, c]` are also supported and converted to `[ns, h*w, c]` before token reduction.
 
         Args:
         - act_data (torch.tensor): batched input activations
@@ -79,44 +86,24 @@ class ViTLinearSVD(DRB):
         Returns:
         - cvs (torch.tensor) = batched projected activations
         '''
-        act_data = kwargs['act_data'] 
-
+        act_data = kwargs['act_data']
         n_act = act_data.shape[0]
+
         if act_data.ndim == 4:
-            # Swin attention inputs are channel-last feature maps [B, H, W, C].
-            # Convert to tokenized form [B, H*W, C].
             act_data = act_data.flatten(start_dim=1, end_dim=2)
         if act_data.ndim == 3:
-            if self.token_reduction == 'first':
-                act_data = act_data[:, 0, :]
-            elif self.token_reduction == 'mean':
-                act_data = act_data.mean(dim=1)
-            else:
-                raise RuntimeError(
-                    f"Unknown token_reduction '{self.token_reduction}'. "
-                    "Supported values are 'first' and 'mean'."
-                )
+            act_data = self.red_fn(act_data)
         elif act_data.ndim != 2:
-            raise RuntimeError(
-                f"Expected 2D, 3D, or Swin-style 4D activations for ViTLinearSVD, got shape {tuple(act_data.shape)}."
-            )
+            raise RuntimeError(f"Expected 2D/3D/4D activations, got shape {tuple(act_data.shape)}.")
 
         acts_flat = act_data.flatten(start_dim=1)
         if self.use_bias:
-            ones = torch.ones(n_act, 1, device=acts_flat.device)
-            _acts = torch.hstack((acts_flat, ones))
+            _acts = torch.hstack((acts_flat, torch.ones(n_act, 1, device=acts_flat.device)))
         else:
             _acts = acts_flat
 
-        if _acts.shape[1] != self.reduct_m.shape[1]:
-            raise RuntimeError(
-                f"SVD projection dimension mismatch: got {_acts.shape[1]} features from activations, "
-                f"expected {self.reduct_m.shape[1]}."
-            )
+        return (self.reduct_m @ _acts.T).T
 
-        cvs = (self.reduct_m@_acts.T).T
-    
-        return cvs
 
     def parser(self, **kwargs):
         """

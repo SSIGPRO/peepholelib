@@ -76,7 +76,6 @@ class GMM(ClassifierBase): # quella buona
                     datasets = _dss,
                     corevectors = _cvs,
                     loader = loader,
-                    batch_size = bs,
                     verbose = verbose
                     )
         return

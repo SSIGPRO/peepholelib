@@ -19,8 +19,8 @@ class _ShardedPTD:
     def __init__(self, shards):
         self.shards = shards
         self._keys = list(self.shards[0].keys())
-        lengths = torch.tensor([len(s) for s in shards])
-        self._cum = torch.cat([torch.tensor([0]), lengths.cumsum(dim=0)])
+        lengths = torch.tensor([0]+[len(s) for s in shards])
+        self._cum = lengths.cumsum(dim=0)
         self._total = lengths.sum().item()
         return
 
@@ -56,13 +56,15 @@ class _ShardedPTD:
         shard_groups = {}
         for pos, i in enumerate(indices):
             si, li = self._resolve(int(i))
-            shard_groups.setdefault(si, []).append((pos, li))
+            if si not in shard_groups:
+                shard_groups[si] = ([], [])
+            shard_groups[si][0].append(pos)
+            shard_groups[si][1].append(li)
 
         parts = []
         flat_positions = []
-        for si in sorted(shard_groups.keys()):
-            positions, local_idxs = zip(*shard_groups[si])
-            parts.append(self.shards[si][list(local_idxs)])
+        for si, (positions, local_idxs) in shard_groups.items():
+            parts.append(self.shards[si][local_idxs])
             flat_positions.extend(positions)
 
         cat = torch.cat(parts, dim=0)
@@ -70,7 +72,6 @@ class _ShardedPTD:
         inv_perm = [0] * len(indices)
         for cat_pos, orig_pos in enumerate(flat_positions):
             inv_perm[orig_pos] = cat_pos
-
         return cat[inv_perm]
 
     def close(self):
@@ -109,11 +110,10 @@ class _StackedDS:
         s_ori = self.ori[0]
         s_inf = inf[0]
 
-        if len(self.ori) != len(inf):
-            raise RuntimeError(f'Original dataset has {len(self.ori)} samples, parsed inference values have {len(inf)} samples. They should have the same number of samples.')
+        if len(self.ori) != len(inf): raise RuntimeError(f'Original dataset has {len(self.ori)} samples, parsed inference values have {len(inf)} samples. They should have the same number of samples.')
 
-        # if keys appear in both, we ignore it from the original
-        self.k_ori = list(set(s_ori.keys()) - set(s_inf.keys())) 
+        # if keys appear in both, prefer inference values over original values
+        self.k_ori = [k for k in s_ori.keys() if k not in s_inf.keys()]
         self.k_inf = list(s_inf.keys()) 
 
         # save the inf
@@ -122,24 +122,17 @@ class _StackedDS:
         return
 
     def __getitem__(self, idx):
-        if isinstance(idx, str):
-            k = idx
-            if self.inf is not None and k in self.k_inf:
-                return self.inf[k]
-            return self.ori[k]
+        ori_item = self.ori[idx]
+        inf_item = self.inf[idx] if self.inf is not None else None
 
-        r = {}
-
-        for k in self.k_ori:
-            r[k] = self.ori[idx][k]
-
-        if self.inf != None:
-            for k in self.k_inf:
-                r[k] = self.inf[idx][k]
+        r = TensorDict({}, batch_size=ori_item.batch_size)
+        for k in self.keys():
+            r[k] = inf_item[k] if inf_item is not None and k in self.k_inf else ori_item[k]
 
         return self.transform(r)
     
     def __getitems__(self, idx):
+
         r = TensorDict({}, batch_size=len(idx))
 
         ori_batch = self.ori.__getitems__(idx)
@@ -235,6 +228,9 @@ class ParsedDataset():
             for ds_key in ds_wrap.__dataset__.keys():
                 if verbose: print(f'\n ---- Getting data from {ds_key}\n')
                 n_samples = len(ds_wrap.__dataset__[ds_key])
+                _chunk_size = chunk_size if chunk_size is not None else n_samples
+
+                n_chunks = ceil(n_samples / _chunk_size)
 
                 # sample for dry run to get shapes
                 sample = next(iter(DataLoader(
@@ -263,11 +259,10 @@ class ParsedDataset():
                         ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
                 else:
-                    n_chunks = ceil(n_samples / chunk_size) if chunk_size != None else 1
                     ds_folder.mkdir(parents=True, exist_ok=True)
                     for chunk_i in range(n_chunks):
-                        chunk_start = chunk_i * chunk_size
-                        chunk_end = min(chunk_start + chunk_size, n_samples)
+                        chunk_start = chunk_i * _chunk_size
+                        chunk_end = min(chunk_start + _chunk_size, n_samples)
                         chunk_n = chunk_end - chunk_start
                         chunk_path = ds_folder / f'chunk_{chunk_i}'
 
@@ -300,7 +295,7 @@ class ParsedDataset():
                                     batch_size = bs,
                                     collate_fn = lambda x: x,
                                     shuffle = False,
-                                    num_workers = 0 #n_threads
+                                    num_workers = n_threads
                                     )
 
                             if verbose: print(f'Parsing chunk {chunk_i}')
@@ -393,7 +388,7 @@ class ParsedDataset():
                             batch_size = bs,
                             collate_fn = lambda x:x,
                             shuffle = False,
-                            num_workers = 0
+                            num_workers = n_threads
                             )
 
                     dl_dst = DataLoader(
@@ -401,7 +396,7 @@ class ParsedDataset():
                             batch_size = bs,
                             collate_fn = lambda x:x,
                             shuffle = False,
-                            num_workers = 0
+                            num_workers = n_threads
                             )
                     
                     if verbose: print(f'Parsing inference for {inf_ds_key}')
@@ -442,7 +437,10 @@ class ParsedDataset():
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
 
             # detect sharded vs single-file layout
-            chunk_paths = sorted((self.path / f'dss.{ds_key}').glob('chunk_*'))
+            chunk_paths = sorted(
+                (self.path / f'dss.{ds_key}').glob('chunk_*'),
+                key=lambda p: int(p.name.split('_')[-1])
+            )
             if verbose: print(f'Loading {len(chunk_paths)} shards for {ds_key}.')
             shards = []
             for cp in chunk_paths:
@@ -455,12 +453,12 @@ class ParsedDataset():
             self._dss[ds_key] = _StackedDS(ori=ori)
 
             if inf_names == None:
-                self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+                self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
                 _n_samples = len(self._dss[ds_key])
 
             else: 
                 if len(inf_names[ds_key]) == 0:
-                    self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None else None)
+                    self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
                     _n_samples = len(self._dss[ds_key])
                 else:
                     for inf_name in inf_names[ds_key]:
@@ -476,11 +474,6 @@ class ParsedDataset():
 
                         # stack inference values — single H5 file
                         inf_path = self.path / f'dss.{ds_key}.{inf_name}'
-                        if not inf_path.exists():
-                            raise FileNotFoundError(
-                                f'No inference data found for {inf_ds_key}. '
-                                f'Expected a single H5 file at {inf_path}.'
-                            )
                         if verbose: print(f'Loading inference for {inf_ds_key} from {inf_path}.')
                         _td = PersistentTensorDict.from_h5(inf_path, mode=mode)
                         _td.batch_size = torch.Size((len(_td),))
@@ -513,4 +506,3 @@ class ParsedDataset():
         if not self._is_contexted:
             raise RuntimeError('Function should be called within context manager')
         return
-
