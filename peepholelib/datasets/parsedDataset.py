@@ -272,49 +272,49 @@ class ParsedDataset():
 
                         if verbose: print(f'  Chunk {chunk_i}: Creating ({chunk_n} samples).')
                         ptd = PersistentTensorDict(filename=chunk_path, batch_size=[chunk_n], mode='w')
-
                         ptd.close()
-                        ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
 
+                        ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
+                        ptd.batch_size = torch.Size((chunk_n,))
                         shards.append(ptd)
 
-            for chunk_i, shard in enumerate(shards): 
-                chunk_start = chunk_i * _chunk_size
-                chunk_end = min(chunk_start + _chunk_size, n_samples)
-                chunk_n = chunk_end - chunk_start   
+                for chunk_i, shard in enumerate(shards): 
+                    chunk_start = chunk_i * _chunk_size
+                    chunk_end = min(chunk_start + _chunk_size, n_samples)
+                    chunk_n = chunk_end - chunk_start   
 
-                in_ktc = list(set(_ktc) - set(shard.keys()))
+                    in_ktc = list(set(_ktc) - set(shard.keys()))
 
-                if len(in_ktc) > 0:
-                    for key in in_ktc:
-                        if verbose: print(f'Allocating {key}')
-                        ptd[key] = MMT.empty(
+                    if len(in_ktc) > 0:
+                        for key in in_ktc:
+                            if verbose: print(f'Allocating {key}')
+                            shard[key] = MMT.empty(
                                 shape = torch.Size((chunk_n,) + sample[key].shape[1:]),
                                 dtype = sample[key].dtype
                                 )
-                        
-                    subset = Subset(ds_wrap.__dataset__[ds_key], range(chunk_start, chunk_end))
 
-                    dl_ori = DataLoader(
+                        subset = Subset(ds_wrap.__dataset__[ds_key], range(chunk_start, chunk_end))
+
+                        dl_ori = DataLoader(
                             dataset = subset,
                             batch_size = bs,
                             shuffle = False
                             )
 
-                    dl_dst = DataLoader(
-                            ptd,
+                        dl_dst = DataLoader(
+                            shard,
                             batch_size = bs,
                             collate_fn = lambda x: x,
                             shuffle = False,
                             num_workers = n_threads
                             )
 
-                    if verbose: print(f'Parsing chunk {chunk_i}')
-                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(chunk_n/bs)):
-                        for key in in_ktc:
-                            data_t[key] = data_in[key]
+                        if verbose: print(f'Parsing chunk {chunk_i}')
+                        for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(chunk_n/bs)):
+                            for key in in_ktc:
+                                data_t[key] = data_in[key]
 
-        self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
+                self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
     
         return
     
