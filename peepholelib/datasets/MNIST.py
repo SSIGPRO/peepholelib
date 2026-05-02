@@ -34,7 +34,7 @@ class MNIST(DatasetWrap):
         DatasetWrap.__init__(self, **kwargs)
 
         # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom', None)
+        self.transform = kwargs.get('std_transform', None)
 
         self.splitting_ratio = kwargs.get('splitting_ratio', [5/6, 1/6])
 

@@ -36,7 +36,7 @@ class Textures(DatasetWrap):
         DatasetWrap.__init__(self, **kwargs)
 
         # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom', None)
+        self.transform = kwargs.get('std_transform', None)
 
         # append ToTensor to the transform
         if self.transform != None:
