@@ -61,33 +61,22 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
-        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
-        - batch_size: Do the computation in batchs. Defaults to 512.
+        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'.
         - verbose (Bool): Print progress messages. 
         '''
         
         dss = kwargs['datasets']
         cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
-        bs = kwargs.get('batch_size', 512)
-        verbose = kwargs.get('verbose', False)
 
         # pre-allocate empirical posteriors
-        _empp = torch.zeros(self.nl_class, self.nl_model)
-        
-        # create dataloaders
-        dss_dl = DataLoader(dss._dss[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
-        cvs_dl = DataLoader(cvs._corevds[loader], batch_size=bs, collate_fn=lambda x: x, shuffle=False)
+        _empp = torch.zeros(self.nl_class, self.nl_model, device=self.device)
 
-        # iterate over _fit_data
-        if verbose: print('Computing empirical posterior')
-        for _dss, _cvs in tqdm(zip(dss_dl, cvs_dl), disable=not verbose):
-            data, label = self.parser(cvs=_cvs[self.target_module], dss=_dss)
-            data, label = data.to(self.device), label.to(self.device)
-
-            preds = self.predict(data)
-            for p, l in zip(preds, label):
-                _empp[int(p), int(l)] += 1
+        data = self.parser(cvs=cvs._corevds[loader][self.target_module])
+        label = dss._dss[loader][:][self.label_key].to(self.device)
+        preds = self.predict(data).to(self.device)
+        indices = preds.long() * self.nl_model + label.long()
+        _empp = torch.bincount(indices, minlength=self.nl_class * self.nl_model).reshape(self.nl_class, self.nl_model).float()
 
         # normalize to get empirical posteriors
         _empp /= _empp.sum(dim=1, keepdim=True)

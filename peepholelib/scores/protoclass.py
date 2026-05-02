@@ -58,9 +58,9 @@ def conceptogram_protoclass_score(**kwargs):
 
     if proto == None:
         cps = cpss[proto_key]
-        results = dss._dss[proto_key]['result']
-        labels = dss._dss[proto_key]['label']
-        confs = sm(dss._dss[proto_key]['output'], dim=-1).max(dim=-1).values
+        results = dss._dss[proto_key][:]['result']
+        labels = dss._dss[proto_key][:]['label']
+        confs = sm(dss._dss[proto_key][:]['output'], dim=-1).max(dim=-1).values
         # compute proto-classes
         proto = torch.zeros(nc, nd, nc)
         for i in range(nc):

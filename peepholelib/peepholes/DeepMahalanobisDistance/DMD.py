@@ -90,7 +90,7 @@ class DeepMahalanobisDistance(DrillBase):
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
-        labels = dss[label_key].int()
+        labels = dss[:][label_key].int()
         self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
         list_features = cvs.to(self.device) # create a copy of cvs to device
         
