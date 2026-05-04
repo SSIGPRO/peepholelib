@@ -126,7 +126,7 @@ def plot_conceptogram(**kwargs):
             axs[1][-2].set_title(cp_title)
             axs[1][-2].set_xlabel('Layers')
 
-            # Plot the bar with nn's sofmaxed output
+            #Plot the bar with nn's sofmaxed output
             axs[1][-1].imshow(1-output.reshape(-1,1), vmin=0.0, vmax=1.0, cmap='bone')
             axs[1][-1].set_xticks([])
             axs[1][-1].set_yticks([pred])
@@ -134,6 +134,20 @@ def plot_conceptogram(**kwargs):
             axs[1][-1].yaxis.set_label_position("right")
             axs[1][-1].yaxis.tick_right()
             axs[1][-1].set_xlabel('Output')
+            n_layers = len(ticks)
+            n_layers = len(ticks)
+
+            base_w = 10.0        # width for small models
+            per_layer = 0.22     # extra inches per layer
+            max_w = 60.0         # cap to avoid excessive width
+
+            fig = plt.gcf()
+            current_w, current_h = fig.get_size_inches()
+            fig.set_size_inches(
+                min(max_w, base_w + per_layer * n_layers),
+                current_h,
+                forward=True
+            )
             
             # save conceptogram
             plt.savefig(path/f'{name}.{ds_key}.{sample}.png', dpi=300, bbox_inches='tight')

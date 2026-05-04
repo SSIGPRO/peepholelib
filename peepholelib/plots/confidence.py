@@ -42,12 +42,12 @@ def plot_confidence(**kwargs):
     path.mkdir(parents=True, exist_ok=True)
 
     if loaders == None: loaders = list(scores.keys())
-
     fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(5*(len(loaders)), 5))
     
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
     for loader_n, ds_key in enumerate(loaders):
+
         # save OKs and KOs and confidences for plotting
         df_okko = pd.DataFrame()
         cs_okko, ls_okko = {}, {} 

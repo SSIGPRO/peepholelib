@@ -83,6 +83,9 @@ def get_coreVectors(self, **kwargs):
         for mk in model._target_modules.keys(): 
             if not (mk in self._corevds[ds_key]):
                 # Dry run to get CV shape
+                act = _act0[mk]
+                if act is None:
+                    raise RuntimeError(f"Activation is None for layer {mk}, reducer={type(reducers[mk]).__name__}")
                 _cv = reducers[mk](act_data=_act0[mk])
                 cv_shape = _cv.shape[1:]
 
