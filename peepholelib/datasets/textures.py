@@ -3,16 +3,14 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-from torch.utils.data import random_split
 
-# Places365 from torchvision
-from torchvision.datasets import Places365 as torchPlaces
-from torchvision.transforms import ToTensor
+# Textures from torchvision
+from torchvision.datasets import DTD as torchTextures 
+from torchvision.transforms import ToTensor, Resize, Compose
 
-class PlacesCustom(torchPlaces):
-
+class TexturesCustom(torchTextures):
     def __init__(self, **kwargs):
-        torchPlaces.__init__(self, **kwargs)
+        torchTextures.__init__(self, **kwargs)
 
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
@@ -22,13 +20,16 @@ class PlacesCustom(torchPlaces):
                 'label': torch.tensor(label),
                 }  
 
-class Places(DatasetWrap):
+class Textures(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Places loader (val & test). Validation is created from train.
+        Wrap for Describable Textures Dataset
+        https://www.robots.ox.ac.uk/~vgg/data/dtd/ 
+
+        Textures loader (val & test).
 
         Expects:
-            path (str): Places download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): Textures download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
@@ -37,42 +38,39 @@ class Places(DatasetWrap):
         # add a default transform for specific DS
         self.transform = kwargs.get('std_transform', None)
 
-        self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
-
         # append ToTensor to the transform
         if self.transform != None:
             self.transform.transforms.append(ToTensor())
         else:
-            self.transform = ToTensor()
+            self.transform = Compose([ToTensor(), Resize((224, 224))])
 
         return
     
     def __load_data__(self):
         '''
-        Load and prepare Places data.
+        Load and prepare Textures data.
         
         Returns:
         - a thumbs up
         '''
 
-        _data = PlacesCustom(
+        val_dataset = TexturesCustom(
                 root = self.path,
                 split = 'val',
                 transform = self.transform,
-                small = True,
                 download = True
                 )
 
-        # split to get 10000 samples for val and test
-        _, val_dataset, test_dataset = random_split(
-                _data,
-                self.splitting_ratio, 
-                generator=torch.Generator().manual_seed(self.seed)
+        test_dataset = TexturesCustom(
+                root = self.path,
+                split = 'test',
+                transform = self.transform,
+                download = True
                 )
-                    
+
         self.__dataset__ = {
-                'Places365-val': val_dataset,
-                'Places365-test': test_dataset
+                'Textures-val': val_dataset,
+                'Textures-test': test_dataset
                 }
-        
+
         return
