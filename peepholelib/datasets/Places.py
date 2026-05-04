@@ -25,7 +25,7 @@ class PlacesCustom(torchPlaces):
 class Places(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Places loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        Places loader (val & test). Validation is created from train.
 
         Expects:
             path (str): Places download folder. If not downloaded, downloads the dataset in this folder.
@@ -35,7 +35,7 @@ class Places(DatasetWrap):
         DatasetWrap.__init__(self, **kwargs)
 
         # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom', None)
+        self.transform = kwargs.get('std_transform', None)
 
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
 
@@ -75,11 +75,4 @@ class Places(DatasetWrap):
                 'Places365-test': test_dataset
                 }
         
-        # TODO: implement get_classes()
-        #self._classes = {
-        #        'Places-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-        #        'Places-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-        #        'Places-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
-        #        }
-
         return

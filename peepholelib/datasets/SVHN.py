@@ -34,7 +34,7 @@ class SVHN(DatasetWrap):
         DatasetWrap.__init__(self, **kwargs)
         
         # add a default transform for specific DS
-        self.transform = kwargs.get('std_transfrom', None)
+        self.transform = kwargs.get('std_transform', None)
 
         self.train_ratio = kwargs.get('train_ratio', 0.86349)
         self.test_ratio = kwargs.get('test_ratio', 0.38415)
