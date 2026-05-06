@@ -9,15 +9,19 @@ from tensordict import TensorDict, PersistentTensorDict
 from tensordict import MemoryMappedTensor as MMT
 from torch.utils.data import DataLoader
 
+# our stuff
 from peepholelib.peepholes import drill_base as driller
+from peepholelib.utils.ptd_wraps import _ModuleWiseStack
 
 class Peepholes:
     def __init__(self, **kwargs):
+        '''
+        Args:
+        - path (str|pathlib.Path): Path to save corevectors.
+        '''
         self.path = Path(kwargs['path'])
-        self.name = kwargs['name']
-        self.device = kwargs['device'] if 'device' in kwargs else 'cpu'
 
-        # Set in get_peepholes() 
+        # Set in get_peepholes() or load_only() 
         self.target_modules = None # list of peep modules
         self._drillers = None 
 
@@ -41,83 +45,97 @@ class Peepholes:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.coreVectors): corevectors respective the `datasets`.
         - loaders (list[str]): list of loaders, usually `['train', 'val', 'test']`. If `None` uses all loaders in `corevectors._corevds.keys()`. Defaults to dss `None`.
-        - target_modules (list[str]): list of modules to consider as in `model.state_dict`.
         - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
+        - names dict(str:str): Dictionary with key being the module name, and value being a name to append to the PTD file with the peepholes. Peepholes will be saved in a file with name `<loader>/<key>.<name>. If `None` it is ignored. Defaults to `None`.
         - batchsize (int): batchsize to process `corevectors` into `peepholes`. Defaults to 64.
         - n_threads (int): Number of threads to pass as `num_workers` to `torch.utils.data.DataLoader`. Defaults to 1.
         - verbose (bool): print progress messages
         '''
         self.check_uncontexted()
-        
-        datasets = kwargs['datasets']
-        corevectors = kwargs['corevectors']
-        loaders  = kwargs.get('loaders', None)
-        self.target_modules = kwargs['target_modules'] # list of peep modules
-        self._drillers = kwargs['drillers']
 
+        dss = kwargs['datasets']
+        cvs = kwargs['corevectors']
+        loaders  = kwargs.get('loaders', None)
+        self._drillers = kwargs['drillers']
+        names = kwargs.get('names', None)
         bs = kwargs.get('batch_size', 64)
         n_threads = kwargs.get('n_threads', 1)
-        verbose = kwargs.get('verbose', False)
 
-        if loaders == None: loaders = list(corevectors._corevds.keys())
+        verbose = kwargs.get('verbose', False)
+        target_modules = kwargs['target_modules'] # list of peep modules
+
+        if loaders == None: loaders = list(cvs._corevds.keys())
 
         for ds_key in loaders:
-            cvds = corevectors._corevds[ds_key]
-            dssds = datasets._dss[ds_key]
-
+            #------------------------
+            # Pre-allocate peepholes
+            #------------------------
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
-            file_path = self.path/(self.name+'.'+ds_key)
-            
-            # create/load PersistentTensorDict file
-            if file_path.exists():
-                if verbose: print(f'File {file_path} exists. Loading from disk.')
-                self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r')
-                n_samples = len(self._phs[ds_key])
-                if verbose: print('loaded n_samples: ', n_samples)
-            else:
-                n_samples = len(cvds)
-                if verbose: print('loader n_samples: ', n_samples) 
-                self.path.mkdir(parents=True, exist_ok=True)
-                self._phs[ds_key] = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
 
-            modules_to_compute = []
-            for module in self.target_modules:
-                if not module in self._phs[ds_key]:
-                    #------------------------
-                    # Pre-allocate peepholes
-                    #------------------------
-                    # dry run to get size and dtype
-                    _cv = cvds[module][0:1]
-                    _d = dssds[0:1] 
-                    _ph = self._drillers[module](cvs=_cv, dss=_d)
-
-                    if verbose: print('allocating peepholes for module: ', module)
-                    self._phs[ds_key][module] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
-                    modules_to_compute.append(module)
+            _tds = {}
+            _mtc = [] #list of modules to compute
+            for mk in cvs._corevds[ds_key].keys(): 
+                if names == None:
+                    file_path = self.path/ds_key/mk
                 else:
-                    if verbose: print(f'Peepholes for {module} already present. Skipping.')
+                    file_path = self.path/ds_key/(mk+'.'+names[mk])
 
-            if len(modules_to_compute) == 0:
-                if verbose: print(f'No modules to compute for {ds_key}. Skipping.')
-                continue
+                file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Close PTD create with mode 'w' and re-open it with mode 'r+'
-            # This is done so we can use multiple workers for reading and writting
-            self._phs[ds_key].close()
-            self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
+                # create/load PersistentTensorDict file
+                if file_path.exists():
+                    if verbose: print(f'File {file_path} exists. Loading from disk.')
+                    _tds = PersistentTensorDict.from_h5(file_path, mode='r')
+                    n_samples = len(_td)
+                else:
+                    n_samples = len(cvs._corevds[ds_key])
+                    if verbose: print(f'Allocating peepholes for module {mk} with {n_samples} samples.')
+                    _td = PersistentTensorDict(filename=file_path, batch_size=[n_samples], mode='w')
+                    # dry run to get size and dtype
+                    _cv = cvs._corevds[ds_key][mk][0:1]
+                    _d = dss._dss[ds_key][0:1] 
+                    _ph = self._drillers[mk](cvs=_cv, dss=_d)
+
+                    # allocate peepholes 
+                    _td[mk] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
+                    _mtc.append(mk)
+
+                    # close and open it again to use with the dataloaders
+                    _td.close()
+                    _td = PersistentTensorDict.from_h5(file_path, mode='r+')
+
+                _tds[mk] = _td
 
             #------------------------ 
-            # computing peepholes
+            # compute peepholes
             #------------------------
-            # create dataloaders
-            dl_phs = DataLoader(self._phs[ds_key], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads)
-            dl_cvs = DataLoader(cvds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
-            dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+            if len(_mtc) == 0:
+                if verbose: print(f'No modules to compute for {ds_key}. Skipping.')
+                self._phs[ds_key] = _ModuleWiseStack(tds=_tds)
+                continue
 
-            if verbose: print(f'\n ---- computing peepholes for modules {modules_to_compute}\n')
-            for _cvs, _dss, phs in tqdm(zip(dl_cvs, dl_dss, dl_phs), disable=not verbose, total=ceil(n_samples/bs)):
-                for module in modules_to_compute:
-                    phs[module] = self._drillers[module](cvs=_cvs[module], dss=_dss)
+            if verbose: print(f'\n ---- computing peepholes for modules {_mtc}\n')
+
+            # create dataloaders
+            dss_dl = DataLoader(dss._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+            cvs_dl = DataLoader(cvs._corevds[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
+
+            phs_dls = [
+                    DataLoader(_tds[mk], batch_size=bs, collate_fn=lambda x:x, num_workers = n_threads) for mk in _mtc
+                    ]
+
+            for data in tqdm(zip(dss_dl, cvs_dl, *phs_dls), disable=not verbose, total=ceil(n_samples/bs)):
+                # the first data in the tuple is the dataset
+                # the second is the corevectors 
+                # to next ones are from phs_dls, ordered according to _mtc
+                _dss = data[0]
+                _cvs = data[1]
+                phs = {mk: data[i+2] for i, mk in enumerate(_mtc)}
+                for mk in _mtc:
+                    phs[mk][mk] = self._drillers[mk](cvs=_cvs[mk], dss=_dss)
+            
+            # save as stacked
+            self._phs[ds_key] = _ModuleWiseStack(tds=_tds)
 
         return 
 
@@ -127,16 +145,29 @@ class Peepholes:
         '''
         self.check_uncontexted()
 
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
         loaders = kwargs['loaders']
-        mode = kwargs['mode'] if 'mode' in kwargs else 'r'
+        names = kwargs['names']
+        mode = kwargs.get('mode', 'r')
+        verbose = kwargs.get('verbose', False)
+
+        self.__close()
 
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting peepholes for {ds_key}\n')
-            file_path = self.path/(self.name+'.'+ds_key)
-           
-            if verbose: print(f'File {file_path} exists. Loading from disk.')
-            self._phs[ds_key] = PersistentTensorDict.from_h5(file_path, mode=mode)
+
+            _tds = {}
+            for mk in names.keys():
+                if names[mk] == None:
+                    file_path = self.path/ds_key/mk
+                else:
+                    file_path = self.path/ds_key/(mk+'.'+names[mk])
+
+                if verbose: print(f'Loading file {file_path}. ')
+                _td = PersistentTensorDict.from_h5(file_path, mode=mode)
+                _tds[mk] = _td
+
+            self._phs[ds_key] = _ModuleWiseStack(tds=_tds)
+            if verbose: print('loaded n_samples: ', len(self._phs[ds_key]))
 
         return
 
@@ -154,7 +185,7 @@ class Peepholes:
         target_modules = kwargs.get('target_modules', None)
         verbose = kwargs.get('verbose', False)
 
-        if self._phs == None:
+        if self._phs == {}:
             raise RuntimeError('Peepholes not present. Please run get_peepholes() first.')
 
         loaders = kwargs.get('loaders', list(self._phs))
@@ -162,7 +193,6 @@ class Peepholes:
         _conceptograms = {}
         for ds_key in loaders:
             if verbose: print(f'\n ---- Getting conceptograms for {ds_key}\n')
-            file_path = self.path / (self.name + '.' + ds_key)
 
             #-----------------------------------------
             # Check if peepholes exist before computing scores
@@ -173,28 +203,28 @@ class Peepholes:
                 target_modules = self._phs[ds_key].keys()
 
             for module in target_modules:
-                if module not in self._phs[ds_key]:
+                if module not in self._phs[ds_key].keys():
                     raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
 
             _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer] for layer in target_modules], dim=1)
 
         return _conceptograms
 
+    def __close(self):
+        if self._phs != {}:
+            for ds_key in self._phs:
+                self._phs[ds_key].close()
+
+        # reset these
+        self._phs = {}
+        return
+
     def __enter__(self):
         self._is_contexted = True
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        verbose = True 
-
-        if self._phs == None:
-            if verbose: print('no peepholes to close. doing nothing.')
-            return
-
-        for ds_key in self._phs:
-            if verbose: print(f'closing {ds_key}')
-            self._phs[ds_key].close()
-            
+        self.__close()    
         self._is_contexted = False 
         return
 

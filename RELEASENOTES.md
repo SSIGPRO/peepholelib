@@ -1,19 +1,24 @@
 # DEVEL
 
 ## Datasets
+- Implements MNIST and DTD (Textures)
 - Move transforms for `parsedDatase` class. Dataset values are saved raw.
 - Separate the parsed dataset and inference values into different `PTD`s. Add `parse_dataset()` and `parse_inference()` functions for each.
 - Add `inference_fn` for parsing datasets.
 - Implement AWA e CUB wrappers
 
 ## SVDs
+- Implement `kernel` SVD reduction for convolution layers.
 - move SVDs to dimentionality reduction class in `coreVectors/dimReduction`.
 
 ## Corevectors
+- Normalization always apply. A normalization is saved for each `loader` and `module`, and corevectors are denormalized and renormalized.
+- Model's modules are saved in different PTDs
 - Wrap dimentionality reduction within classes.
 - Implement dimentionality reduction base.
 
 ## Peepholes
+- Model's modules are saved in different PTDs
 - add Flag to control wether or not call `_compute_empirical_posteriors()` in classifiers' `fit()`. 
 - Classifiers now call `compute_empirical_posteriors` inside `fit` to have a common interface with `DMD`.
 - drillers' `load()` returns a bool indicating if it has been fitted and saved as common interface for checking it.
@@ -27,6 +32,7 @@
 - update `utils/testing.py` to `utils/samplers.py`
 
 ## Datasets
+- Adds MNIST and DTD (Textures)
 - Rework `datasets`. Now each dataset is istantiated individually, previous `coreVectors.parse_ds()` is moved to `DatasetBase`
 
 ## Model
