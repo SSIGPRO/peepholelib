@@ -67,8 +67,8 @@ def plot_ood(**kwargs):
 
             # guarantees the same number of samples
             _ns = min(len(s_id), len(s_ood))
-            s_id = s_ori[torch.randperm(len(s_id))[:_ns]]
-            s_ood = s_atk[torch.randperm(len(s_ood))[:_ns]]
+            s_id = s_id[torch.randperm(len(s_id))[:_ns]]
+            s_ood = s_ood[torch.randperm(len(s_ood))[:_ns]]
 
             # computing AUC for each score type
             _labels = torch.hstack((torch.ones(s_id.shape), torch.zeros(s_ood.shape)))
