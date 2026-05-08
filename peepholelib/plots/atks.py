@@ -48,6 +48,11 @@ def auc_atks(**kwargs):
                 idx = dss._dss[ds_key][filter_key] == 1
                 s_ori = s_ori[idx]
                 s_atk = s_atk[idx]
+            else:
+                # guarantees the same number of samples
+                _ns = min(len(s_ori), len(s_atk))
+                s_ori = s_ori[torch.randperm(len(s_ori))[:_ns]]
+                s_atk = s_atk[torch.randperm(len(s_atk))[:_ns]]
 
             # computing AUC for each score type
             _labels = torch.hstack((torch.ones(s_ori.shape), torch.zeros(s_atk.shape)))
