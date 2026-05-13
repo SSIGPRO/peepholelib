@@ -85,7 +85,7 @@ class Peepholes:
                 # create/load PersistentTensorDict file
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
-                    _tds = PersistentTensorDict.from_h5(file_path, mode='r')
+                    _td = PersistentTensorDict.from_h5(file_path, mode='r')
                     n_samples = len(_td)
                 else:
                     n_samples = len(cvs._corevds[ds_key])
