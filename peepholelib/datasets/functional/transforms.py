@@ -150,7 +150,7 @@ mobilenet_v2_transform = transforms.Compose([
     transforms.CenterCrop(224),
     ]) 
 
-mobilenet_v2_cifar10_augumentations = transforms.Compose([
+mobilenet_v2_cifar10_augmentations = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
     transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10), 

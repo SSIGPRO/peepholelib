@@ -18,6 +18,7 @@
 - Implement dimentionality reduction base.
 
 ## Peepholes
+- Add `retry_load_time` to sleep on a load fail. Usefull for tuning.
 - Model's modules are saved in different PTDs
 - add Flag to control wether or not call `_compute_empirical_posteriors()` in classifiers' `fit()`. 
 - Classifiers now call `compute_empirical_posteriors` inside `fit` to have a common interface with `DMD`.

@@ -2,6 +2,7 @@
 from pathlib import Path
 from tqdm import tqdm
 from math import ceil
+from time import sleep
 
 # torch stuff
 import torch
@@ -48,6 +49,7 @@ class Peepholes:
         - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
         - names dict(str:str): Dictionary with key being the module name, and value being a name to append to the PTD file with the peepholes. Peepholes will be saved in a file with name `<loader>/<key>.<name>. If `None` it is ignored. Defaults to `None`.
         - batchsize (int): batchsize to process `corevectors` into `peepholes`. Defaults to 64.
+        - retry_load_time (int): Time (in seconds) to wait before retrying loading an already existing PTD with peepholes. If `None` no further attempts are done. Defaults to `None`.
         - n_threads (int): Number of threads to pass as `num_workers` to `torch.utils.data.DataLoader`. Defaults to 1.
         - verbose (bool): print progress messages
         '''
@@ -59,10 +61,9 @@ class Peepholes:
         self._drillers = kwargs['drillers']
         names = kwargs.get('names', None)
         bs = kwargs.get('batch_size', 64)
+        rlt = kwargs.get('retry_load_time', None)
         n_threads = kwargs.get('n_threads', 1)
-
         verbose = kwargs.get('verbose', False)
-        target_modules = kwargs['target_modules'] # list of peep modules
 
         if loaders == None: loaders = list(cvs._corevds.keys())
 
@@ -85,7 +86,18 @@ class Peepholes:
                 # create/load PersistentTensorDict file
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
-                    _td = PersistentTensorDict.from_h5(file_path, mode='r')
+
+                    if rlt == None:
+                        _td = PersistentTensorDict.from_h5(file_path, mode='r')
+                    else:
+                        while True:
+                            try: 
+                                _td = PersistentTensorDict.from_h5(file_path, mode='r')
+                                break
+                            except BlockingIOError:
+                                if verbose: print(f'Seems like the file {file_path} is busy. Will wait {rlt} seconds and try again.')
+                                sleep(rlt)
+
                     n_samples = len(_td)
                 else:
                     n_samples = len(cvs._corevds[ds_key])
