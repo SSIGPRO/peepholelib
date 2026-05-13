@@ -16,8 +16,11 @@ class MNISTCustom(torchMNIST):
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
 
+        # MNIST samples only have 1 channel
+        # we repeat the images to use with classifiers which expect 3 channels
+        # according to: https://discuss.pytorch.org/t/grayscale-to-rgb-transform/18315
         return {
-                'image': img,
+                'image': img.repeat(3,1,1),
                 'label': torch.tensor(label),
                 }  
 
