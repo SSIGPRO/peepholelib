@@ -81,14 +81,13 @@ class SVHN(DatasetWrap):
             download = True
         )
         
-        train_dataset, val_dataset = random_split(
+        _, val_dataset = random_split(
                 _train_data,
                 [self.train_ratio, 1 - self.train_ratio],
                 generator=torch.Generator().manual_seed(self.seed)
                 )
 
         self.__dataset__ = {
-                'SVHN-train': train_dataset,
                 'SVHN-val': val_dataset,
                 'SVHN-test': test_dataset
                 }
