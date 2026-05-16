@@ -109,7 +109,7 @@ class ParsedDataset():
             
                     if verbose: print(f'All {existing_chunks} chunks for {ds_key} already exist. Loading from disk.')
                     for chunk_path in existing_chunks:
-                        ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
+                        ptd = PersistentTensorDict.from_h5(chunk_path, mode='r')
                         ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
                 else:
