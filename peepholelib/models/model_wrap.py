@@ -19,8 +19,8 @@ class InputNormalizer(nn.Module):
         self.mean = mean.to(device)
         self.std = std.to(device)
 
-    def forward(self, input: Tensor) -> Tensor:
-        return (input - self.mean) / self.std
+    def forward(self, x: Tensor) -> Tensor:
+        return (x - self.mean) / self.std
 
     def __repr__(self):
         return f'InputNormalizer(mean={self.mean}, std={self.std})'  
@@ -81,6 +81,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
         self._normalizer = lambda x: x
 
         assert(issubclass(type(self._model), torch.nn.Module))
+
         # impose requirse_grad = False for all parameters
         self.set_requires_grad(requires_grad=False, layer_names=None)
 
@@ -189,6 +190,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
             for name, param in self._model.named_parameters():
                 if any(layer_name in name for layer_name in layer_names):
                     param.requires_grad_(requires_grad)
+        return
 
     def get_trainable_parameters(self, **kwargs):
         layers_to_train = kwargs.get('layers_to_train', None)
