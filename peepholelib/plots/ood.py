@@ -232,4 +232,4 @@ def plot_ood(**kwargs):
     plt.tight_layout()
     plt.savefig(path / f'auc_only{suffix}.png', dpi=300, bbox_inches='tight')
     plt.close()
-    return 
+    return aucs_df

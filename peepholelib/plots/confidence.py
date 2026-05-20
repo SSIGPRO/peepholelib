@@ -47,14 +47,15 @@ def plot_confidence(**kwargs):
     
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
+    metrics = {}
     for loader_n, ds_key in enumerate(loaders):
         # save OKs and KOs and confidences for plotting
         df_okko = pd.DataFrame()
-        cs_okko, ls_okko = {}, {} 
+        cs_okko, ls_okko = {}, {}
 
         for score_n, score_name in enumerate(scores[ds_key].keys()):
             _scores = scores[ds_key][score_name]
-            results = dss._dss[ds_key]['result'] 
+            results = dss._dss[ds_key]['result']
             ns = _scores.shape[0] # number of samples
 
             s_oks = _scores[results == True]
@@ -64,8 +65,10 @@ def plot_confidence(**kwargs):
             auc = AUC().update(_scores, results.int()).compute().item()
             sorted_pos, _ = torch.sort(s_oks, descending=True)
             tpr95_index = int(torch.ceil(torch.tensor(0.95 * sorted_pos.numel())).item()) - 1
-            threshold = sorted_pos[tpr95_index]                
+            threshold = sorted_pos[tpr95_index]
             fpr95 = (s_kos >= threshold).float().mean().item()
+
+            metrics.setdefault(ds_key, {})[score_name] = {'AUC': auc, 'FPR95': fpr95}
 
             if verbose:
                 print(f'FPR95 for {ds_key} {score_name} split: {fpr95:.4f}')
@@ -159,7 +162,7 @@ def plot_confidence(**kwargs):
 
     plt.savefig((path/f'confidence.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
-    return 
+    return metrics
 
 def one_thr_for_all(**kwargs):
 

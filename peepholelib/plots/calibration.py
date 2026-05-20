@@ -45,12 +45,13 @@ def plot_calibration(**kwargs):
     colors = ['xkcd:cobalt', 'xkcd:bluish green', 'xkcd:light orange', 'xkcd:dark hot pink', 'xkcd:purplish', 'xkcd:slate gray', 'xkcd:cinnamon']
 
     n_bins = ceil(1/calib_bin)
+    metrics = {}
     for loader_n, ds_key in enumerate(loaders):
 
         df_calib = pd.DataFrame()
         for score_name in scores[ds_key].keys():
             _scores = scores[ds_key][score_name]
-            results = dss._dss[ds_key]['result'] 
+            results = dss._dss[ds_key]['result']
             ns = _scores.shape[0] # number of samples
 
             # comput calibration and ECEs
@@ -65,11 +66,12 @@ def plot_calibration(**kwargs):
                 s_conf[b] = _scores[s_idx].sum()/s_ns[b] # bin's average confidence
 
             # avoid numerical problems with NaN
-            s_acc = torch.nan_to_num(s_acc) 
-            s_conf = torch.nan_to_num(s_conf) 
+            s_acc = torch.nan_to_num(s_acc)
+            s_conf = torch.nan_to_num(s_conf)
 
             # Compute ECE score
             ece = ((s_ns*(s_acc-s_conf).abs()).sum()/ns).item()
+            metrics.setdefault(ds_key, {})[score_name] = {'ECE': ece}
             if verbose: print(f'ECE for {ds_key} {score_name} split: {ece:.4f}')
 
             df_calib = df_calib._append(
@@ -127,4 +129,4 @@ def plot_calibration(**kwargs):
     
     plt.savefig((path/f'calibration.png').as_posix(), dpi=300, bbox_inches='tight')
     plt.close()
-    return 
+    return metrics
