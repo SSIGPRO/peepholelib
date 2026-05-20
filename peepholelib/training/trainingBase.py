@@ -14,13 +14,16 @@ from peepholelib.training.validationLoops import DefaultValidationLoop
 from peepholelib.training.testingLoops import DefaultTestLoop
 from peepholelib.training.savingLoops import DefaultSavingLoop
 
-def img_classification_acc(pred, target):
+def img_classification_acc(pred, target, reduction='sum'):
     
     pred_idx = torch.argmax(pred, dim=1)
-    return (pred_idx == target).sum()
+    if reduction == 'sum':
+        acc = (pred_idx == target).float().sum()
+    elif reduction == 'mean':
+        acc = (pred_idx == target).float().mean()
+    return acc 
 
 class Trainer(metaclass=abc.ABCMeta):
-
     def __init__(self, **kwargs):
         """
         Base trainer that owns the full training state and orchestrates the
@@ -79,7 +82,7 @@ class Trainer(metaclass=abc.ABCMeta):
 
         # Loss function
         _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
-        loss_kwargs = kwargs.get('loss_kwargs', dict())
+        loss_kwargs = kwargs.get('loss_kwargs', dict(reduction='sum'))
         self.acc_fn = kwargs.get('acc_fn', img_classification_acc)
 
         self.loss_fn = _l(**loss_kwargs)
@@ -100,25 +103,25 @@ class Trainer(metaclass=abc.ABCMeta):
         self.no_training = False
 
         self.train_dl = DataLoader(
-                                dataset=self.ds.__dataset__[self.train_key],
-                                batch_size=bs,
-                                shuffle=True,
-                                **dl_kwargs,
-                            )
+                dataset = self.ds.__dataset__[self.train_key],
+                batch_size = bs,
+                shuffle = True,
+                **dl_kwargs,
+                )
 
         self.val_dl = DataLoader(
-                                dataset=self.ds.__dataset__[self.val_key],
-                                batch_size=bs,
-                                shuffle=False,
-                                **dl_kwargs,
-                            ) 
+                dataset = self.ds.__dataset__[self.val_key],
+                batch_size = bs,
+                shuffle = False,
+                **dl_kwargs,
+                ) 
         
         self.test_dl = DataLoader(
-                                dataset=self.ds.__dataset__[self.test_key],
-                                batch_size=bs,
-                                shuffle=False,
-                                **dl_kwargs,
-                            ) 
+                dataset = self.ds.__dataset__[self.test_key],
+                batch_size = bs,
+                shuffle = False,
+                **dl_kwargs,
+                ) 
         
         if iterations == 'full': 
             if self.verbose: print('using the whole dataset every iteration')
@@ -241,7 +244,6 @@ class Trainer(metaclass=abc.ABCMeta):
                 
     def test(self):
         if self.verbose: print('----- Testing Model ----- ')
-
 
         best_model_file = self.path / 'best_model' / 'best_model_config.pt'
         
