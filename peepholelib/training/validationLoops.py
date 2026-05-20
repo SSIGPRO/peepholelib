@@ -1,5 +1,4 @@
 from time import time
-from math import isinf
 import torch
 
 def DefaultValidationLoop(**kwargs):
