@@ -1,5 +1,7 @@
 # DEVEL
 
+# v.0.0.2
+
 ## Datasets
 - Implements MNIST and DTD (Textures)
 - Move transforms for `parsedDatase` class. Dataset values are saved raw.
