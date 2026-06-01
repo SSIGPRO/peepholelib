@@ -6,13 +6,16 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 def random_subsampling(ds, perc):
     assert(isinstance(ds, DatasetWrap))
-    
+
     if isinstance(perc, float):
-        perc = [perc for _ in ds.__dataset__]
-    
-    for k, p in zip(ds.__dataset__, perc):
-        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [p, 1.0-p])
-    return 
+        perc = {k: perc for k in ds.__dataset__}
+
+    if not isinstance(perc, dict):
+        raise TypeError(f'perc must be a float or a dict, got {type(perc)}')
+
+    for k, p in perc.items():
+        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [p, 1.0 - p])
+    return
 
 def dist_preserving(data, n, weights='label'):
     raise RuntimeError('DEPRECATED')

@@ -10,6 +10,9 @@ from torchvision.transforms import ToTensor, Compose, Resize
 
 class SSBHardCustom(ImageFolder):
 
+    def __init__(self, **kwargs):
+        ImageFolder.__init__(self, **kwargs)
+
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
         return {

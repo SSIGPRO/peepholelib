@@ -169,7 +169,7 @@ class ParsedDataset():
 
         return
 
-    def parse_subsample(self, **kwargs):
+    def __parse_subsample(self, **kwargs):
         '''
         Takes an already-parsed dataset and creates a subsampled version, saving the sampled
         shards at `self.path/dss.<ds_key>_sub_<pct>` (e.g. `dss.test_sub_10` for 10% of `test`).

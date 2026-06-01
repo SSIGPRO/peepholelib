@@ -10,6 +10,9 @@ from torchvision.transforms import ToTensor, Compose, Resize
 
 class iNaturalistCustom(ImageFolder):
 
+    def __init__(self, **kwargs):
+        ImageFolder.__init__(self, **kwargs)
+
     def __getitem__(self, index):
         img, label = super().__getitem__(index)
         return {
@@ -41,7 +44,7 @@ class iNaturalist(DatasetWrap):
         if self.transform is not None:
             self.transform.transforms.append(ToTensor())
         else:
-            self.transform = Compose([Resize((224, 224)), ToTensor()])
+            self.transform = Compose([ToTensor(), Resize((224, 224))])
 
         return
 
