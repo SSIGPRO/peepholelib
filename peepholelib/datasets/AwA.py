@@ -1,0 +1,244 @@
+# general python stuff
+from PIL import Image
+from pathlib import Path
+
+# Our stuff
+from peepholelib.datasets.datasetWrap import DatasetWrap
+
+# torch stuff
+import torch
+from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import random_split
+
+from torchvision.transforms import ToTensor
+
+class AwACustom(Dataset):
+    def __init__(self, **kwargs):
+        """
+        path: path to AwA2 folder containing JPEGImages/, classes.txt, predicate-matrix-binary.txt
+        split: "train" or "test"
+        train_ratio: fraction of samples used for training
+        seed: for deterministic split
+        """
+
+        self.path = Path(kwargs['path'])
+        self.reference_ds = kwargs['reference_ds']
+        self.transform = kwargs['transform']        
+        self.seed = kwargs['seed']
+
+        # ---- Load class names ----
+        classes_file = self.path / "classes.txt"
+        self.id_to_class = {}
+        with open(classes_file) as f:
+            for line in f:
+                cid, cname = line.strip().split('\t')
+                self.id_to_class[int(cid)] = cname
+
+        # ---- Load attribute matrix ----
+        attr_file = self.path / "predicate-matrix-binary.txt"
+        attr_list = []
+        with open(attr_file, "r") as f:
+            for line in f:
+                attr_list.append([float(x) for x in line.strip().split()])
+        self.attributes = torch.tensor(attr_list, dtype=torch.float32)  # [50, 85]
+
+        # ---- Load attribute names ----
+        pred_file = self.path / "predicates.txt"
+        self.attribute_names = []
+        with open(pred_file, "r") as f:
+            for line in f:
+                _, name = line.strip().split('\t')
+                self.attribute_names.append(name)
+
+        assert len(self.attribute_names) == self.attributes.shape[1]
+
+        # ---- Build full list of samples (image_path, class_id) ----
+        self.samples = []
+        img_path = self.path / "JPEGImages"
+
+        for cid, cname in self.id_to_class.items():
+            class_dir = img_path / cname
+            if not class_dir.is_dir():
+                print(f"WARNING: folder missing → {class_dir}")
+                continue
+
+            for img_file in class_dir.iterdir():
+                if img_file.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    self.samples.append((img_file, cid - 1))
+        
+        if self.reference_ds is not None:
+            # ---- Reference ds classes names ----
+            if self.reference_ds == 'ImageNet':
+                self.mapping_AwA_ImageNet = {
+                        0: [351, 352, 353],
+                        1: [294, 295, 297],
+                        2: [148],
+                        3: [337],
+                        4: [251],
+                        5: [283],
+                        6: [339],
+                        7: [235],
+                        8: [147],
+                        9: [284],
+                        10: [361],
+                        # 11 no match
+                        12: [292],
+                        13: [344],
+                        14: [288, 289],
+                        # 15 no match
+                        16: [381],
+                        17: [147],
+                        18: [385, 386, 101],
+                        19: [366],
+                        20: [345, 346],
+                        21: [277, 278, 279, 280],
+                        22: [348, 349],
+                        23: [150],
+                        24: [367],
+                        25: [333],
+                        26: [335],
+                        # 27 no match
+                        28: [330, 331, 332],
+                        # 29 no match
+                        # 30 no match
+                        31: [269, 270, 271, 272],
+                        32: [151],
+                        # 33 no match
+                        34: [356],
+                        35: [360],
+                        36: [346],
+                        37: [340],
+                        38: [388],
+                        # 39 no match 
+                        40: [287],
+                        41: [341],
+                        42: [291],
+                        # 43 no match
+                        44: [296], 
+                        45: [231, 232],
+                        # 46 no match
+                        # 47 no match
+                        48: [345, 346],
+                        # 49 no match
+                        }
+
+                self.M = torch.zeros((len(self.id_to_class.keys()), 1000), dtype=torch.uint8)
+
+                for c_AwA, cs_IN in self.mapping_AwA_ImageNet.items():
+                    for c_IN in cs_IN:
+                        self.M[c_AwA, c_IN] = 1
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        img_path, class_id = self.samples[idx]
+
+        img = Image.open(img_path).convert("RGB")
+        if self.transform:
+            img = self.transform(img)
+
+        attr_tensor = self.attributes[class_id]
+
+        attr_dict = {
+            attribute_name: torch.tensor(attr_tensor[i].item())
+            for i, attribute_name in enumerate(self.attribute_names)
+        }
+
+        if self.reference_ds is not None: 
+            label = self.M[class_id]
+        else:
+            label = torch.tensor(class_id)
+
+        sample = {
+            'image': img,
+            'label': label,
+            **attr_dict
+        }
+
+        return sample
+    
+class AwA(DatasetWrap):
+    def __init__(self, **kwargs): 
+        '''
+        AwA loader (train & val & test). Splits are created from the full dataset
+        according to `splitting_ratio` (default: 0.6 train, 0.2 val, 0.2 test).
+
+        Args:
+            path (str): Path to the AwA2 folder containing dataset files (e.g. `JPEGImages`, `classes.txt`, `predicates.txt`, `predicate-matrix-binary.txt`).
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the training split.
+            splitting_ratio (list[float], optional): Ratios for [train, val, test]. Must sum to 1.0.
+            seed (int, optional): Random seed used for deterministic splits.
+            reference_ds (str, optional): Optional reference dataset name for label remapping (currently supports `'ImageNet'`).
+        Returns:
+            - a thumbs up
+        '''
+        self.path = kwargs['path']
+        self.transform = kwargs.get('std_transform', None)
+        self.augmentation = kwargs.get('aug_transform', None)
+        self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
+        self.seed = kwargs.get('seed', 42)
+        self.reference_ds = kwargs.get('reference_ds', None)
+
+        assert sum(self.splitting_ratio) == 1.0
+
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
+
+        return
+
+    def __load_data__(self, **kwargs):
+        """
+        Load and prepare AwA data.
+        """
+
+        self.__dataset__ = {}
+        _ds = AwACustom(
+                path=self.path,
+                transform=self.transform,
+                reference_ds=self.reference_ds,
+                seed=self.seed
+            )
+
+        if self.augmentation is None:
+            # split train into train and test
+            train_ds, val_ds, test_ds = torch.utils.data.random_split(
+                    _ds,
+                    self.splitting_ratio,
+                    generator = torch.Generator().manual_seed(self.seed)
+                    )
+
+        else:
+            aug_ds = AwACustom(
+                    path=self.path,
+                    transform=self.augmentation,      
+                    reference_ds=self.reference_ds,
+                    seed=self.seed
+                )
+
+            train_idx, val_idx, test_idx = torch.utils.data.random_split(
+                    range(len(_ds)),
+                    self.splitting_ratio,
+                    generator=torch.Generator().manual_seed(self.seed)
+                    )
+
+            train_ds = torch.utils.data.Subset(aug_ds, train_idx.indices)
+            val_ds   = torch.utils.data.Subset(_ds, val_idx.indices)
+            test_ds  = torch.utils.data.Subset(_ds, test_idx.indices)
+
+        # 4) Save
+        self.__dataset__ = {
+                'AwA-train': train_ds,
+                'AwA-val': val_ds,
+                'AwA-test': test_ds
+            }
+
+

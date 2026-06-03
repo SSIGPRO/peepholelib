@@ -6,24 +6,22 @@ class DatasetWrap(metaclass=abc.ABCMeta):
 
     def __init__(self, **kwargs):
         '''
-        Creates instance of dataset base. For base datasets, `Transform` is mandatory.
+        Creates instance of dataset base. For base datasets.
 
         Args:
         - path (str): Path for dataset. 
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset
 
         '''
         self.path = Path(kwargs['path'])
         self.seed = kwargs.get('seed', 42)
-        self.transform = kwargs['transform']
+
+        # useful for checking in `datasets.parsedDatase.ParsedDataset` 
+        self.has_transforms = ('std_transform' in kwargs) or ('aug_transform' in kwargs)
         
         return
 
     @abc.abstractmethod
     def __load_data__(self):
         raise NotImplementedError()
-    
-    @abc.abstractmethod
-    def get(self, ds_key, idx):
-        raise NotImplementedError()
+

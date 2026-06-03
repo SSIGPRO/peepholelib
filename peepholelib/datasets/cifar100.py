@@ -3,31 +3,86 @@ import pickle
 
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_cifar100
 
 # torch stuff
 import torch
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Subset
 
 # CIFAR from torchvision
-from torchvision import datasets
+from torchvision.datasets import CIFAR100
+from torchvision.transforms import ToTensor
+
+class CIFAR100Custom(CIFAR100):
+    def __init__(self, **kwargs):
+        CIFAR100.__init__(self, **kwargs)
+        self.fine_to_coarse = {
+            0: [4, 30, 55, 72, 95],
+            1: [32, 1, 67, 73, 91],
+            2: [54, 62, 70, 82, 92],
+            3: [9, 10, 16, 28, 61], 
+            4: [0, 51, 53, 57, 83],
+            5: [22, 39, 40, 86, 87],
+            6: [5, 20, 25, 84, 94],
+            7: [6, 7, 14, 18, 24],
+            8: [3, 42, 43, 88, 97],
+            9: [12, 17, 37, 68, 76],
+            10: [23, 33, 49, 60, 71], 
+            11: [15, 19, 21, 31, 38],
+            12: [34, 63, 64, 66, 75],
+            13: [26, 45, 77, 79, 99],
+            14: [2, 11, 35, 46, 98], 
+            15: [27, 29, 44, 78, 93],
+            16: [36, 50, 65, 74, 80],
+            17: [47, 52, 56, 59, 96],
+            18: [8, 13, 48, 58, 90],
+            19: [41, 69, 81, 85, 89]
+        }
+
+        self.M = torch.zeros(20, 100)
+
+        for superc, cs in self.fine_to_coarse.items():
+            for c in cs:
+                self.M[superc, c] = 1
+
+    def __getitem__(self, index):
+        img, label = super().__getitem__(index)
+
+        sample = {
+            "image": img,
+            "label": torch.tensor(label),
+            "coarse_label": self.M[:, int(label)].argmax(),
+        }
+        return sample
 
 class Cifar100(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Cifar100 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        CIFAR100 loader (train & val & test). Validation is created from the training split according to `train_ratio` (default: 0.8 train, 0.2 val).
 
         Args:
-            path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+            path (str): CIFAR100 download folder. If not already available, the dataset is downloaded in this folder.
+            transform (callable, optional): Transform applied to validation/test images. Defaults to `vgg16`.
+            augmentation (callable, optional): If provided, applied only to the training split.
+            train_ratio (float, optional): Fraction of training samples used for train (remainder goes to val).
+            seed (int, optional): Random seed used for deterministic train/val splitting.
         Returns:
             - a thumbs up
         '''
-        
-        # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_cifar100
-
         DatasetWrap.__init__(self, **kwargs)
+        
+        self.transform = kwargs.get('std_transform', None)
+        self.augmentation = kwargs.get('aug_transform', None)
+        self.train_ratio = kwargs.get('train_ratio', 0.8)
+        
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
     
@@ -38,45 +93,54 @@ class Cifar100(DatasetWrap):
         Returns:
         - a thumbs up
         '''
-        
-        transform = self.transform
-        seed = self.seed
-            
-        # set torch seed
-        torch.manual_seed(seed)
 
         # Test dataset is loaded directly
-        test_dataset = datasets.CIFAR100(
+        test_ds = CIFAR100Custom(
             root = self.path,
             train = False,
-            transform = transform,
+            transform = self.transform,
             download = True
-        )
-        
-        # train data will be splitted into training and validation
-        _train_data = datasets.CIFAR100( 
-            root = self.path,
-            train = True,
-            transform = None, #transform,
-            download = True
-        )
-        
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
         )
 
-        # Apply the transform 
-        if transform != None:
-            val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform 
+        base_ds = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=self.transform,
+                download=False
+            )
+        
+        if not (0.0 < self.train_ratio < 1.0):
+            raise ValueError(f'train_ratio must be in (0, 1), got {self.train_ratio}.')
+
+        n_total = len(base_ds)
+        n_train = int(round(n_total * self.train_ratio))
+        n_val = n_total - n_train
+
+        train_idx, val_idx = random_split(
+                range(n_total),
+                [n_train, n_val],
+                generator=torch.Generator().manual_seed(self.seed)
+            )
+        
+        val_ds = Subset(base_ds, val_idx)
+        
+        if self.augmentation is None:
+                    
+            train_ds = Subset(base_ds, train_idx)
+        else:
+            _train_aug = CIFAR100Custom(
+                root=self.path,
+                train=True,
+                transform=self.augmentation,
+                download=True
+            )
+            train_ds = Subset(_train_aug, train_idx)
     
         # Save datasets as objects in the class
         self.__dataset__ = {
-                'CIFAR100-train': train_dataset,
-                'CIFAR100-val': val_dataset,
-                'CIFAR100-test': test_dataset
+                'CIFAR100-train': train_ds,
+                'CIFAR100-val': val_ds,
+                'CIFAR100-test': test_ds
                 }
         
         return 
@@ -89,18 +153,25 @@ class Cifar100(DatasetWrap):
         labels = {i: name for i, name in enumerate(meta['fine_label_names'])}
         return labels 
     
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
+    def get_superclasses(cls):
+
+        return {0: 'aquatic mammals',
+                1: 'fish',
+                2: 'flowers',
+                3: 'food containers',
+                4: 'fruit and vegetables',
+                5: 'household electrical devices',
+                6: 'household furniture',
+                7: 'insects',
+                8: 'large carnivores',
+                9: 'large man-made outdoor things',
+                10: 'large natural outdoor scenes',
+                11: 'large omnivores and herbivores',
+                12: 'medium-sized mammals',
+                13: 'non-insect invertebrates',
+                14: 'people',
+                15: 'reptiles',
+                16: 'small mammals',
+                17: 'trees',
+                18: 'vehicles 1',
+                19: 'vehicles 2'}

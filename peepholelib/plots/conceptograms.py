@@ -1,6 +1,7 @@
 # torch stuff
 import torch
 from torch.nn.functional import softmax
+from torch.utils.data import DataLoader
 
 # python stuff
 import matplotlib.pyplot as plt
@@ -59,14 +60,11 @@ def plot_conceptogram(**kwargs):
     has_title = (scores != None) and (classes != None)
 
     for ds_key in loaders:
-        # getting data from corevectors
-        _dss = dss._dss[ds_key][samples] 
-        
         conceptos = phs.get_conceptograms(loaders=[ds_key], target_modules=target_modules)[ds_key][samples]
         
         path.mkdir(parents=True, exist_ok=True)
-        for _d, _c, sample in zip(_dss, conceptos, samples):
-
+        for _c, sample in zip(conceptos, samples):
+            _d = dss._dss[ds_key][sample]
             label = int(_d[label_key])
             pred = int(_d['pred'])
             output = pred_fn(_d['output'].squeeze(dim=0))

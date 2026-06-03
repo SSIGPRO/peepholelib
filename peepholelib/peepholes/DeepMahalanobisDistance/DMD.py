@@ -3,36 +3,49 @@ import abc
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
 
 # torch stuff
 import torch
 from peepholelib.peepholes.drill_base import DrillBase
-from peepholelib.coreVectors.dimReduction.avgPooling import ChannelWiseMean_conv
 from sklearn import covariance
+
+# pur stuff
+from peepholelib.models.model_wrap import get_out_activations
+
+def get_images(**kwargs):
+    """
+    Get only images
+
+    Args:
+        act (PersistentTensorDict): TensorDict for the activations inside `peepholelib.CoreVectors` class
+
+    Returns:
+        image (torch.Tensor): images saved in the activations.  
+    """
+    img = kwargs['dss']['image']
+    return img 
 
 class DeepMahalanobisDistance(DrillBase): 
     def __init__(self, **kwargs):
         DrillBase.__init__(self, **kwargs)
 
         self.model = kwargs['model']
-        self._layer = kwargs['layer']
         self.magnitude = kwargs['magnitude']
+        self.reducer = kwargs['reducer']
+        self.ds_parser = kwargs.get('ds_parser', get_images)
+        self.act_parser = kwargs.get('act_parser', get_out_activations)
         self.std_transform = torch.tensor(kwargs['std_transform'], device=self.device)
-        self.parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
-        self.save_input = kwargs['save_input'] if 'save_input' in kwargs else False
-        self.save_output = kwargs['save_output'] if 'save_output' in kwargs else True
+        self.save_input = kwargs.get('save_input', False)
+        self.save_output = kwargs.get('save_output', True)
 
         # computed in fit()
         self._means = {} 
         self._precision = {}
 
-        # set in fit()
-        self._cvs = None 
+        self.cv_parser = self.reducer.parser
 
         # used in save() or load()
-        self.dmd_folder = self.path/(self.name+self._suffix)
+        self.dmd_folder = self.path/self.name
         self.precision_path = self.dmd_folder/'precision.pt'
         self.mean_path = self.dmd_folder/'mean.pt' 
 
@@ -42,10 +55,14 @@ class DeepMahalanobisDistance(DrillBase):
         return
     
     def load(self, **kwargs):
-        self._means = torch.load(self.mean_path).to(self.device)
-        self._precision = torch.load(self.precision_path).to(self.device)
-    
-        return 
+        # return true or false if DMD is fitted or not
+        if self.mean_path.exists() and self.precision_path.exists():
+            self._means = torch.load(self.mean_path).to(self.device)
+            self._precision = torch.load(self.precision_path).to(self.device)
+            ok = True
+        else:
+            ok = False
+        return ok 
 
     def save(self, **kwargs):
         self.dmd_folder.mkdir(parents=True, exist_ok=True)
@@ -61,22 +78,21 @@ class DeepMahalanobisDistance(DrillBase):
                 precision: list of precisions
         """
 
-        _dss = kwargs['dataset']
+        _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader')
-        drill_key = kwargs.get('drill_key')
         label_key = kwargs.get('label_key', 'label')
         
         # parsing for simplification
         dss = _dss._dss[loader]
-        cvs = _cvs._corevds[loader][drill_key]
+        cvs = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module])
 
         group_lasso = covariance.EmpiricalCovariance(assume_centered=False)
         
         # get TDs for each label
-        labels = dss[label_key].int()
+        labels = dss[:][label_key].int()
         self._means = torch.zeros(self.nl_model, self.n_features, device=self.device) 
-        list_features = cvs.clone().detach().to(self.device) # create a copy of cvs to device
+        list_features = cvs.to(self.device) # create a copy of cvs to device
         
         for i in range(self.nl_model):
             self._means[i] = list_features[labels == i].mean(dim=0).to(self.device)
@@ -101,10 +117,9 @@ class DeepMahalanobisDistance(DrillBase):
         std = self.std_transform
         
         dss = kwargs['dss']
-        parser_act = kwargs['parser_act'] if 'parser_act' in kwargs else ChannelWiseMean_conv
 
         # get input image and set gradient to modify it
-        data = self.parser(dss = dss)
+        data = self.ds_parser(dss = dss)
         data = data.to(self.device)
         data.requires_grad_(True)
         n_samples = data.shape[0]
@@ -114,16 +129,18 @@ class DeepMahalanobisDistance(DrillBase):
         self.model._model.zero_grad()
         _ = self.model(data.to(self.device))
         
-        if self._layer == 'output':
+        if self.target_module == 'output':
             output = self.model(data.to(self.device))
         else:
-            output = self.parser_act(self.model._acts['out_activations'][self._layer])
+            _parsed_act = self.act_parser(self.model._acts)[self.target_module]
+            output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
         
         gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
         for i in range(self.nl_model):
             zero_f = output - self._means[i]
             term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
-            gaussian_score[:,i] = term_gau
+
+            gaussian_score[:,i] = term_gau.detach()
 
         if magnitude != 0:
             # Input_processing
@@ -137,10 +154,6 @@ class DeepMahalanobisDistance(DrillBase):
             gradient = torch.ge(data.grad.data, 0)
             gradient = (gradient.float() - 0.5) * 2
 
-            # TODO: Still think this could be simpler
-            # TODO: is this 3 because the activation are reshaped to have 3 dimensions?
-            # I suspect this is specific for the models used in the reference code
-            # The std values should probably reflect the number of dimensions
             for i in range(3):
                 gradient.index_copy_(1, torch.LongTensor([i]).to(self.device), gradient.index_select(1, torch.LongTensor([i]).to(self.device)) / (std[i]))
         
@@ -149,10 +162,11 @@ class DeepMahalanobisDistance(DrillBase):
             with torch.no_grad():
                 _ = self.model(tempInputs.to(self.device))
                 
-            if self._layer == 'output':
+            if self.target_module == 'output':
                 output = self.model(tempInputs.to(self.device)) 
             else:
-                output = self.parser_act(self.model._acts['out_activations'][self._layer])
+                _parsed_act = self.act_parser(self.model._acts)[self.target_module]
+                output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
 
             gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
             for i in range(self.nl_model):
@@ -160,5 +174,4 @@ class DeepMahalanobisDistance(DrillBase):
                 term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
                 gaussian_score[:, i] = term_gau
 
-        score = gaussian_score
-        return score.detach().cpu()
+        return gaussian_score

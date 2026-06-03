@@ -1,30 +1,49 @@
 # Our stuff
 from peepholelib.datasets.datasetWrap import DatasetWrap
-from peepholelib.datasets.functional.transforms import vgg16_imagenet
 
 # torch stuff
 import torch
 from torch.utils.data import random_split
 
 # Places365 from torchvision
-from torchvision import datasets
+from torchvision.datasets import Places365 as torchPlaces
+from torchvision.transforms import ToTensor
+
+class PlacesCustom(torchPlaces):
+
+    def __init__(self, **kwargs):
+        torchPlaces.__init__(self, **kwargs)
+
+    def __getitem__(self, index):
+        img, label = super().__getitem__(index)
+
+        return {
+                'image': img,
+                'label': torch.tensor(label),
+                }  
 
 class Places(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Places loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        Places loader (val & test). Validation is created from train.
 
         Expects:
             path (str): Places download folder. If not downloaded, downloads the dataset in this folder.
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
 
         # add a default transform for specific DS
-        if 'transform' not in kwargs:
-            kwargs['transform'] = vgg16_imagenet
+        self.transform = kwargs.get('std_transform', None)
 
-        DatasetWrap.__init__(self, **kwargs)
+        self.splitting_ratio = kwargs.get('splitting_ratio', [0.45205478, 0.27397261, 0.27397261])
+
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
 
         return
     
@@ -36,16 +55,10 @@ class Places(DatasetWrap):
         - a thumbs up
         '''
 
-        transform = self.transform
-        seed = self.seed              
-
-        # set torch seed
-        torch.manual_seed(seed)
-
-        _data = datasets.__dict__['Places365'](
+        _data = PlacesCustom(
                 root = self.path,
                 split = 'val',
-                transform = transform,
+                transform = self.transform,
                 small = True,
                 download = True
                 )
@@ -53,8 +66,8 @@ class Places(DatasetWrap):
         # split to get 10000 samples for val and test
         _, val_dataset, test_dataset = random_split(
                 _data,
-                [0.45205478, 0.27397261, 0.27397261], # to get exactly 10000 samples
-                generator=torch.Generator().manual_seed(seed)
+                self.splitting_ratio, 
+                generator=torch.Generator().manual_seed(self.seed)
                 )
                     
         self.__dataset__ = {
@@ -62,27 +75,4 @@ class Places(DatasetWrap):
                 'Places365-test': test_dataset
                 }
         
-        # TODO: implement get_classes()
-        #self._classes = {
-        #        'Places-train': {i: class_name for i, class_name in enumerate(train_dataset.classes)},
-        #        'Places-val': {i: class_name for i, class_name in enumerate(val_dataset.classes)},
-        #        'Places-test': {i: class_name for i, class_name in enumerate(test_dataset.classes)}
-        #        }
-
         return
-    
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]

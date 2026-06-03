@@ -11,11 +11,13 @@ from torcheval.metrics import BinaryAUROC as AUC
 
 def auc_atks(**kwargs):
     '''
-    Plot OOD detection.
+    Compute and print OOD or AA AUC scores.
 
     Args:
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
-    - id_loaders (dict(str:str|list(str))): Dictionary of loaders of in-distribution data, with the key being the score type and values a str or list of strings for respective loaders.
+    - datasets (peepholelib.datasets.parsedDatataset.ParsedDataset))): parsed datasets. 
+    - filter_key (str): String within `datasets._dss[loader]` to filters the classification results, e.g. if you want to select only AAs which were successfull. If `None`, all samples are used. Defaults to `'attack_sucess'`
+    - ori_loaders (dict(str:str|list(str))): Dictionary of loaders of in-distribution data, with the key being the score type and values a str or list of strings for respective loaders.
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
     - verbose (bool): print progress messages.
@@ -27,8 +29,10 @@ def auc_atks(**kwargs):
     atk_loaders = kwargs.get('atk_loaders')
     verbose = kwargs.get('verbose', False)
 
+    aucs = {}
     for loader_n, ds_key in enumerate(atk_loaders):
-
+        aucs[ds_key] = {}
+        
         # save in-distribution and out-of-distribution scores for plotting
         for score_n, score_name in enumerate(ori_loaders.keys()):
             _ori_loader = ori_loaders[score_name]
@@ -39,9 +43,16 @@ def auc_atks(**kwargs):
                 s_ori = scores[_ori_loader][score_name]
 
             s_atk = scores[ds_key][score_name]
-            idx = dss._dss[ds_key][filter_key] == 1
-            s_ori = s_ori[idx]
-            s_atk = s_atk[idx]
+
+            if filter_key is not None:
+                idx = dss._dss[ds_key][filter_key] == 1
+                s_ori = s_ori[idx]
+                s_atk = s_atk[idx]
+            else:
+                # guarantees the same number of samples
+                _ns = min(len(s_ori), len(s_atk))
+                s_ori = s_ori[torch.randperm(len(s_ori))[:_ns]]
+                s_atk = s_atk[torch.randperm(len(s_atk))[:_ns]]
 
             # computing AUC for each score type
             _labels = torch.hstack((torch.ones(s_ori.shape), torch.zeros(s_atk.shape)))
@@ -49,5 +60,6 @@ def auc_atks(**kwargs):
 
             auc = AUC().update(_scores, _labels).compute().item()
             if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
+            aucs[ds_key][score_name] = auc
 
-    return 
+    return aucs 

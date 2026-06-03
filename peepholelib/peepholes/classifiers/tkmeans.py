@@ -30,23 +30,29 @@ class KMeans(ClassifierBase): # quella buona
                     )
                 )
 
-        self._clas_path = self.path/(self.name+'.KMeans'+self._suffix)
-        self._empp_file = self._clas_path/'empp.pt'
+        self._clas_path = self.path/self.name
+        self._empp_file = self._clas_path/'empp_{self.label_key}.pt'
         return
 
     def fit(self, **kwargs):
         '''
         Fitss clusters.
         Args:
-        - corevectors (TensorDict): Corevectors.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting the GMM, usually 'train'. Defaults to 'train'. 
+        - batch_size: Do the computation in batchs. Defaults to 512.
+        - compute_empp (bool): Wether to compute the empirical posterior. Defaults to `True`.
         - verbose (Bool): Print progress messages. 
         '''
+        _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
+        bs = kwargs.get('batch_size', 512)
+        _compute_empp = kwargs.get('compute_empp', True)
         verbose = kwargs.get('verbose', False)
 
-        cvs = _cvs._corevds[loader]
+        cvs = _cvs._corevds[loader][self.target_module]
         if verbose: 
             print('\n ---- KMeans classifier\n')
 
@@ -60,6 +66,15 @@ class KMeans(ClassifierBase): # quella buona
         if verbose: print('Fitting KMeans')
         self._classifier.fit(data)
 
+        # compute empirical posteriors       
+        if _compute_empp:
+            self._compute_empirical_posteriors(
+                    datasets = _dss,
+                    corevectors = _cvs,
+                    loader = loader,
+                    bs = bs,
+                    verbose = verbose
+                    )
         return
     
     def classifier_probabilities(self, **kwargs):
@@ -71,9 +86,7 @@ class KMeans(ClassifierBase): # quella buona
         '''
         
         data = kwargs['data']
-
         distances = self._classifier.transform(data)
-        
         # changing strategy: back to softmin
         probs = torch.nn.functional.softmin(distances, dim=1)
             
@@ -90,7 +103,11 @@ class KMeans(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
-        self._classifier = tKMeans.load(self._clas_path)
-        super().load()
+        if self._clas_path.exists(): 
+            self._classifier = tKMeans.load(self._clas_path)
+            super().load()
+            ok = True 
+        else:
+            ok = False
 
-        return
+        return ok

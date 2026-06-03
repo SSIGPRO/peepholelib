@@ -1,26 +1,56 @@
 # Our stuff
-from peepholelib.datasets.dataset_base import DatasetBase
-from peepholelib.datasets.transforms import vgg16_cifar10
+from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Subset
 
 # CIFAR from torchvision
-from torchvision import datasets
+from torchvision.datasets import CIFAR10
+from torchvision.transforms import ToTensor 
 
-class Cifar10(DatasetBase):
+class CIFAR10Custom(CIFAR10):
+    def __init__(self, **kwargs):
+        CIFAR10.__init__(self, **kwargs)
+        self._to_tensor = ToTensor()
+
+    def __getitem__(self, index):
+        img, label = super().__getitem__(index)
+
+        sample = {
+                "image": self._to_tensor(img),
+                "label": torch.tensor(label),
+            }
+        return sample
+
+class Cifar10(DatasetWrap):
     def __init__(self, **kwargs):
         '''
-        Cifar10 loader (train & val & test). Validation is created from train, fixed in 0.8 for train and 0.2 for val.
+        CIFAR10 loader (train & val & test). Validation is created from the training split according to `train_ratio` (default: 0.8 train, 0.2 val).
 
-        Expects:
-            data_path (str): Cifar download folder. If not downloaded, downloads the dataset in this folder.
+        Args:
+            path (str): CIFAR10 download folder. If not already available, the dataset is downloaded in this folder. images.
+            augmentation (callable, optional): If provided, applied only to the training split.
+            train_ratio (float, optional): Fraction of training samples used for train (remainder goes to val).
+            seed (int, optional): Random seed used for deterministic train/val splitting.
         Returns:
             - a thumbs up
         '''
+        DatasetWrap.__init__(self, **kwargs)
 
-        DatasetBase.__init__(self, **kwargs)
+        self.transform = kwargs.get('std_transform', None)
+        self.augmentation = kwargs.get('aug_transform', None)
+        self.train_ratio = kwargs.get('train_ratio', 0.8)
+
+        # append ToTensor to the transform
+        if self.transform != None:
+            self.transform.transforms.append(ToTensor())
+        else:
+            self.transform = ToTensor()
+                                                                          
+        # if augmentation == None, transform will be used for all loaders
+        if self.augmentation != None:
+            self.augmentation.transforms.append(ToTensor())
 
         return
     
@@ -30,54 +60,38 @@ class Cifar10(DatasetBase):
         
         Args:
         - seed (int): Random seed for reproducibility.
-        - transform (torchvision.transforms.Compose): Custom transform to apply to the original dataset.
         
         Returns:
         - a thumbs up
         '''
-        # accepts custom transform if provided in kwargs
-        transform = kwargs.get('transform',vgg16_cifar10)
-
-        seed = kwargs.get('seed', 42)
-            
-        # set torch seed
-        torch.manual_seed(seed)
-
         # Test dataset is loaded directly
-        test_dataset = datasets.CIFAR10(
-            root = self.data_path,
+        test_ds = CIFAR10Custom(
+            root = self.path,
             train = False,
-            transform = transform,
             download = True
-        )
-        
-        # train data will be splitted into training and validation
-        _train_data = datasets.CIFAR10( 
-            root = self.data_path,
-            train = True,
-            transform = None, #transform,
-            download = True
-        )
-        
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
         )
 
-        # Apply the transform 
-        if transform != None:
-            val_dataset.dataset.transform = transform
-            train_dataset.dataset.transform = transform   
-    
+        # train is splitted into train and val
+        base_ds = CIFAR10Custom(
+                root=self.path,
+                train=True,
+                download=False
+            )
+        
+        train_ds, val_ds = random_split(
+                base_ds,
+                [self.train_ratio, 1 - self.train_ratio],
+                generator=torch.Generator().manual_seed(self.seed)
+            )
+        
         # Save datasets as objects in the class
         self.__dataset__ = {
-                'train': train_dataset,
-                'val': val_dataset,
-                'test': test_dataset
+                'train': train_ds,
+                'val': val_ds,
+                'test': test_ds
                 }
         
-        classes = {i: class_name for i, class_name in enumerate(train_dataset.classes)}
+        classes = {i: class_name for i, class_name in enumerate(train_ds.classes)}
         self._classes = {
                 'CIFAR10-train': classes,
                 'CIFAR10-val': classes, 
@@ -85,19 +99,3 @@ class Cifar10(DatasetBase):
                 }
         
         return 
-    
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
