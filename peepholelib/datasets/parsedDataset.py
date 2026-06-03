@@ -108,7 +108,8 @@ class ParsedDataset():
                     existing_chunks = list(ds_folder.glob('chunk_*'))
             
                     if verbose: print(f'All {existing_chunks} chunks for {ds_key} already exist. Loading from disk.')
-                    for chunk_path in existing_chunks:
+                    for chunk_i in range(existing_chunks):
+                        chunk_path = ds_folder / f'chunk_{chunk_i}'
                         ptd = PersistentTensorDict.from_h5(chunk_path, mode='r')
                         ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
@@ -165,9 +166,124 @@ class ParsedDataset():
                                 data_t[key] = data_in[key]
 
                 self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
-    
+
         return
-    
+
+    def __parse_subsample(self, **kwargs):
+        '''
+        Takes an already-parsed dataset and creates a subsampled version, saving the sampled
+        shards at `self.path/dss.<ds_key>_sub_<pct>` (e.g. `dss.test_sub_10` for 10% of `test`).
+        The new key `<ds_key>_sub_<pct>` is registered in `self._dss` and can be used as a
+        loader in subsequent calls to `parse_inference()` or `load_only()`.
+
+        Args:
+        - loaders (list[str]): base ds_keys to subsample (must be present in `self._dss` or `self._dss_ori`).
+        - percentage (float | dict{str: float}): fraction of samples to keep. Pass a single float to apply the same percentage to all loaders, or a dict keyed by loader name for per-loader percentages (e.g. `{'val': 0.1, 'test': 0.2}`).
+        - seed (int | None): random seed for reproducibility. Defaults to None.
+        - chunk_size (int | None): if set, split output into shards of at most `chunk_size` samples. Defaults to None (single shard).
+        - batch_size (int): batch size used when copying data. Defaults to 64.
+        - n_threads (int): `num_workers` passed to DataLoader. Defaults to 1.
+        - verbose (bool): print progress messages. Defaults to False.
+        '''
+
+        loaders = kwargs.get('loaders')
+        percentage = kwargs.get('percentage')
+        seed = kwargs.get('seed', None)
+        chunk_size = kwargs.get('chunk_size', None)
+        bs = kwargs.get('batch_size', 64)
+        n_threads = kwargs.get('n_threads', 1)
+        verbose = kwargs.get('verbose', False)
+
+        if isinstance(percentage, float) or isinstance(percentage, int):
+            percentage = {k: percentage for k in loaders}
+
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        for ds_key in loaders:
+            if ds_key not in percentage:
+                raise RuntimeError(f'No percentage specified for loader "{ds_key}".')
+
+            if ds_key in self._dss:
+                src = self._dss[ds_key].ori
+            elif ds_key in self._dss_ori:
+                src = self._dss_ori[ds_key].ori
+            else:
+                raise RuntimeError(f'Dataset key "{ds_key}" not found. Call load_only() or parse_dataset() first.')
+
+            n_total = len(src)
+            perc = percentage[ds_key]
+            n_sub = max(1, int(n_total * perc))
+            pct = int(perc * 100)
+            sub_key = f'{ds_key}_sub_{pct}'
+            sub_folder = self.path / f'dss.{sub_key}'
+
+            if verbose: print(f'\n ---- Subsampling {ds_key}: {n_sub}/{n_total} samples ({pct}%)\n')
+
+            _chunk_size = chunk_size if chunk_size is not None else n_sub
+            n_chunks = ceil(n_sub / _chunk_size)
+
+            sample = src[0:1]
+            keys = list(sample.keys())
+
+            shards = []
+            if sub_folder.exists():
+                existing_chunks = len(list(sub_folder.glob('chunk_*')))
+                if verbose: print(f'All {existing_chunks} chunks for {sub_key} already exist. Loading from disk.')
+                for chunk_i in range(existing_chunks):
+                    chunk_path = sub_folder / f'chunk_{chunk_i}'
+                    ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
+                    ptd.batch_size = torch.Size((len(ptd),))
+                    shards.append(ptd)
+            else:
+                indices = torch.randperm(n_total)[:n_sub].tolist()
+                sub_folder.mkdir(parents=True, exist_ok=True)
+
+                for chunk_i in range(n_chunks):
+                    chunk_start = chunk_i * _chunk_size
+                    chunk_end = min(chunk_start + _chunk_size, n_sub)
+                    chunk_n = chunk_end - chunk_start
+                    chunk_indices = indices[chunk_start:chunk_end]
+                    chunk_path = sub_folder / f'chunk_{chunk_i}'
+
+                    if verbose: print(f'  Chunk {chunk_i}: Creating ({chunk_n} samples).')
+                    ptd = PersistentTensorDict(filename=chunk_path, batch_size=[chunk_n], mode='w')
+
+                    for key in keys:
+                        ptd[key] = MMT.empty(
+                            shape=torch.Size((chunk_n,) + sample[key].shape[1:]),
+                            dtype=sample[key].dtype
+                        )
+
+                    ptd.close()
+                    ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
+
+                    dl_ori = DataLoader(
+                        dataset=Subset(src, chunk_indices),
+                        batch_size=bs,
+                        collate_fn=lambda x: x,
+                        shuffle=False,
+                        num_workers=n_threads
+                    )
+                    dl_dst = DataLoader(
+                        dataset=ptd,
+                        batch_size=bs,
+                        collate_fn=lambda x: x,
+                        shuffle=False,
+                        num_workers=n_threads
+                    )
+
+                    if verbose: print(f'Copying chunk {chunk_i}')
+                    for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(chunk_n/bs)):
+                        for key in keys:
+                            data_t[key] = data_in[key]
+
+                    shards.append(ptd)
+
+            self._dss[sub_key] = _StackedDS(ori=_ShardedPTD(shards))
+
+        return
+
     def parse_inference(self, **kwargs):
         '''
         Parse inference results, e.g., output, `result` (1 if samples are correctly classified, 0 otherwise) into `tensordict.PersistentTensorDict`s at `path/dss.<loader>.<name>`, with 'loader' being the loaders keys (see `self._dss.keys()` in `self.parse_dataset()`) and `name` is the key from the dictionary passed in the `inference_fns` argument. Already existing keys are skipped.
