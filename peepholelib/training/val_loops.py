@@ -51,7 +51,7 @@ def default_val_loop(self, **kwargs):
         self.num_bad_epochs = 0
 
         # Optional: save best model snapshot
-        self.saving_fn(
+        self.save_fn(
                 epoch = epoch,
                 file = self.best_model_file,
                 plot = False

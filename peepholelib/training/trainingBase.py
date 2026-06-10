@@ -91,7 +91,7 @@ class Trainer():
                 self = self
                 )
         self.validation_loop = partial(
-                kwargs.get("validation_loop", default_val_loop),
+                kwargs.get("val_loop", default_val_loop),
                 self = self
                 )
         self.test_loop = partial(
@@ -178,12 +178,12 @@ class Trainer():
         self.num_bad_epochs = 0
         return
    
-    def __train_epoch(self, epoch):
+    def _train_epoch(self, epoch):
         t0 = time()
         self.train_loop(epoch=epoch)
         stop = self.validation_loop(epoch=epoch)
 
-        if save_every != None:
+        if self.save_every != None:
             if (epoch + 1) % self.save_every == 0:
                 self.saving_fn(
                         epoch = epoch,
@@ -210,7 +210,7 @@ class Trainer():
         if self.verbose: print('----- Training Model ----- ')
 
         for epoch in range(self.initial_epoch, self.max_epochs):
-            stop = self.__train_epoch(epoch)
+            stop = self._train_epoch(epoch)
             if stop: break
 
         return
