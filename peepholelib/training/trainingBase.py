@@ -108,7 +108,6 @@ class Trainer():
                 )
         self.save_every = kwargs.get("save_every", None)
         self.early_stopping_patience = kwargs.get("early_stopping_patience", float('inf'))
-        self._plot_archived = False
 
         # set file names
         self.file = self.path/self.name
