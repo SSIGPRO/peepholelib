@@ -103,7 +103,6 @@ class GMM(ClassifierBase): # quella buona
         return
 
     def load(self, **kwargs):
-<<<<<<< HEAD
         if self._clas_path.exists():
             self._classifier = tGMM.load(self._clas_path)
             super().load()
@@ -112,14 +111,6 @@ class GMM(ClassifierBase): # quella buona
             ok = False
 
         return ok
-=======
-        verbose = kwargs['verbose'] if 'verbose' in kwargs else False
-        if verbose: print('\n ---- Loading GMM classifier\n')
-        self._classifier = tGMM.load(self._clas_path)
-        super().load()
-        
-        return
->>>>>>> ec6a98a (starting back on XAI (#122))
     
     def load_without_empp(self, **kwargs):
         self._classifier = tGMM.load(self._clas_path)

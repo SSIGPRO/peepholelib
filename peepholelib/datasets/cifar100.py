@@ -6,12 +6,7 @@ from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # torch stuff
 import torch
-<<<<<<< HEAD
 from torch.utils.data import random_split, Subset
-=======
-from torchvision.datasets import CIFAR100
-from torch.utils.data import random_split
->>>>>>> ec6a98a (starting back on XAI (#122))
 
 # CIFAR from torchvision
 from torchvision.datasets import CIFAR100
@@ -143,33 +138,12 @@ class Cifar100(DatasetWrap):
         '''
 
         # Test dataset is loaded directly
-<<<<<<< HEAD
         test_ds = CIFAR100Custom(
-=======
-        test_dataset = CIFAR100Custom(
->>>>>>> ec6a98a (starting back on XAI (#122))
             root = self.path,
             train = False,
             transform = self.transform,
             download = True
         )
-<<<<<<< HEAD
-=======
-        
-        # train data will be splitted into training and validation
-        _train_data = CIFAR100Custom( 
-            root = self.path,
-            train = True,
-            transform = None, 
-            download = True
-        )
-        
-        train_dataset, val_dataset = random_split(
-            _train_data,
-            [0.8, 0.2],
-            generator=torch.Generator().manual_seed(seed)
-        )
->>>>>>> ec6a98a (starting back on XAI (#122))
 
         base_ds = CIFAR100Custom(
                 root=self.path,
@@ -244,22 +218,3 @@ class Cifar100(DatasetWrap):
                 17: 'trees',
                 18: 'vehicles 1',
                 19: 'vehicles 2'}
-<<<<<<< HEAD
-=======
-    
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
->>>>>>> ec6a98a (starting back on XAI (#122))

@@ -1,8 +1,4 @@
 # general python stuff
-<<<<<<< HEAD
-=======
-from tqdm import tqdm
->>>>>>> ec6a98a (starting back on XAI (#122))
 from PIL import Image
 from pathlib import Path
 
@@ -15,13 +11,9 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data import random_split
 
-<<<<<<< HEAD
 from torchvision.transforms import ToTensor
 
 class AwACustom(Dataset):
-=======
-class CustomDS(Dataset):
->>>>>>> ec6a98a (starting back on XAI (#122))
     def __init__(self, **kwargs):
         """
         path: path to AwA2 folder containing JPEGImages/, classes.txt, predicate-matrix-binary.txt
@@ -76,7 +68,6 @@ class CustomDS(Dataset):
                     self.samples.append((img_file, cid - 1))
         
         if self.reference_ds is not None:
-<<<<<<< HEAD
             # ---- Reference ds classes names ----
             if self.reference_ds == 'ImageNet':
                 self.mapping_AwA_ImageNet = {
@@ -131,65 +122,6 @@ class CustomDS(Dataset):
                         48: [345, 346],
                         # 49 no match
                         }
-=======
-
-            # ---- Reference ds classes names ----
-
-            if self.reference_ds == 'ImageNet':
-
-                self.mapping_AwA_ImageNet = {
-                                                0: [351, 352, 353],
-                                                1: [294, 295, 297],
-                                                2: [148],
-                                                3: [337],
-                                                4: [251],
-                                                5: [283],
-                                                6: [339],
-                                                7: [235],
-                                                8: [147],
-                                                9: [284],
-                                                10: [361],
-                                                # 11 no match
-                                                12: [292],
-                                                13: [344],
-                                                14: [288, 289],
-                                                # 15 no match
-                                                16: [381],
-                                                17: [147],
-                                                18: [385, 386, 101],
-                                                19: [366],
-                                                20: [345, 346],
-                                                21: [277, 278, 279, 280],
-                                                22: [348, 349],
-                                                23: [150],
-                                                24: [367],
-                                                25: [333],
-                                                26: [335],
-                                                # 27 no match
-                                                28: [330, 331, 332],
-                                                # 29 no match
-                                                # 30 no match
-                                                31: [269, 270, 271, 272],
-                                                32: [151],
-                                                # 33 no match
-                                                34: [356],
-                                                35: [360],
-                                                36: [346],
-                                                37: [340],
-                                                38: [388],
-                                                # 39 no match 
-                                                40: [287],
-                                                41: [341],
-                                                42: [291],
-                                                # 43 no match
-                                                44: [296], 
-                                                45: [231, 232],
-                                                # 46 no match
-                                                # 47 no match
-                                                48: [345, 346],
-                                                # 49 no match
-                                            }
->>>>>>> ec6a98a (starting back on XAI (#122))
 
                 self.M = torch.zeros((len(self.id_to_class.keys()), 1000), dtype=torch.uint8)
 
@@ -228,7 +160,6 @@ class CustomDS(Dataset):
         return sample
     
 class AwA(DatasetWrap):
-<<<<<<< HEAD
     def __init__(self, **kwargs): 
         '''
         AwA loader (train & val & test). Splits are created from the full dataset
@@ -247,18 +178,11 @@ class AwA(DatasetWrap):
         self.path = kwargs['path']
         self.transform = kwargs.get('std_transform', None)
         self.augmentation = kwargs.get('aug_transform', None)
-=======
-
-    def __init__(self, **kwargs): 
-        self.path = kwargs.get('path')
-        self.transform = kwargs.get('transform')
->>>>>>> ec6a98a (starting back on XAI (#122))
         self.splitting_ratio = kwargs.get('splitting_ratio', [0.6, 0.2, 0.2]) # train, val, test
         self.seed = kwargs.get('seed', 42)
         self.reference_ds = kwargs.get('reference_ds', None)
 
         assert sum(self.splitting_ratio) == 1.0
-<<<<<<< HEAD
 
         # append ToTensor to the transform
         if self.transform != None:
@@ -270,13 +194,10 @@ class AwA(DatasetWrap):
         if self.augmentation != None:
             self.augmentation.transforms.append(ToTensor())
 
-=======
->>>>>>> ec6a98a (starting back on XAI (#122))
         return
 
     def __load_data__(self, **kwargs):
         """
-<<<<<<< HEAD
         Load and prepare AwA data.
         """
 
@@ -324,47 +245,3 @@ class AwA(DatasetWrap):
             }
 
 
-=======
-        Load and prepare CUB data.
-        """
-        self.__dataset__ = {}
-
-        # Load train split
-        _ds = CustomDS(
-            path=self.path,
-            transform=self.transform,
-            reference_ds=self.reference_ds,
-            seed=self.seed
-        )
-
-        self.__dataset__ = {}
-        
-        # split train into train and test
-        self.__dataset__['AwA-train'], self.__dataset__['AwA-val'], self.__dataset__['AwA-test'] = torch.utils.data.random_split(
-                _ds,
-                self.splitting_ratio,
-                generator = torch.Generator().manual_seed(self.seed)
-        )
-
-        # self._classes = {
-        #         'AwA-train': _ds.id_to_class,
-        #         'AwA-val': _ds.id_to_class,
-        #         }
-
-    def get(self, ds_key, idx):
-        '''
-        Get item from the dataset.
-        
-        Args:
-        - idx (int): Index of the item to get.
-        - ds_key (str): Key of the dataset to get the item from ('train', 'val', 'test').
-        
-        Returns:
-        - a tuple of (image, label)
-        '''
-        if not self.__dataset__:
-            raise RuntimeError('Data not loaded. Please run load_data() first.')
-        
-        return [self.__dataset__[ds_key][idx]]
-    
->>>>>>> ec6a98a (starting back on XAI (#122))

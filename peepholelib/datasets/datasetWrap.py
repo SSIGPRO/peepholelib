@@ -15,15 +15,9 @@ class DatasetWrap(metaclass=abc.ABCMeta):
         '''
         self.path = Path(kwargs['path'])
         self.seed = kwargs.get('seed', 42)
-<<<<<<< HEAD
 
         # useful for checking in `datasets.parsedDatase.ParsedDataset` 
         self.has_transforms = ('std_transform' in kwargs) or ('aug_transform' in kwargs)
-=======
-        self.transform = kwargs['transform']
-        # optional transform applied to labels (e.g., convert to tensors)
-        self.target_transform = kwargs.get('target_transform', None)
->>>>>>> ec6a98a (starting back on XAI (#122))
         
         return
 

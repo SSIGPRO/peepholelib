@@ -11,14 +11,8 @@ from tensordict import MemoryMappedTensor as MMT
 import torch
 from torch.utils.data import DataLoader, Subset
 
-<<<<<<< HEAD
 # Our stuff
 from peepholelib.utils.ptd_wraps import _ShardedPTD, _StackedDS 
-=======
-# our stuff
-from peepholelib.models.prediction_fns import multilabel_classification
-from peepholelib.datasets.functional.results import results_one_hot_encoding
->>>>>>> ec6a98a (starting back on XAI (#122))
 
 class ParsedDataset():
 
@@ -303,21 +297,9 @@ class ParsedDataset():
         - verbose (bool): print progress messages.
         '''
         
-<<<<<<< HEAD
         loaders = kwargs.get('loaders', None)
         inference_fns = kwargs['inference_fns']
         transforms = kwargs.get('transforms', None)
-=======
-        save_path = Path(kwargs.get('save_path'))
-        model = kwargs.get('model')
-        dss = kwargs.get('datasets')
-        ds_parsers = kwargs.get('ds_parsers') ## it will be a dictionary
-        ds_kwargs = kwargs.get('ds_kwargs', None) ## it will be a dictionary
-        ds_samplers = kwargs.get('ds_samplers', None) ## it will be a dictionary
-        pred_fn = kwargs.get('pred_fn', multilabel_classification)
-        result_fn = kwargs.get('result_fn', results_one_hot_encoding)
-
->>>>>>> ec6a98a (starting back on XAI (#122))
         bs = kwargs.get('batch_size', 64) 
         n_threads = kwargs.get('n_threads', 1) 
         verbose = kwargs.get('verbose', False) 
@@ -358,7 +340,6 @@ class ParsedDataset():
                 with torch.no_grad():
                     _res = inf_fn(data = sample)
 
-<<<<<<< HEAD
                 out_ktc = list(set(_res.keys())-set(ptd.keys()))
                 
                 if len(out_ktc) > 0:
@@ -373,69 +354,6 @@ class ParsedDataset():
                     # This is done so we can use multiple workers with the dataloaders 
                     ptd.close()
                     ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
-=======
-                        # dry run to get shapes
-                        data = ds_parser(dss[ds_name].get(ds_key,0))
-
-                        with torch.no_grad():
-                            _res = model(data['image'].to(device))
-                            num_classes = _res.shape[1]
-                            _pred_labels = pred_fn(_res)
-
-                        for key in data.keys():
-                            _d = data[key]
-                            # pre-allocation activations
-                            ret._dss[ds_key][key] = MMT.empty(shape=torch.Size((n_samples,)+_d.shape[1:]), dtype=_d.dtype)
-                         
-                        if verbose: print(f'Allocating output, pred, result')
-                        # allocate memory for pred and result
-                        ret._dss[ds_key]['output'] = MMT.empty(shape=torch.Size((n_samples, num_classes)), dtype=_res.dtype)
-                        ret._dss[ds_key]['pred'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=_pred_labels.dtype)
-                        ret._dss[ds_key]['result'] = MMT.empty(shape=torch.Size((n_samples,)), dtype=torch.bool) 
-
-                        # Close PTD create with mode 'w' and re-open it with mode 'r+'
-                        # This is done so we can use multiple workers with the dataloaders 
-                        ret._dss[ds_key].close()
-                        ret._dss[ds_key] = PersistentTensorDict.from_h5(file_path, mode='r+')
-
-                        #------------------------
-                        # copy images and labels
-                        #------------------------
-                        # create dataloader of input dataset
-                        dl_ori = DataLoader(
-                                dataset = dss[ds_name].__dataset__[ds_key],
-                                batch_size = bs,
-                                collate_fn = ds_parser,
-                                shuffle = False
-                                ) 
-
-                        dl_dst = DataLoader(
-                                ret._dss[ds_key],
-                                batch_size = bs,
-                                collate_fn = lambda x:x,
-                                shuffle = False,
-                                num_workers = n_threads
-                                )
-
-                        if verbose: print(f'Parsing {ds_key}')
-                        for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(n_samples/bs)): 
-                            for key in data_in.keys():
-                                
-                                data_t[key] = data_in[key]
-                        
-                            # ---------------------------------------
-                            # compute predictions and get activations
-                            # ---------------------------------------
-                            with torch.no_grad():
-                                y_predicted = model(data_t['image'].to(device))
-                                predicted_labels = pred_fn(y_predicted).detach().cpu()
-                        
-                                data_t['output'] = y_predicted
-                                data_t['pred'] = predicted_labels
-                                data_t['result'] = result_fn(predicted_labels, data_t['label'])
-        
-        return ret
->>>>>>> ec6a98a (starting back on XAI (#122))
 
                     #------------------------
                     # copy images and labels
