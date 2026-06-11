@@ -89,6 +89,7 @@ def optimize_projection(**kwargs):
     dpgmm_max_clusters = int(kwargs.get("dpgmm_max_clusters", 100)) #attention is not the max
     dpgmm_iterations = int(kwargs.get("dpgmm_iterations", 100))
     gmm_retries = int(kwargs.get("gmm_retries", 10))
+    covariance_type = str(kwargs.get("covariance_type", "diag")).strip().lower()
 
     if loss_name not in {"nll", "bic", "silhouette"}:
         raise ValueError(f"Unknown loss '{loss_name}'. Expected 'nll', 'bic' or 'silhouette'.")
@@ -142,6 +143,7 @@ def optimize_projection(**kwargs):
             dpgmm_max_clusters=dpgmm_max_clusters,
             dpgmm_iterations=dpgmm_iterations,
             gmm_retries=gmm_retries,
+            covariance_type=covariance_type,
         )
 
     n_samples = h_data.shape[0]
@@ -332,12 +334,12 @@ def _cosine_distance(before, after):
     return float((1.0 - cosine_similarity).detach().cpu())
 
 
-def _fit_gmm(cv,n_components,seed=None, cluster_method="gmm", dpgmm_max_clusters=100, dpgmm_iterations=100, gmm_retries=10):
+def _fit_gmm(cv,n_components,seed=None, cluster_method="gmm", dpgmm_max_clusters=100, dpgmm_iterations=100, gmm_retries=10, covariance_type="diag"):
     cluster_method = str(cluster_method).strip().lower()
     if cluster_method == "gmm":
         for attempt in range(gmm_retries + 1):
             attempt_seed = None if seed is None else seed + attempt
-            gmm_state = _fit_torchgmm(cv=cv, n_components=n_components, seed=attempt_seed)
+            gmm_state = _fit_torchgmm(cv=cv, n_components=n_components, seed=attempt_seed, covariance_type=covariance_type)
             if _gmm_state_is_finite(gmm_state):
                 break
         return gmm_state
@@ -345,7 +347,7 @@ def _fit_gmm(cv,n_components,seed=None, cluster_method="gmm", dpgmm_max_clusters
     return _fit_dpgmm(cv=cv,max_clusters_num=dpgmm_max_clusters,iterations_num=dpgmm_iterations,seed=seed)
 
 
-def _fit_torchgmm(cv, n_components, seed=None):
+def _fit_torchgmm(cv, n_components, seed=None, covariance_type="diag"):
     n_features = cv.shape[1]
 
     if seed is not None:
@@ -354,9 +356,10 @@ def _fit_torchgmm(cv, n_components, seed=None):
     device = cv.device
     estimator = tGMM(
         num_components=n_components,
+        covariance_type=covariance_type,
         trainer_params = dict(
             num_nodes = 1,
-            max_epochs = 50000,
+            max_epochs = 100,
             accelerator = device.type,
             devices = [device.index],
             enable_progress_bar = False 

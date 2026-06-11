@@ -81,6 +81,7 @@ def optimize_clustering(**kwargs):
     dpgmm_max_clusters = int(kwargs.get("dpgmm_max_clusters", 100))
     dpgmm_iterations = int(kwargs.get("dpgmm_iterations", 1000))
     gmm_retries = int(kwargs.get("gmm_retries", 10))
+    covariance_type = str(kwargs.get("covariance_type", "diag")).strip().lower()
     # saving parameters
     cv_path = kwargs.get("cv_path", None)
     cv_name = kwargs.get("cv_name", "optimized_corevectors")
@@ -117,6 +118,7 @@ def optimize_clustering(**kwargs):
         dpgmm_max_clusters=dpgmm_max_clusters,
         dpgmm_iterations=dpgmm_iterations,
         gmm_retries=gmm_retries,
+        covariance_type=covariance_type,
     )
 
     optimized_reduct_m = projection_results["optimized_reduct_m"].detach().clone()
@@ -171,6 +173,7 @@ def optimize_clustering(**kwargs):
         dpgmm_max_clusters=dpgmm_max_clusters,
         dpgmm_iterations=dpgmm_iterations,
         gmm_retries=gmm_retries,
+        covariance_type=covariance_type,
     )
     optimized_n_components = int(after_gmm_state["weights"].shape[0])
     after_n_params = _gmm_num_parameters(
@@ -290,6 +293,7 @@ def optimize_clustering(**kwargs):
             name=driller_name,
             label_key=label_key,
             n_classes=kwargs.get("n_classes"),
+            covariance_type=covariance_type,
             verbose=verbose,
         )
 
@@ -606,14 +610,14 @@ def _save_corevector_normalization(mean, std, layer_name, path, verbose=False):
     return norm_path
 
 
-def _save_optimized_gmm_driller(gmm_state,labels,path,name,label_key,n_classes=None,verbose=False):
+def _save_optimized_gmm_driller(gmm_state,labels,path,name,label_key,n_classes=None,covariance_type="diag",verbose=False):
     path = Path(path)
     clas_path = path / name
 
     path.mkdir(parents=True, exist_ok=True)
     clas_path.mkdir(parents=True, exist_ok=True)
 
-    estimator = _gmm_estimator_from_state(gmm_state)
+    estimator = _gmm_estimator_from_state(gmm_state, covariance_type=covariance_type)
     estimator.save(clas_path)
 
     labels, n_classes = _labels_to_class_ids(
@@ -635,7 +639,7 @@ def _save_optimized_gmm_driller(gmm_state,labels,path,name,label_key,n_classes=N
     return clas_path
 
 
-def _gmm_estimator_from_state(gmm_state):
+def _gmm_estimator_from_state(gmm_state, covariance_type="diag"):
     weights = gmm_state["weights"].detach()
     means = gmm_state["means"].detach()
     variances = gmm_state["variances"].detach().clamp_min(1e-12)
@@ -644,7 +648,7 @@ def _gmm_estimator_from_state(gmm_state):
     device = means.device
     trainer_params = {
         "num_nodes": 1,
-        "max_epochs": 50000,
+        "max_epochs": 100,
         "accelerator": device.type,
         "devices": [device.index] if device.type == "cuda" else 1,
         "enable_progress_bar": False,
@@ -652,13 +656,14 @@ def _gmm_estimator_from_state(gmm_state):
 
     estimator = tGMM(
         num_components=int(n_components),
+        covariance_type=covariance_type,
         trainer_params=trainer_params,
     )
     model = GaussianMixtureModel(
         GaussianMixtureModelConfig(
             num_components=int(n_components),
             num_features=int(n_features),
-            covariance_type="diag",
+            covariance_type=covariance_type,
         )
     ).to(device=means.device, dtype=means.dtype)
 
