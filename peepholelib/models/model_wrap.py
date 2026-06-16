@@ -1,6 +1,5 @@
 # General python stuff
 from pathlib import Path as Path
-import abc  
 
 # torch stuff
 import torch
@@ -16,8 +15,8 @@ class InputNormalizer(nn.Module):
     def __init__(self, mean, std, device):
         super(InputNormalizer, self).__init__()
 
-        self.mean = mean.to(device)
-        self.std = std.to(device)
+        self.register_buffer('mean', mean.to(device))
+        self.register_buffer('std', std.to(device))
 
     def forward(self, x: Tensor) -> Tensor:
         return (x - self.mean) / self.std
@@ -70,15 +69,15 @@ class Hook:
     def __str__(self):
         return f"\nInputs shape: {self.i_act.shape}\nOutputs shape: {self.o_act.shape}\n"
 
-class ModelWrap(metaclass=abc.ABCMeta):
+class ModelWrap(nn.Module):
     def __init__(self, **kwargs):
+        super().__init__()
         # check and set model
         self._model = kwargs['model']
         tm = kwargs.get('target_modules', None)
         self.device = kwargs.get('device', 'cpu')
 
-        # set in prepend_normalize()
-        self._normalizer = lambda x: x
+        self.normalizer = nn.Identity()
 
         assert(issubclass(type(self._model), torch.nn.Module))
 
@@ -142,7 +141,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
 
         return
 
-    def __call__(self, x):
+    def forward(self, x):
         '''
         Forwards the input through the model, and save activations if they are setted (see 'set_activations()') in self._acts.
         
@@ -152,7 +151,7 @@ class ModelWrap(metaclass=abc.ABCMeta):
             res (torch.tensor): the model output
         '''
 
-        x = self._normalizer(x)
+        x = self.normalizer(x)
         res = self._model(x)
 
         # get activations in a dict (similar to corevectors structure)
@@ -299,19 +298,18 @@ class ModelWrap(metaclass=abc.ABCMeta):
         
         return
     
-    def prepend_normalizer(self, **kwargs):
+    def set_normalizer(self, **kwargs):
         '''
-        Add a normalizer step (see `peepholelib.models.model_wrap.InputNormalizer`) before inputs being passed to the model.
+        Set a normalizer (see `peepholelib.models.model_wrap.InputNormalizer`) applied before the model in forward().
         Args:
         - mean (torch.tensor): mean for each channel
         - std (torch.tensor): std for each channel
         '''
-
         mean = kwargs['mean']
         std = kwargs['std']
 
-        self._normalizer = InputNormalizer(mean, std, self.device)
-        return  
+        self.normalizer = InputNormalizer(mean, std, self.device)
+        return
     
     def set_target_modules(self, **kwargs):
         '''
