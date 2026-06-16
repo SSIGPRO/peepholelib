@@ -33,4 +33,4 @@ def default_load(self, **kwargs):
             self.scheduler.load_state_dict(data['scheduler'])
         except (ValueError, KeyError):
             if self.verbose: print('Scheduler state incompatible with checkpoint, starting fresh.')
-   return 
+    return
