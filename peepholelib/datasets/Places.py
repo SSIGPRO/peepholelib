@@ -54,14 +54,24 @@ class Places(DatasetWrap):
         Returns:
         - a thumbs up
         '''
+        try:
+            _data = PlacesCustom(
+                    root = self.path,
+                    split = 'val',
+                    transform = self.transform,
+                    small = True,
+                    download = False 
+                    )
+        except RuntimeError:
+            print("Seems like Places is not downloaded. Will download it.") 
+            _data = PlacesCustom(
+                    root = self.path,
+                    split = 'val',
+                    transform = self.transform,
+                    small = True,
+                    download = True 
+                    )
 
-        _data = PlacesCustom(
-                root = self.path,
-                split = 'val',
-                transform = self.transform,
-                small = True,
-                download = True
-                )
 
         # split to get 10000 samples for val and test
         _, val_dataset, test_dataset = random_split(

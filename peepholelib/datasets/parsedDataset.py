@@ -107,9 +107,8 @@ class ParsedDataset():
                 if ds_folder.exists():
                     existing_chunks = list(ds_folder.glob('chunk_*'))
             
-                    if verbose: print(f'All {existing_chunks} chunks for {ds_key} already exist. Loading from disk.')
-                    for chunk_i in range(existing_chunks):
-                        chunk_path = ds_folder / f'chunk_{chunk_i}'
+                    if verbose: print(f'Found {existing_chunks} chunks for {ds_key}. Loading from disk.')
+                    for chunk_path in existing_chunks:
                         ptd = PersistentTensorDict.from_h5(chunk_path, mode='r')
                         ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
