@@ -12,11 +12,11 @@ from torch import Tensor
 
 class InputNormalizer(nn.Module):
 
-    def __init__(self, mean, std, device):
+    def __init__(self, mean, std):
         super(InputNormalizer, self).__init__()
 
-        self.register_buffer('mean', mean.to(device))
-        self.register_buffer('std', std.to(device))
+        self.register_buffer('mean', mean)
+        self.register_buffer('std', std)
 
     def forward(self, x: Tensor) -> Tensor:
         return (x - self.mean) / self.std
@@ -308,7 +308,7 @@ class ModelWrap(nn.Module):
         mean = kwargs['mean']
         std = kwargs['std']
 
-        self.normalizer = InputNormalizer(mean, std, self.device)
+        self.normalizer = InputNormalizer(mean, std).to(self.device)
         return
     
     def set_target_modules(self, **kwargs):
@@ -329,4 +329,16 @@ class ModelWrap(nn.Module):
 
         self._target_modules = _dict
         
+        return
+
+    def to(self, device):
+        self.device = device
+        self._model.to(self.device)
+        self.normalizer.to(self.device)
+        return
+
+    def cpu(self):
+        self.device = torch.device('cpu')
+        self._model.to(self.device)
+        self.normalizer.to(self.device)
         return
