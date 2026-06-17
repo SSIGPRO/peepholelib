@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import torch
+from sklearn.metrics import adjusted_mutual_info_score
 
 from .projection_optimization import _coverage, _fit_gmm,_get_labels_from_dataset,_gmm_num_parameters, _silhouette_score
 
@@ -54,7 +55,10 @@ def gride_comparison(**kwargs):
         return_diagnostics=True,
         verbose=verbose,
     )
-    discovered_cv_dim = int(max(1, min(full_reduct_m.shape[0], ceil(float(twonn_stats["dimension"])))))
+    raw_discovered_cv_dim = int(max(1, ceil(float(twonn_stats["dimension"]))))
+    if raw_discovered_cv_dim >= 20:
+        raw_discovered_cv_dim *= 2
+    discovered_cv_dim = int(max(1, min(full_reduct_m.shape[0], raw_discovered_cv_dim)))
     twonn_stats["cv_dim"] = discovered_cv_dim
     twonn_stats["initial_cv_dim"] = initial_cv_dim
     twonn_stats["best_cv_dim"] = discovered_cv_dim
@@ -187,7 +191,7 @@ def gride_comparison(**kwargs):
         "twonn_cv_dim": discovered_cv_dim,
 }
 
-def gride_dimension(data, fraction=0.9, n1=10, n2=20, return_diagnostics=False, verbose=False):
+def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, verbose=False):
     """
     Estimate intrinsic dimension with the GRIDE likelihood from Denti et al.
     fraction is the fraction of valid points kept for the fit.
@@ -290,8 +294,9 @@ def _solve_gride_mle(log_mu, n1, n2, min_dimension=1.0, max_iterations=80):
 
 def _gride_score(dimension, log_mu, n1, n2):
     '''
-    d is the value where score(d) = 0
+    calculates the "slope" for the given dimension
     score(d) = ∂logL(d) / ∂d
+    L(d) = product of porbabilities resulted from the poisson process
     '''
     d = torch.tensor(float(dimension), device=log_mu.device, dtype=log_mu.dtype)
     z = (d * log_mu).clamp_min(torch.finfo(log_mu.dtype).eps) # d * log(mu)
@@ -385,15 +390,9 @@ def _evaluate_gmm_state(data, gmm_state):
     }
 
 
-def _compute_twonn_metrics(
-    projected,
-    gmm_state,
-    cv_dim,
-    requested_n_components,
-    labels=None,
-    coverage_threshold=0.8,
-    n_classes=None,
-):
+def _compute_twonn_metrics(projected, gmm_state, cv_dim,
+                        requested_n_components,labels=None,
+                        coverage_threshold=0.8,n_classes=None):
     counts = gmm_state["cluster_counts"]
     active_clusters = int((counts > 0).sum().item())
 
@@ -421,15 +420,24 @@ def _compute_twonn_metrics(
     }
 
     if labels is not None:
+        ami = _finite_or_nan(
+            adjusted_mutual_info_score(
+                labels.detach().cpu().numpy(),
+                gmm_state["assignments"].long().detach().cpu().numpy(),
+            )
+        )
         metrics.update(
-            _coverage(
+            {
+                "ami": ami,
+                **_coverage(
                 assignments=gmm_state["assignments"].long(),
                 labels=labels,
                 n_clusters=gmm_state["weights"].shape[0],
                 coverage_threshold=coverage_threshold,
                 n_classes=n_classes,
                 dtype=projected.dtype,
-            )
+                ),
+            }
         )
 
     return metrics
@@ -515,6 +523,11 @@ def _render_twonn_summary_panel(ax, twonn_stats, before_metrics, after_metrics, 
             f"{before_metrics['active_clusters']}/{requested_n_components} -> "
             f"{after_metrics['active_clusters']}/{requested_n_components}"
         ),
+        (
+            f"AMI before/after: "
+            f"{_format_metric_value(before_metrics.get('ami'))} -> "
+            f"{_format_metric_value(after_metrics.get('ami'))}"
+        ) if "ami" in before_metrics or "ami" in after_metrics else None,
         (
             f"Class coverage before/after: "
             f"{_format_metric_value(before_metrics.get('class_coverage'))} -> "
