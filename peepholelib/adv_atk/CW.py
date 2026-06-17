@@ -623,7 +623,7 @@ class myCW(AttackBase):
         targeted = False if self.mode == 'random' else True
         
         self.atk = L2Adversary(
-                model = self.model._model,
+                model = self.model,
                 device = self.model.device,
                 targeted = targeted, 
                 confidence = self.confidence, 

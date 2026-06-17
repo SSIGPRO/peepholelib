@@ -39,7 +39,7 @@ class myPGD(AttackBase):
         self.mode = kwargs.get('mode', 'random')
         
         self.atk = torchattacks.PGD(
-                model=self.model._model, 
+                model=self.model, 
                 eps=self.eps, 
                 alpha=self.alpha, 
                 steps=self.steps,
