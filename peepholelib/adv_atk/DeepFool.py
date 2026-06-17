@@ -30,7 +30,7 @@ class myDeepFool(AttackBase):
         self.overshoot = kwargs.get('overshoot', 0.02)
 
         self.atk = torchattacks.DeepFool(
-                model=self.model._model,
+                model=self.model,
                 steps=self.steps,
                 overshoot=self.overshoot
                 )
