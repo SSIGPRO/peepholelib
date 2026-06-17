@@ -323,7 +323,7 @@ class ParsedDataset():
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
 
-                    ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
+                    ptd = PersistentTensorDict.from_h5(file_path, mode='r')
                     n_samples = len(ptd)
                     # this is a workaround for when loading PTDs with already populated MMTs
                     ptd.batch_size = torch.Size((n_samples,))
