@@ -21,7 +21,7 @@ def default_load(self, **kwargs):
             )
     
     # resume from the checkpoint we loaded
-    self.initial_epoch = self.best_epoch
+    self.initial_epoch = self.best_epoch + 1
     
     try:
         self.optim.load_state_dict(data['optimizer'])

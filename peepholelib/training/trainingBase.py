@@ -184,7 +184,7 @@ class Trainer():
 
         if self.save_every != None:
             if (epoch + 1) % self.save_every == 0:
-                self.saving_fn(
+                self.save_fn(
                         epoch = epoch,
                         file = self.file.as_posix()+f'.{epoch}.pt',
                         plot = True
