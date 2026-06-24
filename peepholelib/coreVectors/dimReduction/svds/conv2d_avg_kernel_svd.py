@@ -37,11 +37,7 @@ class Conv2dAvgKernelSVD(DRB):
                 raise RuntimeError("Only Conv2D is suported") 
 
             # computation
-            uw = _layer.weight.flatten(start_dim=1, end_dim=-1)
-            if not _layer.bias == None:
-                uw = torch.hstack([uw, _layer.bias.view(-1,1)])
-            
-            uw = uw.to(device)
+            uw = flatten_conv2d_weight(_layer).to(device)
             U, s, Vh = torch.svd_lowrank(uw, q=q)
             U, s, Vh = U.detach().cpu(), s.detach().cpu(), Vh.detach().cpu()
             
@@ -103,6 +99,52 @@ class Conv2dAvgKernelSVD(DRB):
         ret = tcvs if dss == None else (tcvs, dss[label_key])
         return ret 
 
+def flatten_conv2d_weight(layer):
+    '''
+    Flatten a Conv2d kernel into the global input-channel layout used by
+    unfolded activations. For grouped convs, inactive channel blocks are
+    zero-filled
+    '''
+
+    weight = layer.weight
+    bias = layer.bias
+    groups = layer.groups
+    cin = layer.in_channels
+    cout = layer.out_channels
+    cin_g = weight.shape[1]
+    kh, kw = weight.shape[2], weight.shape[3]
+    kernel_size = kh * kw
+
+    if cin % groups != 0:
+        raise RuntimeError('Cin must be divisible by groups')
+    if cout % groups != 0:
+        raise RuntimeError('Cout must be divisible by groups')
+
+    if groups == 1:
+        uw = weight.flatten(start_dim=1, end_dim=-1)
+    else:
+        cout_g = cout // groups
+        uw = torch.zeros(
+                cout,
+                cin * kernel_size,
+                dtype=weight.dtype,
+                device=weight.device,
+                )
+
+        for group_id in range(groups):
+            start_in = group_id * cin_g
+            end_in = (group_id + 1) * cin_g
+            start_out = group_id * cout_g
+            end_out = (group_id + 1) * cout_g
+
+            group_kernel = weight[start_out:end_out].flatten(start_dim=1, end_dim=-1)
+            uw[start_out:end_out, start_in * kernel_size:end_in * kernel_size] = group_kernel
+
+    if bias is not None:
+        uw = torch.hstack((uw, bias.view(-1, 1)))
+
+    return uw
+
 def unroll_conv2d_activations(acts, layer):
     '''
     Unroll activations of a `torch.nn.Conv2d` layer. Used during the svd projection `coreVectors.dimReduction.svd.conv2d_kernel_svd_projection()`
@@ -122,14 +164,8 @@ def unroll_conv2d_activations(acts, layer):
     if not isinstance(layer, torch.nn.Conv2d):
         raise RuntimeError('Input layer should be a torch.nn.Conv2D one')
 
-    if layer.groups != 1:
-        raise RuntimeError('Groups not implemented. Fell free to submit a PR.')
-
-
     weight = layer.weight        
     bias = layer.bias
-    groups = layer.groups
-    pad_mode = layer.padding_mode
     
     # kernel offsets
     kh, kw = weight.shape[2], weight.shape[3]
