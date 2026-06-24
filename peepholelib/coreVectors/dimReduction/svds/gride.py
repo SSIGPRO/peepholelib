@@ -10,7 +10,6 @@ from sklearn.metrics import adjusted_mutual_info_score
 
 from .projection_optimization import _coverage, _fit_gmm,_get_labels_from_dataset,_gmm_num_parameters, _silhouette_score
 
-
 def gride_comparison(**kwargs):
     """
     Compute GRIDE statistics on the projected corevectors and return them.
@@ -22,6 +21,7 @@ def gride_comparison(**kwargs):
     verbose = kwargs.get("verbose", False)
     twonn_fraction = float(kwargs.get("twonn_fraction", 0.95))
     plot_path = kwargs.get("plot_path")
+    double_large_discovered_cv_dim = bool(kwargs.get("double_large_discovered_cv_dim", True))
 
     if initial_cv_dim < 1:
         raise ValueError("cv_dim must be at least 1.")
@@ -56,7 +56,7 @@ def gride_comparison(**kwargs):
         verbose=verbose,
     )
     raw_discovered_cv_dim = int(max(1, ceil(float(twonn_stats["dimension"]))))
-    if raw_discovered_cv_dim >= 20:
+    if double_large_discovered_cv_dim and raw_discovered_cv_dim >= 20:
         raw_discovered_cv_dim *= 2
     discovered_cv_dim = int(max(1, min(full_reduct_m.shape[0], raw_discovered_cv_dim)))
     twonn_stats["cv_dim"] = discovered_cv_dim
@@ -411,12 +411,14 @@ def _compute_twonn_metrics(projected, gmm_state, cv_dim,
     metrics = {
         "cv_dim": int(cv_dim),
         "requested_n_components": int(requested_n_components),
-        "nll": nll,
-        "bic": bic,
-        "complexity": int(complexity),
-        "bic_penalty": bic_penalty,
+        #"nll": nll,
+        #"bic": bic,
+        #"complexity": int(complexity),
+        #"bic_penalty": bic_penalty,
         "active_clusters": int(active_clusters),
         "silhouette": silhouette,
+        "md_col_mean": _mahalanobis_col_mean(gmm_state),
+        "cluster_size_imbalance_ratio": _cluster_size_imbalance_ratio(counts),
     }
 
     if labels is not None:
@@ -517,6 +519,16 @@ def _render_twonn_summary_panel(ax, twonn_stats, before_metrics, after_metrics, 
             f"Silhouette before/after: "
             f"{_format_metric_value(before_metrics.get('silhouette'))} -> "
             f"{_format_metric_value(after_metrics.get('silhouette'))}"
+        ),
+        (
+            f"MD col mean before/after: "
+            f"{_format_metric_value(before_metrics.get('md_col_mean'))} -> "
+            f"{_format_metric_value(after_metrics.get('md_col_mean'))}"
+        ),
+        (
+            f"Cluster size imbalance before/after: "
+            f"{_format_metric_value(before_metrics.get('cluster_size_imbalance_ratio'))} -> "
+            f"{_format_metric_value(after_metrics.get('cluster_size_imbalance_ratio'))}"
         ),
         (
             f"Active clusters before/after: "
@@ -676,6 +688,53 @@ def _finite_or_nan(value):
     if value != value or value in (float("inf"), float("-inf")):
         return float("nan")
     return value
+
+
+def _mahalanobis_col_mean(gmm_state):
+    matrix = _asymmetric_mahalanobis_matrix(gmm_state)
+    if matrix is None or matrix.shape[0] <= 1:
+        return 0.0
+
+    eye = torch.eye(matrix.shape[0], dtype=torch.bool, device=matrix.device)
+    col_mean = matrix.masked_fill(eye, 0.0).sum(dim=0) / (matrix.shape[0] - 1)
+    return float(col_mean.mean().detach().cpu())
+
+
+def _asymmetric_mahalanobis_matrix(gmm_state):
+    if gmm_state is None:
+        return None
+
+    means = gmm_state.get("means")
+    variances = gmm_state.get("variances")
+    if means is None or variances is None:
+        return None
+
+    means = torch.as_tensor(means).detach().float().cpu()
+    variances = torch.as_tensor(variances).detach().float().cpu().clamp_min(1e-12)
+
+    inv_var = variances.reciprocal()
+    weighted_means = means * inv_var
+    t1 = means.pow(2) @ inv_var.T
+    t2 = means @ weighted_means.T
+    t3 = (means.pow(2) * inv_var).sum(dim=1)
+    sq = t1 - 2.0 * t2 + t3.unsqueeze(0)
+    sq.clamp_(min=0.0)
+    return sq.sqrt()
+
+
+def _cluster_size_imbalance_ratio(counts):
+    counts = torch.as_tensor(counts).detach().float()
+    positive_counts = counts[counts > 0]
+    if positive_counts.numel() == 0:
+        return float("nan")
+
+    min_count = positive_counts.min()
+    if float(min_count.detach().cpu()) <= 0.0:
+        return float("nan")
+
+    max_count = positive_counts.max()
+    return float((max_count / min_count).detach().cpu())
+
 
 
 def _format_metric_value(value):
