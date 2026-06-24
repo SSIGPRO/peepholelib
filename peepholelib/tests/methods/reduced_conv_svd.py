@@ -10,10 +10,42 @@ from math import *
 
 
 def channel_conv(layer):
-    uw = layer.weight.flatten(start_dim=1, end_dim=-1)
+    weight = layer.weight
+    bias = layer.bias
+    groups = layer.groups
+    cin = layer.in_channels
+    cout = layer.out_channels
+    cin_g = weight.shape[1]
+    kh, kw = weight.shape[2], weight.shape[3]
+    kernel_size = kh * kw
 
-    if not layer.bias == None:
-        uw = torch.hstack([uw, layer.bias.view(-1,1)])
+    if cin % groups != 0:
+        raise RuntimeError('Cin must be divisible by groups')
+    if cout % groups != 0:
+        raise RuntimeError('Cout must be divisible by groups')
+
+    if groups == 1:
+        uw = weight.flatten(start_dim=1, end_dim=-1)
+    else:
+        cout_g = cout // groups
+        uw = torch.zeros(
+                cout,
+                cin * kernel_size,
+                dtype=weight.dtype,
+                device=weight.device,
+                )
+
+        for group_id in range(groups):
+            start_in = group_id * cin_g
+            end_in = (group_id + 1) * cin_g
+            start_out = group_id * cout_g
+            end_out = (group_id + 1) * cout_g
+
+            group_kernel = weight[start_out:end_out].flatten(start_dim=1, end_dim=-1)
+            uw[start_out:end_out, start_in * kernel_size:end_in * kernel_size] = group_kernel
+
+    if bias is not None:
+        uw = torch.hstack([uw, bias.view(-1,1)])
 
     return uw
 
@@ -55,7 +87,7 @@ if __name__ == '__main__':
     torch.set_printoptions(linewidth=240, precision=2)
     use_cuda = torch.cuda.is_available()
     cuda_index = torch.cuda.device_count() - 1
-    device = torch.device('cuda:4')#'f"cuda:{cuda_index}" if use_cuda else "cpu")
+    device = torch.device(f"cuda:{cuda_index}" if use_cuda else "cpu")
     print(f"Using {device} device")
     q = 300
     errors = []
@@ -65,7 +97,7 @@ if __name__ == '__main__':
         banana = 'potato'
         using_bias = True 
         channel_wise = True 
-        groups = 1#ri(1, 3)
+        groups = ri(1, 4)
         nc = groups*ri(20, 50) # multiple of groups
         kw = ri(10, 20) # kernel width 
         kh = ri(10, 20) # kernel height
