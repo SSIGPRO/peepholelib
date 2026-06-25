@@ -1,37 +1,62 @@
 import torch
-from torch.utils.data import random_split
-from torch.utils.data import DataLoader
+from torch.utils.data import random_split, Subset, DataLoader, Dataset
 from torch.utils.data import WeightedRandomSampler
-from peepholelib.datasets.datasetWrap import DatasetWrap 
+from peepholelib.datasets.datasetWrap import DatasetWrap
 
-def random_subsampling(ds, perc):
+class _DSWrap(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return {**self.dataset[idx], 'idx': idx}
+
+def random_subsampling(**kwargs):
+    ds = kwargs['ds']
+    n_samples = kwargs['n_samples']
+
     assert(isinstance(ds, DatasetWrap))
 
-    if isinstance(perc, float):
-        perc = {k: perc for k in ds.__dataset__}
+    if isinstance(n_samples, int):
+        n_samples = {k: n_samples for k in ds.__dataset__}
+    elif not isinstance(n_samples, dict):
+        raise TypeError(f'n_samples must be an int or a dict, got {type(n_samples)}')
 
-    if not isinstance(perc, dict):
-        raise TypeError(f'perc must be a float or a dict, got {type(perc)}')
-
-    for k, p in perc.items():
-        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [p, 1.0 - p])
+    for k, n in n_samples.items():
+        ds.__dataset__[k], _ = random_split(ds.__dataset__[k], [n, len(ds.__dataset__[k]) - n])
     return
 
-def dist_preserving(data, n, weights='label'):
-    raise RuntimeError('DEPRECATED')
+def balanced_subsampling(**kwargs):
+    ds = kwargs['ds']
+    n_samples = kwargs['n_samples']
+    n_classes = kwargs['n_classes']
+    label_key = kwargs.get('label_key', 'label')
 
-    if torch.is_tensor(weights) and len(weights.shape) == 1:
-        _w = weights.float()
-    elif type(weights) == str:
-        _d = data[weights].detach().int()
-        _l = torch.bincount(_d)
-        __w = _l/_l.sum()
-        _w = torch.Tensor([__w[x] for x in _d]) 
-    else:
-        raise RuntimeError('wrt should be an 1-dim array containing the weights for each sample index, or a string indicating the key in `data` for computing the weights')
+    assert(isinstance(ds, DatasetWrap))
 
-    n = int(n)
-    sampler = WeightedRandomSampler(_w, n, replacement=False)
-    _dl = DataLoader(data, batch_size=n, sampler=sampler, collate_fn=lambda x: x)
-    sub_sampled_data = next(iter(_dl))
-    return sub_sampled_data, _w 
+    if isinstance(n_samples, int):
+        n_samples = {k: n_samples for k in ds.__dataset__}
+    elif not isinstance(n_samples, dict):
+        raise TypeError(f'n_samples must be an int or a dict, got {type(n_samples)}')
+
+    for k, n in n_samples.items():
+        dataset = ds.__dataset__[k]
+
+        n_per_class = max(n//n_classes, 1)
+        class_indices = [[] for _ in range(n_classes)]
+
+        for batch in DataLoader(_DSWrap(dataset), batch_size=512, shuffle=True):
+            labels = batch[label_key].long()
+            idxs = batch['idx']
+            for c in range(n_classes):
+                needed = n_per_class - len(class_indices[c])
+                if needed > 0:
+                    class_indices[c] += idxs[labels == c][:needed].tolist()
+
+            if all(len(c) >= n_per_class for c in class_indices):
+                break
+
+        ds.__dataset__[k] = Subset(dataset, sum(class_indices, []))
+    return

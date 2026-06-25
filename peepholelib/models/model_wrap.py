@@ -287,7 +287,7 @@ class ModelWrap(nn.Module):
         file = _path/_name
         
         # take the checkpoint and the state_dict from the saved file
-        _checkpoint = torch.load(file, map_location=self.device, weights_only=True)
+        _checkpoint = torch.load(file, map_location=self.device, weights_only=False)
         if sd_key in _checkpoint:
             _state_dict = _checkpoint[sd_key]
         else:

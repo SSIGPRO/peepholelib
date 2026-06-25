@@ -23,7 +23,6 @@ def plot_calibration(**kwargs):
     - calib_bin (int): Bin size for calibration plot.
     - verbose (bool): print progress messages.
     '''
-    
     dss = kwargs.get('datasets')
     scores = kwargs.get('scores')
     loaders = kwargs.get('loaders', None)
@@ -38,7 +37,8 @@ def plot_calibration(**kwargs):
         path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
-    if loaders == None: loaders = list(scores.keys())
+
+    if loaders is None: loaders = list(scores.keys())
 
     fig, axs = plt.subplots(1, len(loaders), sharex='none', sharey='none', figsize=(5*(len(loaders)), 5))
 

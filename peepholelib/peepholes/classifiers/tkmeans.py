@@ -31,7 +31,7 @@ class KMeans(ClassifierBase): # quella buona
                 )
 
         self._clas_path = self.path/self.name
-        self._empp_file = self._clas_path/'empp_{self.label_key}.pt'
+        self._empp_file = self._clas_path/f'empp_{self.label_key}.pt'
         return
 
     def fit(self, **kwargs):

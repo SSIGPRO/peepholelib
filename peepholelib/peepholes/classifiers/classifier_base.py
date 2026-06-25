@@ -99,7 +99,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         verbose = kwargs.get('verbose', False) 
 
         # # check for empiracal posterios `_empp`
-        if self._empp == None:
+        if self._empp is None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
         data = self.parser(cvs=cvs)
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)

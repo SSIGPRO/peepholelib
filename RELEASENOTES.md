@@ -1,5 +1,23 @@
 # DEVEL
 
+## Datasets
+- `random_subsampling` and `dist_preserving` now accept `n_samples` (int or dict) instead of a fraction.
+- Add `balanced_subsampling`: samples a fixed number of examples per class using `WeightedRandomSampler`.
+
+## Model
+- `ModelWrap` now extends `nn.Module` instead of using `ABCMeta`. `forward()` replaces `__call__`, and `set_normalizer()` replaces `prepend_normalizer()`.
+- `InputNormalizer` buffers registered via `register_buffer` for correct device handling.
+
+## Peepholes
+- Add `MRC` (Multi-Range Coverage) driller.
+
+## Scores
+- Add `CAM_score`.
+
+## Training
+- Refactor training utilities: `trainingLoops`, `validationLoops`, `savingLoops` replaced by `train_loops`, `val_loops`, `test_loops`, `save_fns`, `load_fns`.
+- `Trainer` is no longer abstract; loop functions are injected via `partial` and can be swapped without subclassing.
+
 # v.0.0.2
 
 ## Datasets
