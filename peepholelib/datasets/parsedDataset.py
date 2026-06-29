@@ -72,47 +72,42 @@ class ParsedDataset():
         if len(has_trans) > 0:
             raise RuntimeError(f'Found `transforms` within the given `dataset_wraps`: {has_trans}. DatasetWraps are expected to not have transforms at this point since they will be set in `parse_inferece()`')
 
-        # enter the context manager
         for ds_name, ds_wrap in ds_wraps.items():
             ds_wrap.__load_data__()
 
-            if ds_samplers != None and ds_name in ds_samplers:
-                if verbose: print(f'Applying sampler to {ds_name}')
-                ds_samplers[ds_name](ds = ds_wrap)
-
+            _sampler_applied = False
             for ds_key in ds_wrap.__dataset__.keys():
                 if verbose: print(f'\n ---- Getting data from {ds_key}\n')
                 n_samples = len(ds_wrap.__dataset__[ds_key])
                 _chunk_size = chunk_size if chunk_size is not None else n_samples
+                n_chunks = ceil(n_samples/_chunk_size)
 
-                n_chunks = ceil(n_samples / _chunk_size)
-
-                # sample for dry run to get shapes
-                sample = next(iter(DataLoader(
-                        dataset = ds_wrap.__dataset__[ds_key],
-                        batch_size = 1,
-                        shuffle = False
-                        )))
-
-                # check / resolve keys_to_copy
-                if keys_to_copy == None:
+                sample = next(iter(DataLoader(dataset=ds_wrap.__dataset__[ds_key], batch_size=1, shuffle=False)))
+                if keys_to_copy is None:
                     _ktc = list(sample.keys())
-                elif len(list(set(keys_to_copy)-set(sample.keys()))) > 0:
-                    raise RuntimeError(f'keys_to_copy {keys_to_copy} should be a subset of the keys from a ds_wrap sample, but {ds_key} has {list(sample.keys())}.')
                 else:
                     _ktc = keys_to_copy
 
-                ds_folder = self.path / f'dss.{ds_key}'
+                ds_folder = self.path/f'dss.{ds_key}'
                 shards = []
                 if ds_folder.exists():
-                    existing_chunks = list(ds_folder.glob('chunk_*'))
-            
-                    if verbose: print(f'Found {existing_chunks} chunks for {ds_key}. Loading from disk.')
-                    for chunk_path in existing_chunks:
+                    if verbose: print(f'Loading {ds_key} from disk.')
+                    for chunk_path in sorted(ds_folder.glob('chunk_*'), key=lambda p: int(p.name.split('_')[-1])):
                         ptd = PersistentTensorDict.from_h5(chunk_path, mode='r')
                         ptd.batch_size = torch.Size((len(ptd),))
                         shards.append(ptd)
                 else:
+                    if not _sampler_applied and ds_samplers is not None and ds_name in ds_samplers:
+                        # TODO: parse indexes to re-enable this
+                        # apply the sampler only if it is a new parsing. This sort of defeat the purpose of keys to copy
+                        if verbose: print(f'Applying sampler to {ds_name}')
+                        ds_samplers[ds_name](ds = ds_wrap)
+                        _sampler_applied = True
+
+                        n_samples = len(ds_wrap.__dataset__[ds_key])
+                        _chunk_size = chunk_size if chunk_size is not None else n_samples
+                        n_chunks = ceil(n_samples/_chunk_size)
+
                     ds_folder.mkdir(parents=True, exist_ok=True)
                     for chunk_i in range(n_chunks):
                         chunk_start = chunk_i * _chunk_size
@@ -120,49 +115,44 @@ class ParsedDataset():
                         chunk_n = chunk_end - chunk_start
                         chunk_path = ds_folder / f'chunk_{chunk_i}'
 
-                        if verbose: print(f'Chunk {chunk_i}: Creating ({chunk_n} samples).')
+                        if verbose: print(f' - Chunk {chunk_i}: Creating ({chunk_n} samples).')
+
                         ptd = PersistentTensorDict(filename=chunk_path, batch_size=[chunk_n], mode='w')
                         ptd.close()
-
                         ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
                         ptd.batch_size = torch.Size((chunk_n,))
-                        shards.append(ptd)
 
-                for chunk_i, shard in enumerate(shards): 
-                    chunk_start = chunk_i * _chunk_size
-                    chunk_end = min(chunk_start + _chunk_size, n_samples)
-                    chunk_n = chunk_end - chunk_start   
-
-                    in_ktc = list(set(_ktc) - set(shard.keys()))
-
-                    if len(in_ktc) > 0:
-                        for key in in_ktc:
-                            if verbose: print(f'Allocating {key}')
-                            shard[key] = MMT.empty(
-                                shape = torch.Size((chunk_n,) + sample[key].shape[1:]),
+                        for key in _ktc:
+                            shape = torch.Size((chunk_n,)+sample[key].shape[1:])
+                            if verbose: print(f' - Allocating {key} with shape {shape}.')
+                            ptd[key] = MMT.empty(
+                                shape = shape,
                                 dtype = sample[key].dtype
                                 )
 
-                        subset = Subset(ds_wrap.__dataset__[ds_key], range(chunk_start, chunk_end))
-
                         dl_ori = DataLoader(
-                            dataset = subset,
+                            dataset = Subset(
+                                ds_wrap.__dataset__[ds_key],
+                                range(chunk_start, chunk_end)
+                                ),
                             batch_size = bs,
                             shuffle = False
                             )
 
                         dl_dst = DataLoader(
-                            shard,
-                            batch_size = bs,
-                            collate_fn = lambda x: x,
-                            shuffle = False,
-                            num_workers = n_threads
-                            )
+                                ptd,
+                                batch_size=bs,
+                                collate_fn=lambda x: x,
+                                shuffle=False,
+                                num_workers=n_threads
+                                )
 
-                        if verbose: print(f'Parsing chunk {chunk_i}')
+                        if verbose: print(f' - Parsing chunk {chunk_i}')
                         for data_in, data_t in tqdm(zip(dl_ori, dl_dst), disable=not verbose, total=ceil(chunk_n/bs)):
-                            for key in in_ktc:
+                            for key in _ktc:
                                 data_t[key] = data_in[key]
+
+                        shards.append(ptd)
 
                 self._dss[ds_key] = _StackedDS(ori=_ShardedPTD(shards))
 
@@ -184,6 +174,7 @@ class ParsedDataset():
         - n_threads (int): `num_workers` passed to DataLoader. Defaults to 1.
         - verbose (bool): print progress messages. Defaults to False.
         '''
+        self.check_uncontexted()
 
         loaders = kwargs.get('loaders')
         percentage = kwargs.get('percentage')
@@ -227,10 +218,9 @@ class ParsedDataset():
 
             shards = []
             if sub_folder.exists():
-                existing_chunks = len(list(sub_folder.glob('chunk_*')))
-                if verbose: print(f'All {existing_chunks} chunks for {sub_key} already exist. Loading from disk.')
-                for chunk_i in range(existing_chunks):
-                    chunk_path = sub_folder / f'chunk_{chunk_i}'
+                existing_chunks = sorted(sub_folder.glob('chunk_*'), key=lambda p: int(p.name.split('_')[-1]))
+                if verbose: print(f'All {len(existing_chunks)} chunks for {sub_key} already exist. Loading from disk.')
+                for chunk_path in existing_chunks:
                     ptd = PersistentTensorDict.from_h5(chunk_path, mode='r+')
                     ptd.batch_size = torch.Size((len(ptd),))
                     shards.append(ptd)
@@ -295,6 +285,7 @@ class ParsedDataset():
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
         - verbose (bool): print progress messages.
         '''
+        self.check_uncontexted()
         
         loaders = kwargs.get('loaders', None)
         inference_fns = kwargs['inference_fns']
@@ -323,7 +314,7 @@ class ParsedDataset():
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
 
-                    ptd = PersistentTensorDict.from_h5(file_path, mode='r')
+                    ptd = PersistentTensorDict.from_h5(file_path, mode='r+')
                     n_samples = len(ptd)
                     # this is a workaround for when loading PTDs with already populated MMTs
                     ptd.batch_size = torch.Size((n_samples,))
@@ -410,10 +401,7 @@ class ParsedDataset():
             if verbose: print(f'\n ---- Getting data from {ds_key}\n')
 
             # detect sharded vs single-file layout
-            chunk_paths = sorted(
-                (self.path / f'dss.{ds_key}').glob('chunk_*'),
-                key=lambda p: int(p.name.split('_')[-1])
-            )
+            chunk_paths = sorted((self.path / f'dss.{ds_key}').glob('chunk_*'), key=lambda p: int(p.name.split('_')[-1]))
             if verbose: print(f'Loading {len(chunk_paths)} shards for {ds_key}.')
             shards = []
             for cp in chunk_paths:
