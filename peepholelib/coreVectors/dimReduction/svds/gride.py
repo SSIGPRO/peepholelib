@@ -21,10 +21,8 @@ def gride_comparison(**kwargs):
     verbose = kwargs.get("verbose", False)
     twonn_fraction = float(kwargs.get("twonn_fraction", 0.95))
     plot_path = kwargs.get("plot_path")
-    double_large_discovered_cv_dim = bool(kwargs.get("double_large_discovered_cv_dim", True))
+    double_large_discovered_cv_dim = kwargs.get("double_large_discovered_cv_dim", True)
 
-    if initial_cv_dim < 1:
-        raise ValueError("cv_dim must be at least 1.")
     if not (0.0 < twonn_fraction <= 1.0):
         raise ValueError("twonn_fraction must be in the interval (0, 1].")
     if h_data.shape[1] != reduct_m.shape[1]:
@@ -45,8 +43,8 @@ def gride_comparison(**kwargs):
         reduct_m=full_reduct_m,
         cv_dim=initial_cv_dim,
     )
-    gride_n1 = int(kwargs.get("gride_n1", 10))
-    gride_n2 = int(kwargs.get("gride_n2", 20))
+    gride_n1 = int(kwargs.get("gride_n1", 1))
+    gride_n2 = int(kwargs.get("gride_n2", 2))
     twonn_stats = gride_dimension(
         before_projected,
         fraction=twonn_fraction,
@@ -197,9 +195,6 @@ def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, ve
     fraction is the fraction of valid points kept for the fit.
     """
 
-    if not (0.0 < float(fraction) <= 1.0):
-        raise ValueError("fraction must be in the interval (0, 1].")
-
     if n2 <= n1:
         raise ValueError("n2 must be greater than n1.")
 
@@ -215,8 +210,7 @@ def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, ve
 
     n_good = int(good_mask.sum().item())
     if verbose:
-        print(f"Found {int(zero_mask.sum().item())} elements for which r1 = 0")
-        print(f"Found {int(degenerate_mask.sum().item())} elements for which r_n1 = r_n2")
+        print(f"Found {int(zero_mask.sum().item())} points for which r1 = 0 and {int(degenerate_mask.sum().item())} points for which r_n1 = r_n2.")
         print(f"Fraction good points: {n_good / max(1, data.shape[0]):.6f}")
     if n_good < 3:
         raise ValueError("Not enough non-degenerate samples for GRIDE.")
@@ -260,7 +254,7 @@ def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, ve
         return stats
     return stats["dimension"]
 
-def _solve_gride_mle(log_mu, n1, n2, min_dimension=1.0, max_iterations=80):
+def _solve_gride_mle(log_mu, n1, n2, min_dimension=1.0, max_iterations=100):
     '''
     binary search 
     '''
@@ -358,7 +352,6 @@ def _evaluate_gmm_state(data, gmm_state):
     weights = torch.as_tensor(gmm_state["weights"], device=data.device, dtype=data.dtype)
     means = torch.as_tensor(gmm_state["means"], device=data.device, dtype=data.dtype)
     variances = torch.as_tensor(gmm_state["variances"], device=data.device, dtype=data.dtype)
-
     weights = torch.nan_to_num(weights, nan=0.0, posinf=0.0, neginf=0.0).clamp_min(0.0)
     if float(weights.sum().detach().cpu()) <= 0.0:
         weights = torch.ones_like(weights) / max(1, weights.numel())
@@ -366,7 +359,6 @@ def _evaluate_gmm_state(data, gmm_state):
         weights = weights / weights.sum()
     means = torch.nan_to_num(means, nan=0.0, posinf=0.0, neginf=0.0)
     variances = torch.nan_to_num(variances, nan=1e-6, posinf=1e6, neginf=1e-6).clamp_min(1e-6)
-
     log_prob = _gmm_component_log_prob(
         data=data,
         weights=weights,
@@ -411,10 +403,10 @@ def _compute_twonn_metrics(projected, gmm_state, cv_dim,
     metrics = {
         "cv_dim": int(cv_dim),
         "requested_n_components": int(requested_n_components),
-        #"nll": nll,
-        #"bic": bic,
-        #"complexity": int(complexity),
-        #"bic_penalty": bic_penalty,
+        "nll": nll,
+        "bic": bic,
+        "complexity": int(complexity),
+        "bic_penalty": bic_penalty,
         "active_clusters": int(active_clusters),
         "silhouette": silhouette,
         "md_col_mean": _mahalanobis_col_mean(gmm_state),
@@ -520,11 +512,11 @@ def _render_twonn_summary_panel(ax, twonn_stats, before_metrics, after_metrics, 
             f"{_format_metric_value(before_metrics.get('silhouette'))} -> "
             f"{_format_metric_value(after_metrics.get('silhouette'))}"
         ),
-        (
-            f"MD col mean before/after: "
-            f"{_format_metric_value(before_metrics.get('md_col_mean'))} -> "
-            f"{_format_metric_value(after_metrics.get('md_col_mean'))}"
-        ),
+        # (
+        #     f"MD col mean before/after: "
+        #     f"{_format_metric_value(before_metrics.get('md_col_mean'))} -> "
+        #     f"{_format_metric_value(after_metrics.get('md_col_mean'))}"
+        # ),
         (
             f"Cluster size imbalance before/after: "
             f"{_format_metric_value(before_metrics.get('cluster_size_imbalance_ratio'))} -> "
@@ -725,13 +717,7 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
 def _cluster_size_imbalance_ratio(counts):
     counts = torch.as_tensor(counts).detach().float()
     positive_counts = counts[counts > 0]
-    if positive_counts.numel() == 0:
-        return float("nan")
-
     min_count = positive_counts.min()
-    if float(min_count.detach().cpu()) <= 0.0:
-        return float("nan")
-
     max_count = positive_counts.max()
     return float((max_count / min_count).detach().cpu())
 
