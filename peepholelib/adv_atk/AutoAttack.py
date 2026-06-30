@@ -61,10 +61,10 @@ class myAutoAttack(AttackBase):
         if version == 'standard':
             valid_attacks = ['apgd-ce', 'apgd-t', 'fab-t', 'square']
 
-            if self.norm in ['Linf', 'L2']:
+            if norm in ['Linf', 'L2']:
                 adversary.apgd.n_restarts = 1
                 adversary.apgd_targeted.n_target_classes = 9
-            elif self.norm in ['L1']:
+            elif norm in ['L1']:
                 adversary.apgd.use_largereps = True
                 adversary.apgd_targeted.use_largereps = True
                 adversary.apgd.n_restarts = 5
@@ -83,8 +83,8 @@ class myAutoAttack(AttackBase):
             adversary.fab.n_target_classes = 9
             adversary.apgd_targeted.n_target_classes = 9
             adversary.square.n_queries = 5000
-            if not self.norm in ['Linf', 'L2']:
-                print('"{}" version is used with {} norm: please check'.format(version, self.norm))
+            if not norm in ['Linf', 'L2']:
+                print('"{}" version is used with {} norm: please check'.format(version, norm))
 
         elif version == 'rand':
             valid_attacks = ['apgd-ce', 'apgd-dlr']
