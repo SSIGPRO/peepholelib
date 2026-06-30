@@ -46,36 +46,36 @@ class myAutoAttack(AttackBase):
         norm = kwargs.get('norm', 'Linf')
         version = kwargs.get('version', 'standard')
         self.attacks_to_run = kwargs.get('attacks_to_run', None)
-        self.fab_n_restarts = kwargs.get('fab_n_restarts', 5)
-        self.fab_n_target_classes = kwargs.get('fab_n_target_classes', 20)
-        self.square_n_queries = kwargs.get('square_n_queries', 20000)
+        fab_n_restarts = kwargs.get('fab_n_restarts', 5)
+        fab_n_target_classes = kwargs.get('fab_n_target_classes', 20)
+        square_n_queries = kwargs.get('square_n_queries', 20000)
 
         adversary = AutoAttack(
-                        model=self.model,
-                        norm=norm,
-                        eps=eps,
-                        version=version,
-                        device=self.model.device
-                    )
+                model = self.model,
+                norm = norm,
+                eps = eps,
+                version = version,
+                device = self.model.device
+                )
 
-        if self.version == 'standard':
+        if version == 'standard':
             valid_attacks = ['apgd-ce', 'apgd-t', 'fab-t', 'square']
 
-            if self.norm in ['Linf', 'L2']:
+            if norm in ['Linf', 'L2']:
                 adversary.apgd.n_restarts = 1
                 adversary.apgd_targeted.n_target_classes = 9
-            elif self.norm in ['L1']:
+            elif norm in ['L1']:
                 adversary.apgd.use_largereps = True
                 adversary.apgd_targeted.use_largereps = True
                 adversary.apgd.n_restarts = 5
                 adversary.apgd_targeted.n_target_classes = 5
-            adversary.fab.n_restarts = self.fab_n_restarts
-            adversary.fab.n_target_classes = self.fab_n_target_classes
-            adversary.square.n_queries = self.square_n_queries
+            adversary.fab.n_restarts = fab_n_restarts
+            adversary.fab.n_target_classes = fab_n_target_classes
+            adversary.square.n_queries = square_n_queries
             adversary.apgd_targeted.n_restarts = 1
             
 
-        elif self.version == 'plus':
+        elif version == 'plus':
             valid_attacks = ['apgd-ce', 'apgd-dlr', 'fab', 'square', 'apgd-t', 'fab-t']
             adversary.apgd.n_restarts = 5
             adversary.fab.n_restarts = 5
@@ -83,21 +83,21 @@ class myAutoAttack(AttackBase):
             adversary.fab.n_target_classes = 9
             adversary.apgd_targeted.n_target_classes = 9
             adversary.square.n_queries = 5000
-            if not self.norm in ['Linf', 'L2']:
-                print('"{}" version is used with {} norm: please check'.format(self.version, self.norm))
+            if not norm in ['Linf', 'L2']:
+                print('"{}" version is used with {} norm: please check'.format(version, norm))
 
-        elif self.version == 'rand':
+        elif version == 'rand':
             valid_attacks = ['apgd-ce', 'apgd-dlr']
             adversary.apgd.n_restarts = 1
             adversary.apgd.eot_iter = 20
         
         else: 
-            raise ValueError(f'Invalid version: {self.version} choose among <standard|plus|rand>')
+            raise ValueError(f'Invalid version: {version} choose among <standard|plus|rand>')
 
         if self.attacks_to_run is not None:
-            if self.attacks_to_run not in valid_attacks:
+            if len(set(self.attacks_to_run)-set(valid_attacks)) > 0:
                 raise ValueError(f'Invalid attack: {self.attacks_to_run}')
-            adversary.attacks_to_run = [self.attacks_to_run]
+            adversary.attacks_to_run = self.attacks_to_run
         self.atk = adversary
         return            
       
