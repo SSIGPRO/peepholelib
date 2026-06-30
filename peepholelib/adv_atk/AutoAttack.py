@@ -51,12 +51,12 @@ class myAutoAttack(AttackBase):
         square_n_queries = kwargs.get('square_n_queries', 20000)
 
         adversary = AutoAttack(
-                        model=self.model,
-                        norm=norm,
-                        eps=eps,
-                        version=version,
-                        device=self.model.device
-                    )
+                model = self.model,
+                norm = norm,
+                eps = eps,
+                version = version,
+                device = self.model.device
+                )
 
         if version == 'standard':
             valid_attacks = ['apgd-ce', 'apgd-t', 'fab-t', 'square']
@@ -95,9 +95,9 @@ class myAutoAttack(AttackBase):
             raise ValueError(f'Invalid version: {version} choose among <standard|plus|rand>')
 
         if self.attacks_to_run is not None:
-            if self.attacks_to_run not in valid_attacks:
+            if len(set(self.attacks_to_run)-set(valid_attacks)) > 0:
                 raise ValueError(f'Invalid attack: {self.attacks_to_run}')
-            adversary.attacks_to_run = [self.attacks_to_run]
+            adversary.attacks_to_run = self.attacks_to_run
         self.atk = adversary
         return            
       
