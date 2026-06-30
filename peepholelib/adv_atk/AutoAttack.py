@@ -17,7 +17,7 @@ class myAutoAttack(AttackBase):
             model (nn.Module): model to attack.
             eps (float): maximum perturbation. (Default: 8/255)
             version (str): 'standard', 'plus' or 'rand'. (Default: 'standard')
-            attack_to_run (str): 'apgd-ce', 'apgd-dlr', 'fab', 'square', 'apgd-t', 'fab-t'. (Default: None, runs all attacks for the chosen version)
+            attacks_to_run (str): 'apgd-ce', 'apgd-dlr', 'fab', 'square', 'apgd-t', 'fab-t'. (Default: None, runs all attacks for the chosen version)
     
         Shape:
             - images: :math:`(N, C, H, W)` where `N = number of batches`, `C = number of channels`,        `H = height` and `W = width`. It must have a range [0, 1].
@@ -42,19 +42,19 @@ class myAutoAttack(AttackBase):
         """
         AttackBase.__init__(self, **kwargs)
          
-        self.eps = kwargs.get('eps', 8/255)
-        self.norm = kwargs.get('norm', 'Linf')
-        self.version = kwargs.get('version', 'standard')
-        self.attack_to_run = kwargs.get('attack_to_run', None)
+        eps = kwargs.get('eps', 8/255)
+        norm = kwargs.get('norm', 'Linf')
+        version = kwargs.get('version', 'standard')
+        self.attacks_to_run = kwargs.get('attacks_to_run', None)
         self.fab_n_restarts = kwargs.get('fab_n_restarts', 5)
         self.fab_n_target_classes = kwargs.get('fab_n_target_classes', 20)
         self.square_n_queries = kwargs.get('square_n_queries', 20000)
 
         adversary = AutoAttack(
                         model=self.model,
-                        norm=self.norm,
-                        eps=self.eps,
-                        version=self.version,
+                        norm=norm,
+                        eps=eps,
+                        version=version,
                         device=self.model.device
                     )
 
@@ -94,10 +94,10 @@ class myAutoAttack(AttackBase):
         else: 
             raise ValueError(f'Invalid version: {self.version} choose among <standard|plus|rand>')
 
-        if self.attack_to_run is not None:
-            if self.attack_to_run not in valid_attacks:
-                raise ValueError(f'Invalid attack: {self.attack_to_run}')
-            adversary.attacks_to_run = [self.attack_to_run]
+        if self.attacks_to_run is not None:
+            if self.attacks_to_run not in valid_attacks:
+                raise ValueError(f'Invalid attack: {self.attacks_to_run}')
+            adversary.attacks_to_run = [self.attacks_to_run]
         self.atk = adversary
         return            
       
