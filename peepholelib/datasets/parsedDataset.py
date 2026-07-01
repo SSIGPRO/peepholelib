@@ -72,7 +72,6 @@ class ParsedDataset():
         if len(has_trans) > 0:
             raise RuntimeError(f'Found `transforms` within the given `dataset_wraps`: {has_trans}. DatasetWraps are expected to not have transforms at this point since they will be set in `parse_inferece()`')
 
-        # enter the context manager
         for ds_name, ds_wrap in ds_wraps.items():
             ds_wrap.__load_data__()
 
