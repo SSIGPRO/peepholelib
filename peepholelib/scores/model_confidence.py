@@ -19,10 +19,10 @@ def model_confidence_score(**kwargs):
     dss = kwargs.get('datasets')
     loaders = kwargs.get('loaders', None)
     append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name', 'MSP')
     verbose = kwargs.get('verbose', False)
     
     # parse arguments
-    score_name = 'MSP'
     if loaders == None: loaders = list(dss._dss.keys())
 
     # create the return dictionary. 

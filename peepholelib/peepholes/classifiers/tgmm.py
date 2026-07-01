@@ -18,7 +18,7 @@ class GMM(ClassifierBase): # quella buona
         ClassifierBase.__init__(self, **kwargs)
         
         self._classifier = tGMM(
-                num_components=self.nl_class,
+                num_components = self.nl_class,
                 **cls_kwargs,
                 trainer_params = dict(
                     num_nodes = 1,

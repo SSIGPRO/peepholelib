@@ -33,7 +33,7 @@ def plot_confidence(**kwargs):
     path = kwargs.get('path', None)
     loaders_renames = kwargs.get('loaders_renames', None)
     verbose = kwargs.get('verbose', False)
-
+    
     # parse arguments
     if path == None: 
         path = Path.cwd()
