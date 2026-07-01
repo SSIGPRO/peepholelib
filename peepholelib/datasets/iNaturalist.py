@@ -50,8 +50,9 @@ class iNaturalist(DatasetWrap):
 
     def __load_data__(self):
         _data = iNaturalistCustom(
-            root=self.path,
-            transform=self.transform,
+            root = self.path,
+            transform = self.transform,
+            download = True,
         )
 
         val_dataset, test_dataset = random_split(
