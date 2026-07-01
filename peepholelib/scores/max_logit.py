@@ -1,8 +1,7 @@
-from torch.nn.functional import softmax as sm
 from peepholelib.scores.score import Score
 
-class MSPScore(Score):
-    score_name = 'MSP'
+class MaxLogitScore(Score):
+    score_name = 'MaxLogit'
 
     def _compute(self, **kwargs):
         dss = kwargs['datasets']
@@ -16,7 +15,7 @@ class MSPScore(Score):
                 continue
             if verbose:
                 print('Computing', self.score_name, 'for dataset', ds_key)
-            scores = sm(dss._dss[ds_key]['output'], dim=-1).max(dim=-1).values
+            scores = dss._dss[ds_key]['output'].max(dim=-1).values
             self._record(ds_key, scores.detach().cpu().reshape(-1))
 
         return self._df

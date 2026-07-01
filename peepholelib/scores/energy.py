@@ -1,12 +1,14 @@
-from torch.nn.functional import softmax as sm
+import torch
 from peepholelib.scores.score import Score
 
-class MSPScore(Score):
-    score_name = 'MSP'
+
+class EnergyScore(Score):
+    score_name = 'Energy'
 
     def _compute(self, **kwargs):
         dss = kwargs['datasets']
         loaders = kwargs.get('loaders') or list(dss._dss.keys())
+        temperature = kwargs.get('temperature', 1.0)
         verbose = kwargs.get('verbose', False)
 
         for ds_key in loaders:
@@ -16,7 +18,8 @@ class MSPScore(Score):
                 continue
             if verbose:
                 print('Computing', self.score_name, 'for dataset', ds_key)
-            scores = sm(dss._dss[ds_key]['output'], dim=-1).max(dim=-1).values
+            logits = dss._dss[ds_key]['output']
+            scores = temperature * torch.logsumexp(logits / temperature, dim=-1)
             self._record(ds_key, scores.detach().cpu().reshape(-1))
 
         return self._df
