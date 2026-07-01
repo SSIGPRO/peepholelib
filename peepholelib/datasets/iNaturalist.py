@@ -50,6 +50,7 @@ class iNaturalist(DatasetWrap):
     def __load_data__(self):
         _data = iNaturalistCustom(
             root = self.path,
+            version = '2021_train_mini',
             transform = self.transform,
             download = True,
         )
