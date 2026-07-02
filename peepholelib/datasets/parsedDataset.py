@@ -418,30 +418,26 @@ class ParsedDataset():
                 _n_samples = len(self._dss[ds_key])
 
             else: 
-                if len(inf_names[ds_key]) == 0:
-                    self._dss[ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
-                    _n_samples = len(self._dss[ds_key])
-                else:
-                    for inf_name in inf_names[ds_key]:
-                        # back up the pointer to the original ds
-                        if (not (ds_key in self._dss_ori.keys())) and (ds_key in self._dss.keys()):
-                            self._dss_ori[ds_key] = self._dss.pop(ds_key)
-                        
-                        inf_ds_key = ds_key + '-' + inf_name
+                for inf_name in inf_names[ds_key]:
+                    # back up the pointer to the original ds
+                    if (not (ds_key in self._dss_ori.keys())) and (ds_key in self._dss.keys()):
+                        self._dss_ori[ds_key] = self._dss.pop(ds_key)
+                    
+                    inf_ds_key = ds_key + '-' + inf_name
 
-                        # create new StackedDS copying the pointer to the original parsed DS
-                        self._dss[inf_ds_key] = _StackedDS(ori=self._dss_ori[ds_key].ori)
-                        self._dss[inf_ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
+                    # create new StackedDS copying the pointer to the original parsed DS
+                    self._dss[inf_ds_key] = _StackedDS(ori=self._dss_ori[ds_key].ori)
+                    self._dss[inf_ds_key].set_transform(transforms[ds_key] if transforms != None and ds_key in transforms else None)
 
-                        # stack inference values — single H5 file
-                        inf_path = self.path / f'dss.{ds_key}.{inf_name}'
-                        if verbose: print(f'Loading inference for {inf_ds_key} from {inf_path}.')
-                        _td = PersistentTensorDict.from_h5(inf_path, mode=mode)
-                        _td.batch_size = torch.Size((len(_td),))
+                    # stack inference values — single H5 file
+                    inf_path = self.path / f'dss.{ds_key}.{inf_name}'
+                    if verbose: print(f'Loading inference for {inf_ds_key} from {inf_path}.')
+                    _td = PersistentTensorDict.from_h5(inf_path, mode=mode)
+                    _td.batch_size = torch.Size((len(_td),))
 
-                        self._dss[inf_ds_key].stack_inference(inf=_td)
+                    self._dss[inf_ds_key].stack_inference(inf=_td)
 
-                    _n_samples = len(self._dss[inf_ds_key])
+                _n_samples = len(self._dss[inf_ds_key])
             if verbose: print('loaded n_samples: ', _n_samples)
         return
     
