@@ -91,7 +91,7 @@ class ModelWrap(nn.Module):
 
         # send model to device
         self._model = self._model.to(self.device)
-        self._model.eval()
+        self.eval()
 
         # set in __call__()
         self._acts = None
