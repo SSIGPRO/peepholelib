@@ -61,11 +61,11 @@ def hidalgo_comparison(**kwargs):
 
     device = reduct_m.device
     dtype = reduct_m.dtype
-    full_reduct_m = reduct_m.detach().to(device=device, dtype=dtype)
+    full_reduct_m = reduct_m.to(device=device, dtype=dtype)
     if initial_cv_dim > full_reduct_m.shape[0]:
         raise RuntimeError(f"cv_dim={initial_cv_dim} exceeds proj rank {full_reduct_m.shape[0]}.")
 
-    h_data = h_data.detach().to(device=device, dtype=dtype)
+    h_data = h_data.to(device=device, dtype=dtype)
     before_projected = _project_with_cv_dim(
         h_data=h_data,
         reduct_m=full_reduct_m,
@@ -204,14 +204,14 @@ def hidalgo_comparison(**kwargs):
         "hidalgo": hidalgo_stats,
     }
     return {
-        "optimized_reduct_m": full_reduct_m.detach().clone(),
-        "optimized_projection": full_reduct_m.detach().clone(),
+        "optimized_reduct_m": full_reduct_m.clone(),
+        "optimized_projection": full_reduct_m.clone(),
         "optimized_cv_dim": discovered_cv_dim,
         "best_cv_dim": discovered_cv_dim,
         "initial_cv_dim": initial_cv_dim,
         "cv_dim_candidates": [initial_cv_dim, discovered_cv_dim],
-        "before_projected": before_projected.detach().clone(),
-        "after_projected": after_projected.detach().clone(),
+        "before_projected": before_projected.clone(),
+        "after_projected": after_projected.clone(),
         "before_metrics": before_metrics,
         "after_metrics": after_metrics,
         "before_gmm": _snapshot_gmm_state(before_gmm),
@@ -316,9 +316,9 @@ def hidalgo_dimension(
 
     fitted_dimensions = segment_state["dimensions"]
     fitted_weights = segment_state["weights"]
-    effective_dimension = float(torch.dot(fitted_weights, fitted_dimensions).detach().cpu())
+    effective_dimension = float(torch.dot(fitted_weights, fitted_dimensions).cpu())
     dominant_index = int(torch.argmax(fitted_weights).item())
-    dominant_dimension = float(fitted_dimensions[dominant_index].detach().cpu())
+    dominant_dimension = float(fitted_dimensions[dominant_index].cpu())
     sort_order = torch.argsort(fitted_dimensions)
     sorted_dimensions = fitted_dimensions[sort_order]
     sorted_weights = fitted_weights[sort_order]
@@ -360,10 +360,10 @@ def hidalgo_dimension(
     stats = {
         "dimension": effective_dimension,
         "dominant_dimension": dominant_dimension,
-        "segment_dimensions": fitted_dimensions.detach().cpu(),
-        "segment_weights": fitted_weights.detach().cpu(),
-        "sorted_segment_dimensions": sorted_dimensions.detach().cpu(),
-        "sorted_segment_weights": sorted_weights.detach().cpu(),
+        "segment_dimensions": fitted_dimensions.cpu(),
+        "segment_weights": fitted_weights.cpu(),
+        "sorted_segment_dimensions": sorted_dimensions.cpu(),
+        "sorted_segment_weights": sorted_weights.cpu(),
         "fraction": float(fraction),
         "n_samples": int(data.shape[0]),
         "n_good_points": int(n_good),
@@ -372,11 +372,11 @@ def hidalgo_dimension(
         "ignored_equal_neighbors": int(degenerate_mask.sum().item()),
         "confident_count": int(confident_count),
         "confident_fraction": float(confident_count / max(1, data.shape[0])),
-        "confident_weights": confident_weights.detach().cpu(),
-        "segment_counts": segment_counts.detach().cpu(),
-        "assignments": z_assignments.detach().cpu(),
-        "raw_assignments": assignments_all.detach().cpu(),
-        "assignment_confidence": confidence_all.detach().cpu(),
+        "confident_weights": confident_weights.cpu(),
+        "segment_counts": segment_counts.cpu(),
+        "assignments": z_assignments.cpu(),
+        "raw_assignments": assignments_all.cpu(),
+        "assignment_confidence": confidence_all.cpu(),
         "k": int(k),
         "q": int(q),
         "zeta": float(zeta),
@@ -386,18 +386,18 @@ def hidalgo_dimension(
         "sampling_rate": int(sampling_rate),
         "best_objective": float(segment_state["mean_log_posterior"]),
         "n_iter_run": int(segment_state["n_iter_run"]),
-        "x": log_mu.detach().cpu(),
-        "y": local_dim.detach().cpu(),
+        "x": log_mu.cpu(),
+        "y": local_dim.cpu(),
         "neighbor_cache": neighbor_cache,
     }
     if verbose:
         print(
             f"Hidalgo segment dimensions: "
-            f"{[round(float(v), 4) for v in fitted_dimensions.detach().cpu().tolist()]}"
+            f"{[round(float(v), 4) for v in fitted_dimensions.cpu().tolist()]}"
         )
         print(
             f"Hidalgo segment weights: "
-            f"{[round(float(v), 4) for v in fitted_weights.detach().cpu().tolist()]}"
+            f"{[round(float(v), 4) for v in fitted_weights.cpu().tolist()]}"
         )
         print(
             f"Hidalgo effective dimension: {stats['dimension']:.6f} | "
@@ -452,8 +452,8 @@ def _get_hidalgo_neighbor_cache(data, q, neighbor_cache=None):
     return {
         "q": int(q),
         "n_samples": int(data.shape[0]),
-        "nearest_distances": nearest_distances.detach().clone(),
-        "nearest_indices": nearest_indices.detach().clone(),
+        "nearest_distances": nearest_distances.clone(),
+        "nearest_indices": nearest_indices.clone(),
     }
 
 
@@ -567,7 +567,7 @@ def _run_hidalgo_gibbs_sampler(
                 current_dimension_mean = dimension_sum / saved_samples
                 if prev_dimension_mean is not None:
                     max_shift = torch.max(torch.abs(current_dimension_mean - prev_dimension_mean))
-                    if float(max_shift.detach().cpu()) <= tol:
+                    if float(max_shift.cpu()) <= tol:
                         stable_saves += 1
                     else:
                         stable_saves = 0
@@ -791,7 +791,7 @@ def _hidalgo_reference_log_posterior_from_assignments(
     if potts_strength is None:
         potts_strength = log(float(zeta) / (1.0 - float(zeta)))
     score = base_log_likelihood + float(potts_strength) * same_neighbor_count - normalization_term
-    return float(score.detach().cpu())
+    return float(score.cpu())
 
 
 def _build_hidalgo_log_zpart_cache(total_points, zeta, q, device, dtype):
@@ -857,7 +857,7 @@ def _infer_hidalgo_posteriors_for_all_points(
     base_log_prob = base_log_prob - log_mu.unsqueeze(1) * dimensions.unsqueeze(0)
 
     unresolved_mask = ~fit_mask
-    if bool(unresolved_mask.any().detach().cpu().item()):
+    if bool(unresolved_mask.any().cpu().item()):
         unresolved_indices = torch.where(unresolved_mask)[0]
         unresolved_log_prob = base_log_prob[unresolved_indices]
         unresolved_neighbor_indices = neighbor_indices_to_fit[unresolved_indices]
@@ -908,7 +908,7 @@ def _evaluate_gmm_state(data, gmm_state):
     variances = torch.as_tensor(gmm_state["variances"], device=data.device, dtype=data.dtype)
 
     weights = torch.nan_to_num(weights, nan=0.0, posinf=0.0, neginf=0.0).clamp_min(0.0)
-    if float(weights.sum().detach().cpu()) <= 0.0:
+    if float(weights.sum().cpu()) <= 0.0:
         weights = torch.ones_like(weights) / max(1, weights.numel())
     else:
         weights = weights / weights.sum()
@@ -927,14 +927,14 @@ def _evaluate_gmm_state(data, gmm_state):
     cluster_counts = torch.bincount(assignments, minlength=weights.shape[0]).to(device=data.device)
 
     return {
-        "weights": weights.detach().clone(),
-        "means": means.detach().clone(),
-        "variances": variances.detach().clone(),
-        "assignments": assignments.detach().clone(),
-        "cluster_counts": cluster_counts.detach().clone(),
-        "cluster_marginal_profile": posterior.mean(dim=0).detach().clone(),
-        "max_assignment_probabilities": posterior.max(dim=1).values.detach().clone(),
-        "nll": (-log_norm.sum()).detach().clone(),
+        "weights": weights.clone(),
+        "means": means.clone(),
+        "variances": variances.clone(),
+        "assignments": assignments.clone(),
+        "cluster_counts": cluster_counts.clone(),
+        "cluster_marginal_profile": posterior.mean(dim=0).clone(),
+        "max_assignment_probabilities": posterior.max(dim=1).values.clone(),
+        "nll": (-log_norm.sum()).clone(),
     }
 
 
@@ -951,7 +951,7 @@ def _compute_hidalgo_metrics(
     active_clusters = int((counts > 0).sum().item())
 
     n_samples = max(1, projected.shape[0])
-    nll = _finite_or_nan(float(gmm_state["nll"].detach().cpu()))
+    nll = _finite_or_nan(float(gmm_state["nll"].cpu()))
     complexity = _gmm_num_parameters(
         n_components=requested_n_components,
         n_features=int(projected.shape[1]),
@@ -959,7 +959,7 @@ def _compute_hidalgo_metrics(
     bic_penalty = float(complexity * log(max(2, n_samples)))
     bic = _finite_or_nan(2.0 * nll + bic_penalty)
     silhouette = _finite_or_nan(
-        float(_silhouette_score(projected, gmm_state["assignments"].long()).detach().cpu())
+        float(_silhouette_score(projected, gmm_state["assignments"].long()).cpu())
     )
 
     metrics = {
@@ -976,8 +976,8 @@ def _compute_hidalgo_metrics(
     if labels is not None:
         ami = _finite_or_nan(
             adjusted_mutual_info_score(
-                labels.detach().cpu().numpy(),
-                gmm_state["assignments"].long().detach().cpu().numpy(),
+                labels.cpu().numpy(),
+                gmm_state["assignments"].long().cpu().numpy(),
             )
         )
         metrics.update(
@@ -1019,7 +1019,7 @@ def _compute_hidalgo_max_dim_after_state(
         raise ValueError("Hidalgo assignments must match h_data sample count.")
 
     segment_cv_dims = [
-        int(max(1, min(full_rank, ceil(float(dim.detach().cpu())))))
+        int(max(1, min(full_rank, ceil(float(dim.cpu())))))
         for dim in segment_dimensions
     ]
     segment_sizes = []
@@ -1275,7 +1275,7 @@ def _render_cluster_population_panel(ax, title, gmm_state, cv_dim, requested_n_c
 
 
 def _cluster_population_summary(gmm_state, cv_dim, requested_n_components, top_k):
-    counts = gmm_state["cluster_counts"].detach().cpu().tolist()
+    counts = gmm_state["cluster_counts"].cpu().tolist()
     indexed_counts = list(enumerate(counts))
     n_components = int(len(indexed_counts))
     active_clusters = sum(count > 0 for _, count in indexed_counts)
@@ -1307,7 +1307,7 @@ def _format_cluster_count_lines(indexed_counts):
 
 def _sorted_cluster_profile(gmm_state):
     profile = torch.sort(
-        torch.as_tensor(gmm_state["cluster_marginal_profile"]).detach().float().cpu(),
+        torch.as_tensor(gmm_state["cluster_marginal_profile"]).float().cpu(),
         descending=True,
     ).values
     return profile.tolist()
@@ -1315,14 +1315,14 @@ def _sorted_cluster_profile(gmm_state):
 
 def _snapshot_gmm_state(gmm_state):
     return {
-        "weights": gmm_state["weights"].detach().clone(),
-        "means": gmm_state["means"].detach().clone(),
-        "variances": gmm_state["variances"].detach().clone(),
-        "assignments": gmm_state["assignments"].detach().clone(),
-        "cluster_counts": gmm_state["cluster_counts"].detach().clone(),
-        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].detach().clone(),
-        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].detach().clone(),
-        "nll": gmm_state["nll"].detach().clone(),
+        "weights": gmm_state["weights"].clone(),
+        "means": gmm_state["means"].clone(),
+        "variances": gmm_state["variances"].clone(),
+        "assignments": gmm_state["assignments"].clone(),
+        "cluster_counts": gmm_state["cluster_counts"].clone(),
+        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].clone(),
+        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].clone(),
+        "nll": gmm_state["nll"].clone(),
     }
 
 
@@ -1344,7 +1344,7 @@ def _mahalanobis_col_mean(gmm_state):
 
     eye = torch.eye(matrix.shape[0], dtype=torch.bool, device=matrix.device)
     col_mean = matrix.masked_fill(eye, 0.0).sum(dim=0) / (matrix.shape[0] - 1)
-    return float(col_mean.mean().detach().cpu())
+    return float(col_mean.mean().cpu())
 
 
 def _asymmetric_mahalanobis_matrix(gmm_state):
@@ -1356,8 +1356,8 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
     if means is None or variances is None:
         return None
 
-    means = torch.as_tensor(means).detach().float().cpu()
-    variances = torch.as_tensor(variances).detach().float().cpu().clamp_min(1e-12)
+    means = torch.as_tensor(means).float().cpu()
+    variances = torch.as_tensor(variances).float().cpu().clamp_min(1e-12)
 
     inv_var = variances.reciprocal()
     weighted_means = means * inv_var
@@ -1370,17 +1370,17 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
 
 
 def _cluster_size_imbalance_ratio(counts):
-    counts = torch.as_tensor(counts).detach().float()
+    counts = torch.as_tensor(counts).float()
     positive_counts = counts[counts > 0]
     if positive_counts.numel() == 0:
         return float("nan")
 
     min_count = positive_counts.min()
-    if float(min_count.detach().cpu()) <= 0.0:
+    if float(min_count.cpu()) <= 0.0:
         return float("nan")
 
     max_count = positive_counts.max()
-    return float((max_count / min_count).detach().cpu())
+    return float((max_count / min_count).cpu())
 
 
 def _format_metric_value(value):
@@ -1393,10 +1393,12 @@ def _format_metric_value(value):
 
 
 def _gmm_component_log_prob(data, weights, means, variances):
-    diff = data.unsqueeze(1) - means.unsqueeze(0)
     inv_var = variances.reciprocal()
     log_det = variances.log().sum(dim=1)
-    mahalanobis = (diff.pow(2) * inv_var.unsqueeze(0)).sum(dim=2)
+    x2_term = data.pow(2) @ inv_var.T
+    cross_term = data @ (means * inv_var).T
+    mean_term = (means.pow(2) * inv_var).sum(dim=1)
+    mahalanobis = x2_term - 2.0 * cross_term + mean_term.unsqueeze(0)
     n_features = data.shape[1]
     return (
         weights.clamp_min(1e-12).log().unsqueeze(0)

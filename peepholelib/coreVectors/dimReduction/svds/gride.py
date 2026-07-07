@@ -33,11 +33,11 @@ def gride_comparison(**kwargs):
 
     device = reduct_m.device
     dtype = reduct_m.dtype
-    full_reduct_m = reduct_m.detach().to(device=device, dtype=dtype)
+    full_reduct_m = reduct_m.to(device=device, dtype=dtype)
     if initial_cv_dim > full_reduct_m.shape[0]:
         raise RuntimeError(f"cv_dim={initial_cv_dim} exceeds proj rank {full_reduct_m.shape[0]}.")
 
-    h_data = h_data.detach().to(device=device, dtype=dtype)
+    h_data = h_data.to(device=device, dtype=dtype)
     before_projected = _project_with_cv_dim(
         h_data=h_data,
         reduct_m=full_reduct_m,
@@ -169,14 +169,14 @@ def gride_comparison(**kwargs):
         "twonn": twonn_stats,
     }
     return {
-        "optimized_reduct_m": full_reduct_m.detach().clone(),
-        "optimized_projection": full_reduct_m.detach().clone(),
+        "optimized_reduct_m": full_reduct_m.clone(),
+        "optimized_projection": full_reduct_m.clone(),
         "optimized_cv_dim": discovered_cv_dim,
         "best_cv_dim": discovered_cv_dim,
         "initial_cv_dim": initial_cv_dim,
         "cv_dim_candidates": [initial_cv_dim, discovered_cv_dim],
-        "before_projected": before_projected.detach().clone(),
-        "after_projected": after_projected.detach().clone(),
+        "before_projected": before_projected.clone(),
+        "after_projected": after_projected.clone(),
         "before_metrics": before_metrics,
         "after_metrics": after_metrics,
         "before_gmm": _snapshot_gmm_state(before_gmm),
@@ -193,6 +193,7 @@ def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, ve
     """
     Estimate intrinsic dimension with the GRIDE likelihood from Denti et al.
     fraction is the fraction of valid points kept for the fit.
+    Diagnostics include the full sorted mu values and the truncated fit subset.
     """
 
     if n2 <= n1:
@@ -236,8 +237,10 @@ def gride_dimension(data, fraction=0.9, n1=1, n2=2, return_diagnostics=False, ve
         "gride_n1": int(n1),
         "gride_n2": int(n2),
         "mg_dimension": None if mg_dimension is None else float(mg_dimension),
-        "x": log_mu.to(dtype=mu.dtype).detach().cpu(),
-        "y": _gride_cdf_transform(fit_mu, dimension=dimension, n1=n1, n2=n2).to(dtype=mu.dtype).detach().cpu(),
+        "mu_full": mu.cpu(),
+        "mu_fit": fit_mu.cpu(),
+        "x": log_mu.to(dtype=mu.dtype).cpu(),
+        "y": _gride_cdf_transform(fit_mu, dimension=dimension, n1=n1, n2=n2).to(dtype=mu.dtype).cpu(),
     }
     if verbose:
         print(
@@ -302,13 +305,13 @@ def _gride_score(dimension, log_mu, n1, n2):
         + (n2 - n1 - 1) * ratio_term
         - (n2 - 1) * torch.sum(log_mu)
     )
-    return float(score.detach().cpu())
+    return float(score.cpu())
 
 
 def _mg_dimension_from_log_mu(log_mu, neighbor_order):
     denominator = (neighbor_order - 1) * torch.sum(log_mu).clamp_min(1e-12)
     numerator = max(1, log_mu.numel() - 1)
-    return float(numerator / denominator.detach().cpu())
+    return float(numerator / denominator.cpu())
 
 
 def _gride_cdf_transform(mu, dimension, n1, n2):
@@ -353,7 +356,7 @@ def _evaluate_gmm_state(data, gmm_state):
     means = torch.as_tensor(gmm_state["means"], device=data.device, dtype=data.dtype)
     variances = torch.as_tensor(gmm_state["variances"], device=data.device, dtype=data.dtype)
     weights = torch.nan_to_num(weights, nan=0.0, posinf=0.0, neginf=0.0).clamp_min(0.0)
-    if float(weights.sum().detach().cpu()) <= 0.0:
+    if float(weights.sum().cpu()) <= 0.0:
         weights = torch.ones_like(weights) / max(1, weights.numel())
     else:
         weights = weights / weights.sum()
@@ -371,14 +374,14 @@ def _evaluate_gmm_state(data, gmm_state):
     cluster_counts = torch.bincount(assignments, minlength=weights.shape[0]).to(device=data.device)
 
     return {
-        "weights": weights.detach().clone(),
-        "means": means.detach().clone(),
-        "variances": variances.detach().clone(),
-        "assignments": assignments.detach().clone(),
-        "cluster_counts": cluster_counts.detach().clone(),
-        "cluster_marginal_profile": posterior.mean(dim=0).detach().clone(),
-        "max_assignment_probabilities": posterior.max(dim=1).values.detach().clone(),
-        "nll": (-log_norm.sum()).detach().clone(),
+        "weights": weights.clone(),
+        "means": means.clone(),
+        "variances": variances.clone(),
+        "assignments": assignments.clone(),
+        "cluster_counts": cluster_counts.clone(),
+        "cluster_marginal_profile": posterior.mean(dim=0).clone(),
+        "max_assignment_probabilities": posterior.max(dim=1).values.clone(),
+        "nll": (-log_norm.sum()).clone(),
     }
 
 
@@ -389,7 +392,7 @@ def _compute_twonn_metrics(projected, gmm_state, cv_dim,
     active_clusters = int((counts > 0).sum().item())
 
     n_samples = max(1, projected.shape[0])
-    nll = _finite_or_nan(float(gmm_state["nll"].detach().cpu()))
+    nll = _finite_or_nan(float(gmm_state["nll"].cpu()))
     complexity = _gmm_num_parameters(
         n_components=requested_n_components,
         n_features=int(projected.shape[1]),
@@ -397,7 +400,7 @@ def _compute_twonn_metrics(projected, gmm_state, cv_dim,
     bic_penalty = float(complexity * log(max(2, n_samples)))
     bic = _finite_or_nan(2.0 * nll + bic_penalty)
     silhouette = _finite_or_nan(
-        float(_silhouette_score(projected, gmm_state["assignments"].long()).detach().cpu())
+        float(_silhouette_score(projected, gmm_state["assignments"].long()).cpu())
     )
 
     metrics = {
@@ -416,8 +419,8 @@ def _compute_twonn_metrics(projected, gmm_state, cv_dim,
     if labels is not None:
         ami = _finite_or_nan(
             adjusted_mutual_info_score(
-                labels.detach().cpu().numpy(),
-                gmm_state["assignments"].long().detach().cpu().numpy(),
+                labels.cpu().numpy(),
+                gmm_state["assignments"].long().cpu().numpy(),
             )
         )
         metrics.update(
@@ -512,11 +515,11 @@ def _render_twonn_summary_panel(ax, twonn_stats, before_metrics, after_metrics, 
             f"{_format_metric_value(before_metrics.get('silhouette'))} -> "
             f"{_format_metric_value(after_metrics.get('silhouette'))}"
         ),
-        # (
-        #     f"MD col mean before/after: "
-        #     f"{_format_metric_value(before_metrics.get('md_col_mean'))} -> "
-        #     f"{_format_metric_value(after_metrics.get('md_col_mean'))}"
-        # ),
+        (
+            f"MD col mean before/after: "
+            f"{_format_metric_value(before_metrics.get('md_col_mean'))} -> "
+            f"{_format_metric_value(after_metrics.get('md_col_mean'))}"
+        ),
         (
             f"Cluster size imbalance before/after: "
             f"{_format_metric_value(before_metrics.get('cluster_size_imbalance_ratio'))} -> "
@@ -620,7 +623,7 @@ def _render_cluster_population_panel(ax, title, gmm_state, cv_dim, requested_n_c
 
 
 def _cluster_population_summary(gmm_state, cv_dim, requested_n_components, top_k):
-    counts = gmm_state["cluster_counts"].detach().cpu().tolist()
+    counts = gmm_state["cluster_counts"].cpu().tolist()
     indexed_counts = list(enumerate(counts))
     n_components = int(len(indexed_counts))
     active_clusters = sum(count > 0 for _, count in indexed_counts)
@@ -652,7 +655,7 @@ def _format_cluster_count_lines(indexed_counts):
 
 def _sorted_cluster_profile(gmm_state):
     profile = torch.sort(
-        torch.as_tensor(gmm_state["cluster_marginal_profile"]).detach().float().cpu(),
+        torch.as_tensor(gmm_state["cluster_marginal_profile"]).float().cpu(),
         descending=True,
     ).values
     return profile.tolist()
@@ -660,14 +663,14 @@ def _sorted_cluster_profile(gmm_state):
 
 def _snapshot_gmm_state(gmm_state):
     return {
-        "weights": gmm_state["weights"].detach().clone(),
-        "means": gmm_state["means"].detach().clone(),
-        "variances": gmm_state["variances"].detach().clone(),
-        "assignments": gmm_state["assignments"].detach().clone(),
-        "cluster_counts": gmm_state["cluster_counts"].detach().clone(),
-        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].detach().clone(),
-        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].detach().clone(),
-        "nll": gmm_state["nll"].detach().clone(),
+        "weights": gmm_state["weights"].clone(),
+        "means": gmm_state["means"].clone(),
+        "variances": gmm_state["variances"].clone(),
+        "assignments": gmm_state["assignments"].clone(),
+        "cluster_counts": gmm_state["cluster_counts"].clone(),
+        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].clone(),
+        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].clone(),
+        "nll": gmm_state["nll"].clone(),
     }
 
 
@@ -689,7 +692,7 @@ def _mahalanobis_col_mean(gmm_state):
 
     eye = torch.eye(matrix.shape[0], dtype=torch.bool, device=matrix.device)
     col_mean = matrix.masked_fill(eye, 0.0).sum(dim=0) / (matrix.shape[0] - 1)
-    return float(col_mean.mean().detach().cpu())
+    return float(col_mean.mean().cpu())
 
 
 def _asymmetric_mahalanobis_matrix(gmm_state):
@@ -701,8 +704,8 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
     if means is None or variances is None:
         return None
 
-    means = torch.as_tensor(means).detach().float().cpu()
-    variances = torch.as_tensor(variances).detach().float().cpu().clamp_min(1e-12)
+    means = torch.as_tensor(means).float().cpu()
+    variances = torch.as_tensor(variances).float().cpu().clamp_min(1e-12)
 
     inv_var = variances.reciprocal()
     weighted_means = means * inv_var
@@ -715,11 +718,11 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
 
 
 def _cluster_size_imbalance_ratio(counts):
-    counts = torch.as_tensor(counts).detach().float()
+    counts = torch.as_tensor(counts).float()
     positive_counts = counts[counts > 0]
     min_count = positive_counts.min()
     max_count = positive_counts.max()
-    return float((max_count / min_count).detach().cpu())
+    return float((max_count / min_count).cpu())
 
 
 
@@ -733,10 +736,12 @@ def _format_metric_value(value):
 
 
 def _gmm_component_log_prob(data, weights, means, variances):
-    diff = data.unsqueeze(1) - means.unsqueeze(0)
     inv_var = variances.reciprocal()
     log_det = variances.log().sum(dim=1)
-    mahalanobis = (diff.pow(2) * inv_var.unsqueeze(0)).sum(dim=2)
+    x2_term = data.pow(2) @ inv_var.T
+    cross_term = data @ (means * inv_var).T
+    mean_term = (means.pow(2) * inv_var).sum(dim=1)
+    mahalanobis = x2_term - 2.0 * cross_term + mean_term.unsqueeze(0)
     n_features = data.shape[1]
     return (
         weights.clamp_min(1e-12).log().unsqueeze(0)

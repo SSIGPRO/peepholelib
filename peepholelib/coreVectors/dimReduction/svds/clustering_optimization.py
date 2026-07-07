@@ -121,9 +121,9 @@ def optimize_clustering(**kwargs):
         covariance_type=covariance_type,
     )
 
-    optimized_reduct_m = projection_results["optimized_reduct_m"].detach().clone()
-    h_data = h_data.detach().to(device=optimized_reduct_m.device, dtype=optimized_reduct_m.dtype)
-    optimized_projected_raw = projection_results["after_projected"].detach().to(
+    optimized_reduct_m = projection_results["optimized_reduct_m"].clone()
+    h_data = h_data.to(device=optimized_reduct_m.device, dtype=optimized_reduct_m.dtype)
+    optimized_projected_raw = projection_results["after_projected"].to(
         device=optimized_reduct_m.device,
         dtype=optimized_reduct_m.dtype,
     )
@@ -299,7 +299,7 @@ def optimize_clustering(**kwargs):
 
     return {
         "optimized_reduct_m": optimized_reduct_m,
-        "optimized_projection": optimized_reduct_m.detach().clone(),
+        "optimized_projection": optimized_reduct_m.clone(),
         "optimized_cv_dim": initial_cv_dim,
         "best_cv_dim": initial_cv_dim,
         "initial_cv_dim": initial_cv_dim,
@@ -307,8 +307,8 @@ def optimize_clustering(**kwargs):
         "initial_n_components": initial_n_components,
         "optimized_n_components": optimized_n_components,
         "projection_active_clusters": optimized_n_components,
-        "before_projected": optimized_projected.detach().clone(),
-        "after_projected": optimized_projected.detach().clone(),
+        "before_projected": optimized_projected.clone(),
+        "after_projected": optimized_projected.clone(),
         "before_metrics": before_metrics,
         "after_metrics": after_metrics,
         "before_gmm": before_gmm_snapshot,
@@ -485,7 +485,7 @@ def _render_mahalanobis_matrix_panels(before_ax, after_ax, before_gmm, after_gmm
 
     finite_maxima = [matrix.max() for matrix in matrices if bool(torch.isfinite(matrix).all().item())]
     vmax = torch.stack(finite_maxima).max() if finite_maxima else torch.tensor(1.0)
-    vmax = float(vmax.detach().cpu())
+    vmax = float(vmax.cpu())
     if vmax <= 0:
         vmax = 1.0
 
@@ -515,8 +515,8 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
     if gmm_state is None:
         return None
 
-    means = torch.as_tensor(gmm_state["means"]).detach().float().cpu()
-    variances = torch.as_tensor(gmm_state["variances"]).detach().float().cpu()
+    means = torch.as_tensor(gmm_state["means"]).float().cpu()
+    variances = torch.as_tensor(gmm_state["variances"]).float().cpu()
     variances = variances.clamp_min(1e-12)
 
     inv_var = variances.reciprocal()
@@ -530,13 +530,13 @@ def _asymmetric_mahalanobis_matrix(gmm_state):
 
 
 def _mahalanobis_matrix_summary(matrix):
-    max_dist = float(matrix.max().detach().cpu())
+    max_dist = float(matrix.max().cpu())
     if matrix.shape[0] <= 1:
         return 0.0, max_dist
 
     eye = torch.eye(matrix.shape[0], dtype=torch.bool, device=matrix.device)
     col_mean = matrix.masked_fill(eye, 0.0).sum(dim=0) / (matrix.shape[0] - 1)
-    return float(col_mean.mean().detach().cpu()), max_dist
+    return float(col_mean.mean().cpu()), max_dist
 
 
 def _compute_projection_normalization(projected):
@@ -552,17 +552,17 @@ def _normalize_gmm_state(gmm_state, mean, std, normalized_projected):
     std = std.to(device=device, dtype=dtype)
 
     normalized_state = dict(gmm_state)
-    normalized_state["weights"] = gmm_state["weights"].detach().to(device=device, dtype=dtype)
+    normalized_state["weights"] = gmm_state["weights"].to(device=device, dtype=dtype)
     normalized_state["means"] = (
-        gmm_state["means"].detach().to(device=device, dtype=dtype) - mean
+        gmm_state["means"].to(device=device, dtype=dtype) - mean
     ) / std
     normalized_state["variances"] = (
-        gmm_state["variances"].detach().to(device=device, dtype=dtype) / std.pow(2)
+        gmm_state["variances"].to(device=device, dtype=dtype) / std.pow(2)
     )
 
     assignments = gmm_state.get("assignments")
     if assignments is not None:
-        assignments = assignments.detach().to(device=device)
+        assignments = assignments.to(device=device)
     return _evaluate_gmm(
         data=normalized_projected,
         gmm_state=normalized_state,
@@ -574,7 +574,7 @@ def _save_optimized_corevectors(projected, layer_name, path, name, loader, verbo
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
     file_path = path / f"{name}.{loader}"
-    projected = projected.detach().cpu()
+    projected = projected.cpu()
 
     if file_path.exists():
         corevds = PersistentTensorDict.from_h5(file_path, mode="r+")
@@ -601,8 +601,8 @@ def _save_corevector_normalization(mean, std, layer_name, path, verbose=False):
     else:
         means, stds = {}, {}
 
-    means[layer_name] = mean.detach().cpu()
-    stds[layer_name] = std.detach().cpu()
+    means[layer_name] = mean.cpu()
+    stds[layer_name] = std.cpu()
     torch.save((means, stds), norm_path)
 
     if verbose:
@@ -632,7 +632,7 @@ def _save_optimized_gmm_driller(gmm_state,labels,path,name,label_key,n_classes=N
         n_classes=n_classes,
         dtype=gmm_state["means"].dtype,
     )
-    torch.save(empp.detach().cpu(), clas_path / f"empp_{label_key}.pt")
+    torch.save(empp.cpu(), clas_path / f"empp_{label_key}.pt")
 
     if verbose:
         print(f"Saved optimized driller to {clas_path}")
@@ -640,9 +640,9 @@ def _save_optimized_gmm_driller(gmm_state,labels,path,name,label_key,n_classes=N
 
 
 def _gmm_estimator_from_state(gmm_state, covariance_type="diag"):
-    weights = gmm_state["weights"].detach()
-    means = gmm_state["means"].detach()
-    variances = gmm_state["variances"].detach().clamp_min(1e-12)
+    weights = gmm_state["weights"]
+    means = gmm_state["means"]
+    variances = gmm_state["variances"].clamp_min(1e-12)
     n_components, n_features = means.shape
 
     device = means.device
@@ -677,5 +677,5 @@ def _gmm_estimator_from_state(gmm_state, covariance_type="diag"):
     estimator.num_iter_ = 0
     n_samples = gmm_state.get("cluster_counts")
     n_samples = int(n_samples.sum().item()) if n_samples is not None else int(gmm_state["assignments"].numel())
-    estimator.nll_ = float((gmm_state["nll"] / max(1, n_samples)).detach().cpu())
+    estimator.nll_ = float((gmm_state["nll"] / max(1, n_samples)).cpu())
     return estimator

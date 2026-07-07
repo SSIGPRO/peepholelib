@@ -106,11 +106,11 @@ def optimize_projection(**kwargs):
 
     device = reduct_m.device
     dtype = reduct_m.dtype
-    full_reduct_m = reduct_m.detach().to(device=device, dtype=dtype)
+    full_reduct_m = reduct_m.to(device=device, dtype=dtype)
     if cv_dim > full_reduct_m.shape[0]:
         raise RuntimeError(f"cv_dim={cv_dim} exceeds proj rank {full_reduct_m.shape[0]}")
 
-    h_data = h_data.detach().to(device=device, dtype=dtype)
+    h_data = h_data.to(device=device, dtype=dtype)
     labels = None if datasets is None else _get_labels_from_dataset(
         datasets=datasets,
         loader=loader,
@@ -129,7 +129,7 @@ def optimize_projection(**kwargs):
         dtype=dtype,
     )
     with torch.no_grad():
-        linear.weight.copy_(active_reduct_m.detach())
+        linear.weight.copy_(active_reduct_m)
 
     optimizer = torch.optim.Adam(linear.parameters(), lr=lr, weight_decay=weight_decay)
 
@@ -172,7 +172,7 @@ def optimize_projection(**kwargs):
     else:
         best_eval_objective = _silhouette_score(before_proj, before_gmm["assignments"], seed=seed)
 
-    best_weight = linear.weight.detach().clone()
+    best_weight = linear.weight.clone()
     frozen_gmm = before_gmm
 
     for epoch in range(n_epochs):
@@ -195,7 +195,7 @@ def optimize_projection(**kwargs):
             raise ValueError(f"Unknown loss '{loss_name}'.")
 
         train_loss = -train_objective if loss_name == "silhouette" else train_objective
-        if not bool(torch.isfinite(train_loss).detach().cpu().item()):
+        if not bool(torch.isfinite(train_loss).cpu().item()):
             train_loss = projected.sum() * 0.0
         train_loss.backward()
         optimizer.step()
@@ -220,9 +220,9 @@ def optimize_projection(**kwargs):
             eval_bic = _bic_from_nll(eval_nll, n_params=n_params, n_samples=n_samples)
 
         history["epoch"].append(epoch)
-        history["objective"].append(float(eval_objective.detach().cpu()))
-        history["nll"].append(float(eval_nll.detach().cpu()))
-        history["bic"].append(float(eval_bic.detach().cpu()))
+        history["objective"].append(float(eval_objective.cpu()))
+        history["nll"].append(float(eval_nll.cpu()))
+        history["bic"].append(float(eval_bic.cpu()))
 
         if verbose:
             print(
@@ -238,12 +238,12 @@ def optimize_projection(**kwargs):
             improved = eval_objective < best_eval_objective
         if improved:
             best_eval_objective = eval_objective
-            best_weight = linear.weight.detach().clone()
+            best_weight = linear.weight.clone()
 
     with torch.no_grad():
         linear.weight.copy_(best_weight)
         optimized_reduct_m = full_reduct_m.clone()
-        optimized_reduct_m[:cv_dim] = linear.weight.detach()
+        optimized_reduct_m[:cv_dim] = linear.weight
         after_proj = linear(h_data)
         if loss_name == "silhouette":
             after_gmm = _evaluate_gmm(after_proj, frozen_gmm, assignments=frozen_gmm["assignments"])
@@ -293,11 +293,11 @@ def optimize_projection(**kwargs):
 
     return {
         "optimized_reduct_m": optimized_reduct_m,
-        "optimized_projection": optimized_reduct_m.detach().clone(),
+        "optimized_projection": optimized_reduct_m.clone(),
         "optimized_cv_dim": int(cv_dim),
         "initial_cv_dim": int(cv_dim),
-        "before_projected": before_proj.detach().clone(),
-        "after_projected": after_proj.detach().clone(),
+        "before_projected": before_proj.clone(),
+        "after_projected": after_proj.clone(),
         "before_metrics": before_metrics,
         "after_metrics": after_metrics,
         "before_gmm": _snapshot_gmm_state(before_gmm, n_params=n_params, n_samples=n_samples),
@@ -315,7 +315,7 @@ def optimize_projection(**kwargs):
 
 def _gmm_state_is_finite(gmm_state):
     return all(
-        bool(torch.isfinite(gmm_state[key]).all().detach().cpu().item())
+        bool(torch.isfinite(gmm_state[key]).all().cpu().item())
         for key in ("weights", "means", "variances", "nll")
     )
 
@@ -325,13 +325,13 @@ def _cosine_distance(before, after):
     cosine similarity = (A . B) / (||A|| * ||B||)
     cosine distance = 1 - cosine similarity
     '''
-    before = before.detach().flatten().float()
-    after = after.detach().flatten().float()
+    before = before.flatten().float()
+    after = after.flatten().float()
     denom = before.norm() * after.norm()
-    if float(denom.detach().cpu()) <= 0.0:
+    if float(denom.cpu()) <= 0.0:
         return float("nan")
     cosine_similarity = torch.dot(before, after) / denom.clamp_min(1e-12)
-    return float((1.0 - cosine_similarity).detach().cpu())
+    return float((1.0 - cosine_similarity).cpu())
 
 
 def _fit_gmm(cv,n_components,seed=None, cluster_method="gmm", dpgmm_max_clusters=100, dpgmm_iterations=100, gmm_retries=10, covariance_type="diag"):
@@ -365,7 +365,7 @@ def _fit_torchgmm(cv, n_components, seed=None, covariance_type="diag"):
             enable_progress_bar = False 
         )
     )
-    fit_data = cv.detach()
+    fit_data = cv
     estimator.fit(fit_data)
 
     model = estimator.model_
@@ -404,7 +404,7 @@ def _fit_dpgmm(cv, max_clusters_num, iterations_num, seed=None):
         batch_size=2**4,
     )
     sampler = sampler.to(cv.device)
-    result = sampler.fit(iterations_num=int(iterations_num), data=cv.detach())
+    result = sampler.fit(iterations_num=int(iterations_num), data=cv)
     assignments = torch.as_tensor(result["cluster_assignment"], device=cv.device, dtype=torch.long)
     if assignments.ndim != 1 or assignments.shape[0] != cv.shape[0]:
         raise ValueError(
@@ -434,7 +434,7 @@ def _fit_dpgmm(cv, max_clusters_num, iterations_num, seed=None):
     )
 
     log_prob = _gmm_component_log_prob(
-        data=cv.detach(),
+        data=cv,
         weights=weights,
         means=means,
         variances=variances,
@@ -518,10 +518,12 @@ def _evaluate_gmm(data, gmm_state, assignments=None):
 
 
 def _gmm_component_log_prob(data, weights, means, variances):
-    diff = data.unsqueeze(1) - means.unsqueeze(0)
     inv_var = variances.reciprocal()
     log_det = variances.log().sum(dim=1)
-    mahalanobis = (diff.pow(2) * inv_var.unsqueeze(0)).sum(dim=2)
+    x2_term = data.pow(2) @ inv_var.T
+    cross_term = data @ (means * inv_var).T
+    mean_term = (means.pow(2) * inv_var).sum(dim=1)
+    mahalanobis = x2_term - 2.0 * cross_term + mean_term.unsqueeze(0)
     n_features = data.shape[1]
     return (
         weights.clamp_min(1e-12).log().unsqueeze(0)
@@ -542,17 +544,17 @@ def _bic_from_nll(nll, n_params, n_samples):
 
 def _snapshot_gmm_state(gmm_state, n_params, n_samples):
     snapshot = {
-        "weights": gmm_state["weights"].detach().clone(),
-        "means": gmm_state["means"].detach().clone(),
-        "variances": gmm_state["variances"].detach().clone(),
-        "assignments": gmm_state["assignments"].detach().clone(),
-        "cluster_counts": gmm_state["cluster_counts"].detach().clone(),
-        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].detach().clone(),
-        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].detach().clone(),
-        "nll": gmm_state["nll"].detach().clone(),
+        "weights": gmm_state["weights"].clone(),
+        "means": gmm_state["means"].clone(),
+        "variances": gmm_state["variances"].clone(),
+        "assignments": gmm_state["assignments"].clone(),
+        "cluster_counts": gmm_state["cluster_counts"].clone(),
+        "cluster_marginal_profile": gmm_state["cluster_marginal_profile"].clone(),
+        "max_assignment_probabilities": gmm_state["max_assignment_probabilities"].clone(),
+        "nll": gmm_state["nll"].clone(),
     }
     if n_params is not None:
-        snapshot["bic"] = _bic_from_nll(gmm_state["nll"], n_params, n_samples).detach().clone()
+        snapshot["bic"] = _bic_from_nll(gmm_state["nll"], n_params, n_samples).clone()
         snapshot["n_params"] = int(n_params)
     return snapshot
 
@@ -563,7 +565,7 @@ def _get_labels_from_dataset(datasets, loader, label_key, device):
     else:
         dss = datasets._dss_ori[loader]
 
-    labels = dss[label_key]
+    labels = dss.ori[label_key]
     return torch.as_tensor(labels, device=device)
 
 
@@ -604,15 +606,15 @@ def _compute_clustering_metrics(projected,gmm_state,loss_name,n_params,n_samples
 
 
     metrics = {
-        "objective": float(objective.detach().cpu()),
-        "nll": float(nll.detach().cpu()),
-        "mean_nll": float((nll / n_samples).detach().cpu()),
-        "bic": None if bic is None else float(bic.detach().cpu()),
+        "objective": float(objective.cpu()),
+        "nll": float(nll.cpu()),
+        "mean_nll": float((nll / n_samples).cpu()),
+        "bic": None if bic is None else float(bic.cpu()),
         "complexity": None if n_params is None else int(n_params),
         "bic_penalty": None if n_params is None else float((n_params * log(max(2, n_samples)))),
         "active_clusters": active_clusters,
-        "normalized_cluster_entropy": float(normalized_entropy.detach().cpu()),
-        "silhouette": float(silhouette.detach().cpu()),
+        "normalized_cluster_entropy": float(normalized_entropy.cpu()),
+        "silhouette": float(silhouette.cpu()),
     }
 
     if labels is not None:
@@ -650,8 +652,8 @@ def _coverage(assignments, labels, n_clusters, coverage_threshold, n_classes=Non
     cluster_represented = (empp >= coverage_threshold).any(dim=1)
 
     return {
-        "class_coverage": float(class_represented.to(dtype).mean().detach().cpu()),
-        "cluster_coverage": float(cluster_represented.to(dtype).mean().detach().cpu()),
+        "class_coverage": float(class_represented.to(dtype).mean().cpu()),
+        "cluster_coverage": float(cluster_represented.to(dtype).mean().cpu()),
     }
 
 def _labels_to_class_ids(labels, n_classes=None, device=None):
@@ -910,7 +912,7 @@ def _sorted_cluster_marginal_posteriors(gmm_state):
     if weights is None:
         return None
 
-    sorted_profile = torch.sort(torch.as_tensor(weights).detach().float().cpu(), descending=True).values
+    sorted_profile = torch.sort(torch.as_tensor(weights).float().cpu(), descending=True).values
     return sorted_profile.tolist()
 
 
@@ -920,7 +922,7 @@ def _cluster_population_summary(gmm_state, top_k=10):
     if counts is None:
         assignments = gmm_state["assignments"].long()
         counts = torch.bincount(assignments, minlength=n_clusters)
-    counts = counts.detach().cpu().tolist()
+    counts = counts.cpu().tolist()
     indexed_counts = list(enumerate(counts))
 
     most_populated = sorted(indexed_counts, key=lambda item: (-item[1], item[0]))[:top_k]

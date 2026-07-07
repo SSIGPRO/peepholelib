@@ -34,6 +34,10 @@ class _ShardedPTD:
         return self._keys
 
     def __getitem__(self, idx):
+        if isinstance(idx, str):
+            if idx not in self._keys:
+                raise KeyError(idx)
+            return torch.cat([shard[idx] for shard in self.shards], dim=0)
 
         if isinstance(idx, int):
             si, li = self._resolve(idx)
