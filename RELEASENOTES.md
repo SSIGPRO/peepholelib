@@ -12,7 +12,7 @@
 - Add `MRC` (Multi-Range Coverage) driller.
 
 ## Scores
-- Add `CAM_score`.
+- Add `CAM_exp_score` and `CAM_lin_score`.
 
 ## Training
 - Refactor training utilities: `trainingLoops`, `validationLoops`, `savingLoops` replaced by `train_loops`, `val_loops`, `test_loops`, `save_fns`, `load_fns`.

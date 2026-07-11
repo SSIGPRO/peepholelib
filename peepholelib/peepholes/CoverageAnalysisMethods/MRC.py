@@ -20,6 +20,9 @@ class MRC(DrillBase):
         # minimum model confidence (max output) for a sample to be included in fit()
         self.confidence_threshold = kwargs.get('confidence_threshold', 0.9)
 
+        # normalize the peepholes by the total number of neurons, so their range lies in [0,1]
+        self.normalize = kwargs.get('normalize', True)
+
         self.reducer = kwargs['reducer']
         self.cv_parser = self.reducer.parser
 
@@ -62,7 +65,7 @@ class MRC(DrillBase):
 
         # keep only correctly classified samples above the confidence threshold
         results = dss[:]['result'].to(self.device)
-        confidence = dss[:]['output'].max(dim=1).values.to(self.device)
+        confidence = dss[:]['output'].softmax(dim=1).max(dim=1).values.to(self.device)
         mask = results & (confidence >= self.confidence_threshold)
         cvs = cvs[mask]
         labels = labels[mask]
@@ -137,7 +140,10 @@ class MRC(DrillBase):
             lam_vals = lam[q_idx, torch.arange(self.n_features, device=self.device)]
 
             cost = torch.where(out_of_range, torch.ones_like(data), 1-lam_vals)
-            eta[:, i] = cost.sum(dim=1)/self.n_features
+            eta[:, i] = cost.sum(dim=1)
+
+            if self.normalize:
+                eta[:, i] /= self.n_features
 
         return eta
 
@@ -154,7 +160,7 @@ class MRC(DrillBase):
 
     def load(self, **kwargs):
         if self._signature_path.exists():
-            signature = torch.load(self._signature_path)
+            signature = torch.load(self._signature_path, weights_only=True)
             self._v_min = signature['v_min'].to(self.device)
             self._v_max = signature['v_max'].to(self.device)
             self._delta = signature['delta'].to(self.device)
