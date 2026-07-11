@@ -197,8 +197,6 @@ class CoreVectors():
 
         if verbose: print(f'\n---- Applying normalization w.r.t. {wrt}\n')
         
-        
-        
         # denormalize
         for ds_key in self._corevds.keys():
             if ds_key not in self._normalizations: self._normalizations[ds_key] = {}
@@ -206,11 +204,15 @@ class CoreVectors():
             for mk in self._corevds[ds_key].keys():
                 # get old normalization
                 _denorm = False
-                norm_file = Path(self._corevds_files[ds_key][mk].as_posix()+'.normalization') 
-                if norm_file.exists():
-                    if verbose: print(f'Found normalization file {norm_file}. Data will be denormalized and renormalized.')
+                if mk in self._normalizations[ds_key]:
+                    old_means, old_stds = self._normalizations[ds_key][mk]
                     _denorm = True
-                    old_means, old_stds = torch.load(norm_file, weights_only=True)
+                else:
+                    norm_file = Path(self._corevds_files[ds_key][mk].as_posix()+'.normalization')
+                    if norm_file.exists():
+                        if verbose: print(f'Found normalization file {norm_file}. Data will be denormalized and renormalized.')
+                        old_means, old_stds = torch.load(norm_file, weights_only=True)
+                        _denorm = True
 
                 dl = DataLoader(self._corevds[ds_key].tds[mk], batch_size=bs, collate_fn=lambda x: x, num_workers=n_threads)
 
@@ -232,7 +234,7 @@ class CoreVectors():
                     data[mk] = (data[mk] - means[mk])/stds[mk]
 
                 torch.save((means[mk], stds[mk]), norm_file)
-                self._normalizations[ds_key][mk] = means, stds
+                self._normalizations[ds_key][mk] = means[mk], stds[mk]
 
         return
     
@@ -244,7 +246,7 @@ class CoreVectors():
         - loaders (list[str]): load the specified loaders
         - names dict(str:str): Dictionary with key being the module name, and value being a name to append to the PTD file with the corevectors. Corevectors are loaded from a file with name `<loader>/<key>.<name>. If `None` is given as `name` loads  `<loader>/<key>`.
         - mode (str): Opens the file with the specified mode. See 'tensordict.PersistentTensorDict.from_h5()' for details. Defaults to 'r'.
-        - norm_file (str): load the normalization information. Defaults to None. 
+        - load_norm (bool): load the normalization stats into memory when available. Defaults to True.
         - verbose (bool): print progress messages.
         '''
         self.check_uncontexted()
@@ -252,6 +254,7 @@ class CoreVectors():
         loaders = kwargs['loaders']
         names = kwargs['names']
         mode = kwargs.get('mode', 'r')
+        load_norm = kwargs.get('load_norm', True)
         verbose = kwargs.get('verbose', False)
 
         self.__close()
@@ -273,10 +276,11 @@ class CoreVectors():
                 _td = PersistentTensorDict.from_h5(file_path, mode=mode)
                 _tds[mk] = _td
 
-                norm_file = Path(file_path.as_posix()+'.normalization') 
-                if norm_file.exists():
-                    if verbose: print(f'Loading normalization from {norm_file}. ')
-                    self._normalizations[ds_key][mk] = torch.load(norm_file, weights_only=True)
+                if load_norm:
+                    norm_file = Path(file_path.as_posix()+'.normalization')
+                    if norm_file.exists():
+                        if verbose: print(f'Loading normalization from {norm_file}. ')
+                        self._normalizations[ds_key][mk] = torch.load(norm_file, weights_only=True)
 
             self._corevds[ds_key] = _ModuleWiseStack(tds=_tds)
             if verbose: print('Loaded n_samples: ', len(self._corevds[ds_key]))
@@ -290,6 +294,7 @@ class CoreVectors():
         # reset these
         self._corevds = {}
         self._corevds_files = {}
+        self._normalizations = {}
         return
 
     def __enter__(self):
