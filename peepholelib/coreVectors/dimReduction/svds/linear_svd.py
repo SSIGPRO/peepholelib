@@ -27,7 +27,7 @@ class LinearSVD(DRB):
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
-            self._svd = torch.load(file_path)
+            self._svd = torch.load(file_path, weights_only=True)
         else: 
             # computation
             W = torch.hstack((_layer.weight, _layer.bias.reshape(-1,1))).to(device)

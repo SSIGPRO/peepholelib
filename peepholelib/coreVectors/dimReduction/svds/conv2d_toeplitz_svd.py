@@ -32,7 +32,7 @@ class Conv2dToeplitzSVD(DRB):
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
-            self._svd = torch.load(file_path)
+            self._svd = torch.load(file_path, weights_only=True)
         else: 
             # Turn on activation saving
             model.set_activations(save_input=True, save_output=False)

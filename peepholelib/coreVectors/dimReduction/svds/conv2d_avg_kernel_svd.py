@@ -31,7 +31,7 @@ class Conv2dAvgKernelSVD(DRB):
 
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
-            self._svd = torch.load(file_path)
+            self._svd = torch.load(file_path, weights_only=True)
         else: 
             if not isinstance(_layer, torch.nn.Conv2d):
                 raise RuntimeError("Only Conv2D is suported") 
