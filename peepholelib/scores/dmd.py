@@ -230,6 +230,7 @@ def DMD_score(**kwargs):
     pos_loader_test = kwargs.get('pos_loader_test', 'test')
     neg_loaders = kwargs['neg_loaders']
     target_modules = kwargs.get('target_modules', None)
+    invert = kwargs.get('invert', False)
     append_scores = kwargs.get('append_scores', None)
     score_name = kwargs.get('score_name', 'DMD')
 
@@ -256,6 +257,10 @@ def DMD_score(**kwargs):
     train_pos = torch.stack([phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
     test_pos = torch.stack([phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
+    if invert:
+        train_pos = 1 - train_pos
+        test_pos = 1 - test_pos
+
     nps = len(train_pos) # number of positive samples
 
     for neg_test_key, neg_train_loaders in neg_loaders.items():
@@ -269,12 +274,17 @@ def DMD_score(**kwargs):
             idx = torch.randperm(len(_train_neg))
             train_neg.append(_train_neg[idx[i*nspnl:(i+1)*nspnl]])
         train_neg = torch.vstack(train_neg)
+        if invert:
+            train_neg = 1 - train_neg
 
         # train data and labels
         train_data = torch.vstack((train_pos, train_neg))
         train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+
         # test data
         test_neg = torch.stack([phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        if invert:
+            test_neg = 1 - test_neg
         test_data = torch.vstack((test_pos, test_neg))
 
         _, y_test = __DMD_score__(

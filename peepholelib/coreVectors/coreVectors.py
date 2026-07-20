@@ -2,6 +2,7 @@
 from pathlib import Path
 from tqdm import tqdm
 from math import ceil
+from time import sleep
 
 # torch stuff
 import torch
@@ -53,6 +54,7 @@ class CoreVectors():
         - activations_parser (callable): A function for parsing activations. Defaults to 'get_in_activations()' (see peepholelib.models.model_wrap.py for details on how we get the activations).
         - names dict(str:str): Dictionary with key being the module name, and value being a name to append to the PTD file with the corevectors. Corevectors will be saved in a file with name `<loader>/<key>.<name>. If `None` it is ignored. Defaults to `None`.
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
+        - retry_load_time (int): Time (in seconds) to wait before retrying loading an already existing PTD with corevectors. If `None` no further attempts are done. Defaults to `None`.
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
         - verbose (bool): print progress messages.
         '''
@@ -64,11 +66,12 @@ class CoreVectors():
         reducers = kwargs.get('reducers')
         activations_parser = kwargs.get('activations_parser', get_in_activations)
         names = kwargs.get('names', None)
-        bs = kwargs.get('batch_size', 64) 
-        n_threads = kwargs.get('n_threads', 1) 
+        bs = kwargs.get('batch_size', 64)
+        rlt = kwargs.get('retry_load_time', None)
+        n_threads = kwargs.get('n_threads', 1)
         save_input = kwargs.get('save_input', True)
-        save_output = kwargs.get('save_output', False) 
-        verbose = kwargs.get('verbose', False) 
+        save_output = kwargs.get('save_output', False)
+        verbose = kwargs.get('verbose', False)
     
         model = self._model 
         device = self._model.device 
@@ -107,7 +110,18 @@ class CoreVectors():
 
                 if file_path.exists():
                     if verbose: print(f'File {file_path} exists. Loading from disk.')
-                    _td = PersistentTensorDict.from_h5(file_path, mode='r')
+
+                    if rlt == None:
+                        _td = PersistentTensorDict.from_h5(file_path, mode='r')
+                    else:
+                        while True:
+                            try:
+                                _td = PersistentTensorDict.from_h5(file_path, mode='r')
+                                break
+                            except BlockingIOError:
+                                if verbose: print(f'Seems like the file {file_path} is busy. Will wait {rlt} seconds and try again.')
+                                sleep(rlt)
+
                     n_samples = len(_td)
                 else:
                     n_samples = len(datasets._dss[ds_key])

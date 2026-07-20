@@ -28,6 +28,7 @@ def conceptogram_protoclass_score(**kwargs):
     target_modules = kwargs.get('target_modules', None)
     proto_key = kwargs.get('proto_key', 'train')
     proto_th = kwargs.get('proto_threshold', 0.9)
+    invert = kwargs.get('invert', False)
     append_scores = kwargs.get('append_scores', None)
     score_name = kwargs.get('score_name', 'Proto-Class')
     proto = kwargs.get('proto', None) #TODO: is this used? remove
@@ -51,6 +52,9 @@ def conceptogram_protoclass_score(**kwargs):
     #-----------
     # get conceptogram 
     cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
+
+    if invert:
+        cpss = 1 - cpss
 
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)

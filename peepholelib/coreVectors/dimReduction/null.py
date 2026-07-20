@@ -17,8 +17,8 @@ class Null(DRB):
         """
         # Assuming the class token is the first token in the sequence
 
-        act_data = kwargs['act_data'] 
-        return act_data.flatten()
+        act_data = kwargs['act_data']
+        return act_data.flatten(start_dim=1)
 
     def parser(self, **kwargs):
         cvs = kwargs['cvs']
