@@ -51,10 +51,7 @@ def conceptogram_protoclass_score(**kwargs):
     # computations
     #-----------
     # get conceptogram 
-    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, verbose=verbose)
-
-    if invert:
-        cpss = 1 - cpss
+    cpss = phs.get_conceptograms(loaders=loaders, target_modules=target_modules, invert=invert, verbose=verbose)
 
     # sizes and values just to facilitate 
     nd = cpss[loaders[0]].shape[1] # number of layers (distributions)

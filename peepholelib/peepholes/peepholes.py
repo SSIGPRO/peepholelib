@@ -195,6 +195,7 @@ class Peepholes:
         self.check_uncontexted()
         
         target_modules = kwargs.get('target_modules', None)
+        invert = kwargs.get('invert', False)
         verbose = kwargs.get('verbose', False)
 
         if self._phs == {}:
@@ -219,6 +220,9 @@ class Peepholes:
                     raise ValueError(f"Peepholes for module {module} do not exist. Please run get_peepholes() first.")
 
             _conceptograms[ds_key] = torch.stack([self._phs[ds_key][layer] for layer in target_modules], dim=1)
+
+            if invert:
+                _conceptograms[ds_key] = 1 - _conceptograms[ds_key]
 
         return _conceptograms
 
