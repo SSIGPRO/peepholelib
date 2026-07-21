@@ -1,8 +1,20 @@
-from time import time
 import torch
 
 def default_val_loop(self, **kwargs):
+    """
+    Default validation loop: runs one validation epoch using the pre-built
+    `DataLoader` for the validation split, steps the scheduler, and tracks
+    the best model/early stopping.
+
+    Args:
+    - epoch (int): current epoch index, passed by `Trainer._train_epoch`.
+    - dataset_key (str): key into `self._dls`/`self._iters` for the validation split. Defaults to `'val'`.
+    """
     epoch = kwargs['epoch']
+    dataset_key = kwargs.get('dataset_key', 'val')
+
+    val_dl = self._dls[dataset_key]
+    iter_val = self._iters[dataset_key]
 
     self.model._model.eval()
     with torch.no_grad():
@@ -10,7 +22,7 @@ def default_val_loop(self, **kwargs):
         acc_acc = 0.0
         samples_acc = 0
 
-        for _, _data in zip(range(self.iter_val), self.val_dl):
+        for _, _data in zip(range(iter_val), val_dl):
             data = self.in_parser(_data)
             images = data["image"].contiguous().to(self.device, non_blocking=True)
             labels = data["label"].contiguous().to(self.device, non_blocking=True)
