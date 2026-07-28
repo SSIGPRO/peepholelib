@@ -33,7 +33,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def load(self, **kwargs):
         if self._empp_file.exists():
-            self._empp = torch.load(self._empp_file).to(self.device)
+            self._empp = torch.load(self._empp_file, weights_only=True).to(self.device)
         return 
 
     @abc.abstractmethod

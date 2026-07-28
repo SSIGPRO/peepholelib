@@ -12,7 +12,7 @@ def conceptogram_protoclass_score(**kwargs):
     - loaders (list[str]): loaders to consider, usually ['train', 'test', 'val'], if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
     - target_modules (list[str]): list if target modules, as keys from the model `statedict`.
     - proto_key (str): The key in `loaders` to get compute the protoclasses from.
-    - proto_th (float): Model's confidence threshold to select samples for the protoclass computation ('0 <= proto_th <= 1').
+    - proto_threshold (float): Model's confidence threshold to select samples for the protoclass computation ('0 <= proto_threshold <= 1'). Raises a `RuntimeError` if no correctly classified sample passes the threshold for some class. Defaults to 0.9.
     - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
     - verbose (bool): print progress messages.
     - proto proto: Protoclasses, an array of shape '(nc, nd, nc)', with 'nc' the number of classes and 'nd' the number of modules in 'target_modules'. Each element in the first dim is the protoclass of the respective label.
@@ -66,7 +66,10 @@ def conceptogram_protoclass_score(**kwargs):
         for i in range(nc):
             cl = torch.logical_and(labels == i, results == 1)
             idx = torch.logical_and(cl, confs>proto_th)
-            
+
+            if idx.sum() == 0:
+                raise RuntimeError(f'No correctly classified samples with confidence > {proto_th} in "{proto_key}" for class {i}. Consider lowering `proto_threshold`.')
+
             _p = cps[idx].sum(dim=0)  ## P'_j
             _p /= _p.sum(dim=1, keepdim=True)
             proto[i][:] = _p[:]

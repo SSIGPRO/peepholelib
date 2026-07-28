@@ -57,8 +57,8 @@ class DeepMahalanobisDistance(DrillBase):
     def load(self, **kwargs):
         # return true or false if DMD is fitted or not
         if self.mean_path.exists() and self.precision_path.exists():
-            self._means = torch.load(self.mean_path).to(self.device)
-            self._precision = torch.load(self.precision_path).to(self.device)
+            self._means = torch.load(self.mean_path, weights_only=True).to(self.device)
+            self._precision = torch.load(self.precision_path, weights_only=True).to(self.device)
             ok = True
         else:
             ok = False
