@@ -2,13 +2,24 @@
 import torch
 
 def default_test_loop(self, **kwargs):
+    """
+    Default test loop: evaluates the model on the pre-built `DataLoader`
+    for the test split.
+
+    Args:
+    - dataset_key (str): key into `self._dls` for the test split. Defaults to `'test'`.
+    """
+    dataset_key = kwargs.get('dataset_key', 'test')
+
+    test_dl = self._dls[dataset_key]
+
     self.model._model.eval()
     loss_acc = 0.0
     acc_acc = 0.0
 
-    n_samples = len(self.test_dl.dataset)
+    n_samples = len(test_dl.dataset)
     with torch.no_grad():
-        for _data in self.test_dl:
+        for _data in test_dl:
             data = self.in_parser(_data)
             images = data["image"].contiguous().to(self.device, non_blocking=True)
             labels = data["label"].contiguous().to(self.device, non_blocking=True)

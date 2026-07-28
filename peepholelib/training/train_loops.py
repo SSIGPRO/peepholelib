@@ -1,11 +1,24 @@
 def default_train_loop(self, **kwargs):
+    """
+    Default training loop: runs one training epoch using the pre-built
+    `DataLoader` for the train split.
+
+    Args:
+    - epoch (int): current epoch index, passed by `Trainer._train_epoch`.
+    - dataset_key (str): key into `self._dls`/`self._iters` for the train split. Defaults to `'train'`.
+    """
     epoch = kwargs['epoch']
+    dataset_key = kwargs.get('dataset_key', 'train')
+
+    train_dl = self._dls[dataset_key]
+    iter_train = self._iters[dataset_key]
+
     loss_acc = 0.0
     acc_acc = 0.0
     samples_acc = 0
     self.model._model.train()
 
-    for it, _data in zip(range(self.iter_train), self.train_dl):
+    for it, _data in zip(range(iter_train), train_dl):
         data = self.in_parser(_data)
         images = data["image"].contiguous().to(self.device, non_blocking=True)
         labels = data["label"].contiguous().to(self.device, non_blocking=True)

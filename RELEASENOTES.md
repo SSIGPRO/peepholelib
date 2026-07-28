@@ -17,6 +17,9 @@
 ## Training
 - Refactor training utilities: `trainingLoops`, `validationLoops`, `savingLoops` replaced by `train_loops`, `val_loops`, `test_loops`, `save_fns`, `load_fns`.
 - `Trainer` is no longer abstract; loop functions are injected via `partial` and can be swapped without subclassing.
+- `Trainer` takes `datasets`, `dataloader_kwargs`, and `iterations` as dicts keyed by `dataset_key`. `DataLoader`s are built once in `__init__`.
+- Rename `Trainer.validation_loop` to `Trainer.val_loop`.
+- Fix `save_every=0` crash, phase-number detection for names containing digits, and resume crash when a checkpoint saved without a scheduler is loaded into a scheduler-configured run.
 
 # v.0.0.2
 

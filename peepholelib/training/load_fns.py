@@ -28,7 +28,7 @@ def default_load(self, **kwargs):
     except (ValueError, KeyError):
         if self.verbose: print('Optimizer state incompatible with checkpoint, starting fresh.')
                                                                                                     
-    if self.scheduler is not None and 'scheduler' in data:
+    if self.scheduler is not None and 'scheduler' in data and data['scheduler'] is not None:
         try:
             self.scheduler.load_state_dict(data['scheduler'])
         except (ValueError, KeyError):
