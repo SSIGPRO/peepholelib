@@ -67,6 +67,7 @@ class Peepholes:
 
         if loaders == None: loaders = list(cvs._corevds.keys())
 
+        tacc = [] 
         for ds_key in loaders:
             #------------------------
             # Pre-allocate peepholes
@@ -106,7 +107,7 @@ class Peepholes:
                     # dry run to get size and dtype
                     _cv = cvs._corevds[ds_key][mk][0:1]
                     _d = dss._dss[ds_key][0:1] 
-                    _ph = self._drillers[mk](cvs=_cv, dss=_d)
+                    _ph, _ = self._drillers[mk](cvs=_cv, dss=_d)
 
                     # allocate peepholes 
                     _td[mk] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
@@ -143,13 +144,21 @@ class Peepholes:
                 _dss = data[0]
                 _cvs = data[1]
                 phs = {mk: data[i+2] for i, mk in enumerate(_mtc)}
+
                 for mk in _mtc:
-                    phs[mk][mk] = self._drillers[mk](cvs=_cvs[mk], dss=_dss)
+                    phs[mk][mk], _tt = self._drillers[mk](cvs=_cvs[mk], dss=_dss)
+            
+                tacc.append(_tt)
             
             # save as stacked
             self._phs[ds_key] = _ModuleWiseStack(tds=_tds)
 
-        return 
+        tacc = torch.tensor(tacc)
+
+        _m = tacc.mean()
+        _s = tacc.std()
+
+        return (_m*(10^6)).item(), (_s*(10^6)).item()
 
     def load_only(self, **kwargs):
         '''
