@@ -1,25 +1,24 @@
 from pathlib import Path
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 from peepholelib.datasets.datasetWrap import DatasetWrap
 
 # UEA Class Registery
-class UEAClassRegistry:
-    _cache = {}
-    @staticmethod
-    def build(dataset_name, raw_labels):
-        unique_labels = sorted(set(raw_labels))
-        mapping = {
-            label: idx
-            for idx, label in enumerate(unique_labels)
-        }
-        UEAClassRegistry._cache[dataset_name] = mapping
-        return mapping
-    @staticmethod
-    def get(dataset_name):
-        return UEAClassRegistry._cache.get(dataset_name)
+# class UEAClassRegistry:
+#     _cache = {}
+#     @staticmethod
+#     def build(dataset_name, raw_labels):
+#         unique_labels = sorted(set(raw_labels))
+#         mapping = {
+#             label: idx
+#             for idx, label in enumerate(unique_labels)
+#         }
+#         UEAClassRegistry._cache[dataset_name] = mapping
+#         return mapping
+#     @staticmethod
+#     def get(dataset_name):
+#         return UEAClassRegistry._cache.get(dataset_name)
     
 # Torch Dataset
 class TSDataset(Dataset):
@@ -45,6 +44,7 @@ class TSDataWrap(DatasetWrap):
             )
         self.root = Path(path)
         self.dataset_name = self.root.name
+        self.label_map = None
 
         # transforms
         self.train_ratio = kwargs.get("train_ratio",0.8)
@@ -170,13 +170,11 @@ class TSDataWrap(DatasetWrap):
             [self.label_map[label] for label in raw_y],
             dtype=torch.long
         )
-
         return raw_X, y
     
     # Compute target length for all samples
     def _compute_target_length(self, train_samples, test_samples):
         lengths = []
-
         for dataset in (train_samples, test_samples):
             for sample in dataset:
                 for dim in sample:
@@ -247,9 +245,7 @@ class TSDataWrap(DatasetWrap):
             processed.append(
                 torch.stack(sample, dim=0)
             )
-
         return torch.stack(processed, dim=0)
-
 
     # Pad Sample
     def _pad_sample(self, sample, target_length):
@@ -277,7 +273,6 @@ class TSDataWrap(DatasetWrap):
             padded.append(dim)
 
         return padded
-
 
     # Truncate Sample
     def _truncate_sample(self, sample, target_length):
