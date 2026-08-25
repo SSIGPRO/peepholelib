@@ -4,22 +4,6 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from peepholelib.datasets.datasetWrap import DatasetWrap
 
-# UEA Class Registery
-# class UEAClassRegistry:
-#     _cache = {}
-#     @staticmethod
-#     def build(dataset_name, raw_labels):
-#         unique_labels = sorted(set(raw_labels))
-#         mapping = {
-#             label: idx
-#             for idx, label in enumerate(unique_labels)
-#         }
-#         UEAClassRegistry._cache[dataset_name] = mapping
-#         return mapping
-#     @staticmethod
-#     def get(dataset_name):
-#         return UEAClassRegistry._cache.get(dataset_name)
-    
 # Torch Dataset
 class TSDataset(Dataset):
     def __init__(self,X,y):
