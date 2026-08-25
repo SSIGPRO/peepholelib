@@ -2,6 +2,7 @@
 import abc  
 from pathlib import Path
 from tqdm import tqdm
+from time import time
 
 # torch stuff
 import torch
@@ -102,8 +103,10 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         if self._empp is None:
             raise RuntimeError('No prediction probabilities. Please run classifiers[layer].compute_empirical_posteriors() first.')
         data = self.parser(cvs=cvs)
+
+        t0 = time()
         cp = self.classifier_probabilities(data=data, verbose=verbose).to(self.device)
         lp = cp@self._empp
         lp /= lp.sum(dim=1, keepdim=True)
 
-        return lp
+        return lp, time()-t0

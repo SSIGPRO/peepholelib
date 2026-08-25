@@ -1,5 +1,6 @@
 # python stuff
 from pathlib import Path
+from time import time
 
 # torch stuff
 import torch
@@ -27,7 +28,7 @@ class MRC(DrillBase):
         self.cv_parser = self.reducer.parser
 
         # computed in fit()
-        # v_min, v_max, delta: (nl_model, n_features)
+        # v_min, v_max, delta: (nl_model, n_features). delta has the zeros replaced by ones, so it can be used as a divisor
         # lam (lambda in the paper): (nl_model, Q, n_features)
         self._v_min = None
         self._v_max = None
@@ -98,7 +99,7 @@ class MRC(DrillBase):
 
             self._v_min[i] = v_min
             self._v_max[i] = v_max
-            self._delta[i] = delta
+            self._delta[i] = delta_safe
             self._lam[i] = lam
         return
 
@@ -119,33 +120,28 @@ class MRC(DrillBase):
         data = self.cv_parser(cvs=cvs).to(self.device)
 
         n_samples = data.shape[0]
-        eta = torch.zeros(n_samples, self.nl_model, device=self.device)
 
-        for i in range(self.nl_model):
-            v_min = self._v_min[i]
-            v_max = self._v_max[i]
-            delta = self._delta[i]
-            lam = self._lam[i] # (Q, n_features)
+        # (n_samples, 1, n_features), broadcast against the (nl_model, n_features) signature
+        data = data.unsqueeze(1)
 
-            # (n_samples, n_features)
-            out_of_range = (data < v_min) | (data > v_max)
+        t0 = time()
+        # (n_samples, nl_model, n_features)
+        out_of_range = (data < self._v_min) | (data > self._v_max)
 
-            delta_safe = delta.clone()
-            delta_safe[delta_safe == 0] = 1
+        q_idx = torch.ceil((data - self._v_min)/self._delta).long()
+        # 0-indexed, clamped to valid range
+        q_idx = (q_idx - 1).clamp(min=0, max=self.Q - 1)
 
-            q_idx = torch.ceil((data - v_min)/delta_safe).long()
-            # 0-indexed, clamped to valid range
-            q_idx = (q_idx - 1).clamp(min=0, max=self.Q - 1)
+        # lam_vals[n, i, j] = lam[i, q_idx[n, i, j], j]
+        lam_vals = self._lam.expand(n_samples, -1, -1, -1).gather(2, q_idx.unsqueeze(2)).squeeze(2)
 
-            lam_vals = lam[q_idx, torch.arange(self.n_features, device=self.device)]
+        cost = torch.where(out_of_range, torch.ones_like(lam_vals), 1-lam_vals)
+        eta = cost.sum(dim=2)
 
-            cost = torch.where(out_of_range, torch.ones_like(data), 1-lam_vals)
-            eta[:, i] = cost.sum(dim=1)
+        if self.normalize:
+            eta /= self.n_features
 
-            if self.normalize:
-                eta[:, i] /= self.n_features
-
-        return eta
+        return eta, time()-t0
 
     def save(self, **kwargs):
         self._mrc_folder.mkdir(parents=True, exist_ok=True)
