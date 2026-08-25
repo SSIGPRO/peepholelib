@@ -66,22 +66,13 @@ class TSDataWrap(DatasetWrap):
                 f"{self.variable_length}"
             )
         self.__dataset__ = {}
-        self.__load_data__()
+        #self.__load_data__()
         
     # Load data
     def __load_data__(self):
         train_file = (self.root / f"{self.dataset_name}_TRAIN.ts")
         test_file = (self.root /f"{self.dataset_name}_TEST.ts")
 
-        if not train_file.exists():
-            raise FileNotFoundError(
-                f"TRAIN file not found:\n{train_file}"
-            )
-
-        if not test_file.exists():
-            raise FileNotFoundError(
-                f"TEST file not found:\n{test_file}"
-            )
         # Load Raw Train
         train_samples, train_y = self._load_ts(train_file)
 
@@ -117,175 +108,224 @@ class TSDataWrap(DatasetWrap):
     def _load_ts(self, file_path):
         raw_X = []
         raw_y = []
-        reading_data = False
+
         with open(file_path, "r") as f:
+
+            # Read header until @data
             for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-    
-                # Skip header
-                if not reading_data:
-                    if line.lower() == "@data":
-                        reading_data = True
-
-                    continue
-
-                # Parse one sample
-                parts = line.split(":")
-                if len(parts) < 2:
-                    continue
-                raw_y.append(
-                    parts[-1].strip()
+                if line.strip().lower() == "@data":
+                    break
+            else:
+                raise RuntimeError(
+                    f"No @data section found in {file_path}"
                 )
-                sample = []
-                for dim in parts[:-1]:
-                    values = np.asarray(
-                        [
-                            float(v)
-                            for v in dim.split(",")
-                        ],
 
-                        dtype=np.float32
-                    )
-                    sample.append(values)
-                raw_X.append(sample)
+            # Read all data lines at once
+            data_lines = f.readlines()
+
+        # Process all data lines
+        for line in data_lines:
+            line = line.strip()
+
+            if not line:
+                continue
+
+            # Parse one sample
+            parts = line.split(":")
+
+            if len(parts) < 2:
+                continue
+
+            raw_y.append(parts[-1].strip())
+            sample = []
+            for dim in parts[:-1]:
+                values = torch.tensor(
+                    [
+                        float(v)
+                        for v in dim.split(",")
+                    ],
+                    dtype=torch.float32
+                )
+
+                sample.append(values)
+
+            raw_X.append(sample)
+
         if len(raw_X) == 0:
             raise RuntimeError(
                 f"No samples parsed from {file_path}"
             )
+
         # Label Encoding
         if "TRAIN" in file_path.name.upper():
-            label_map = UEAClassRegistry.build(
-                self.dataset_name,
-                raw_y
+            self.label_map = {
+                label: idx
+                for idx, label in enumerate(sorted(set(raw_y)))
+            }
+
+        elif self.label_map is None:
+            raise RuntimeError(
+                f"No label map for {self.dataset_name}"
             )
-        else:
-            label_map = UEAClassRegistry.get(
-                self.dataset_name
-            )
-            if label_map is None:
-                raise RuntimeError(
-                    f"No label map for "
-                    f"{self.dataset_name}"
-                )
-        y = np.asarray(
-            [
-                label_map[label]
-                for label in raw_y
-            ],
-            dtype=np.int64
-        )       
+
+        y = torch.tensor(
+            [self.label_map[label] for label in raw_y],
+            dtype=torch.long
+        )
+
         return raw_X, y
     # Compute target length for all samples
-    def _compute_target_length(self,train_samples,test_samples):
+    # Compute target length
+    def _compute_target_length(self, train_samples, test_samples):
         lengths = []
+
         for dataset in (train_samples, test_samples):
             for sample in dataset:
                 for dim in sample:
                     lengths.append(len(dim))
+
         min_length = min(lengths)
         max_length = max(lengths)
+
         print("\nSequence length statistics")
         print("--------------------------")
         print("Minimum :", min_length)
         print("Maximum :", max_length)
+
         if min_length == max_length:
             print("Dataset type : Equal-length")
         else:
             print("Dataset type : Variable-length")
+
             if self.variable_length == "error":
                 raise ValueError(
                     "Variable-length dataset detected."
                 )
+
         return max_length
 
+
     # Prepare samples
-    def _prepare_samples(self,samples,target_length):
+    def _prepare_samples(self, samples, target_length):
         processed = []
-        
+
         # Check that every sample has the same number of dimensions (channels)
         expected_channels = len(samples[0])
-        
+
         # Select processing function once
         if self.variable_length == "truncate":
             processor = self._truncate_sample
+
         elif self.variable_length == "interpolate":
             processor = self._interpolate_sample
+
         elif self.variable_length == "pad":
             processor = self._pad_sample
+
         elif self.variable_length == "auto":
             if self.is_variable_length:
                 processor = self._pad_sample
             else:
-
-            # Equal-length dataset:
-            # No processing required.
+                # Equal-length dataset:
+                # No processing required.
                 processor = None
+
         else:
             raise ValueError(
                 f"Unknown variable_length mode: "
                 f"{self.variable_length}"
             )
+
         # Process every sample
         for i, sample in enumerate(samples):
+
             if len(sample) != expected_channels:
                 raise ValueError(
                     f"Sample {i} has {len(sample)} channels "
                     f"but expected {expected_channels}."
                 )
+
             if processor is not None:
-                sample = processor(sample,target_length)
+                sample = processor(sample, target_length)
+
             processed.append(
-                np.stack(sample, axis=0)
+                torch.stack(sample, dim=0)
             )
-        return np.stack(processed,axis=0)
+
+        return torch.stack(processed, dim=0)
+
+
     # Pad Sample
-    def _pad_sample(self,sample,target_length):
+    def _pad_sample(self, sample, target_length):
         padded = []
+
         for dim in sample:
-            length = len(dim)
+            # Convert to tensor
+            dim = torch.as_tensor(
+                dim,
+                dtype=torch.float32
+            )
+
+            length = dim.shape[0]
 
             # Pad shorter sequences
             if length < target_length:
-                dim = np.pad(
+                padding = target_length - length
+
+                dim = F.pad(
                     dim,
-                    (0, target_length - length),
+                    (0, padding),
                     mode="constant",
-                    constant_values=0
+                    value=0
                 )
-            
+
             # Truncate longer sequences (safety check)
             elif length > target_length:
                 dim = dim[:target_length]
-            padded.append(
-                dim.astype(np.float32)
-            )
+
+            padded.append(dim)
+
         return padded
 
+
     # Truncate Sample
-    def _truncate_sample(self,sample,target_length):
+    def _truncate_sample(self, sample, target_length):
         truncated = []
+
         for dim in sample:
-            truncated.append(
-                dim[:target_length].astype(
-                    np.float32
-                )
+            dim = torch.as_tensor(
+                dim,
+                dtype=torch.float32
             )
+
+            truncated.append(
+                dim[:target_length]
+            )
+
         return truncated
+
+
     # Interpolate Sample
-    def _interpolate_sample(self,sample,target_length):
+    def _interpolate_sample(self, sample, target_length):
         interpolated = []
+
         for dim in sample:
-            tensor = torch.tensor(dim,dtype=torch.float32)
+            tensor = torch.as_tensor(
+                dim,
+                dtype=torch.float32
+            )
+
             tensor = tensor.unsqueeze(0).unsqueeze(0)
+
             tensor = F.interpolate(
                 tensor,
                 size=target_length,
                 mode="linear",
                 align_corners=False
             )
+
             interpolated.append(
-                tensor.squeeze().numpy()
+                tensor.squeeze(0).squeeze(0)
             )
+
         return interpolated
