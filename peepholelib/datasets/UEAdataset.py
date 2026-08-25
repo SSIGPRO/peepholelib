@@ -51,7 +51,8 @@ class TSDataWrap(DatasetWrap):
             )
         self.__dataset__ = {}
         #self.__load_data__()
-        
+        return 
+    
     # Load data
     def __load_data__(self):
         train_file = (self.root / f"{self.dataset_name}_TRAIN.ts")
