@@ -146,9 +146,7 @@ class TSDataWrap(DatasetWrap):
                     ],
                     dtype=torch.float32
                 )
-
                 sample.append(values)
-
             raw_X.append(sample)
 
         if len(raw_X) == 0:
@@ -174,8 +172,8 @@ class TSDataWrap(DatasetWrap):
         )
 
         return raw_X, y
+    
     # Compute target length for all samples
-    # Compute target length
     def _compute_target_length(self, train_samples, test_samples):
         lengths = []
 
@@ -203,8 +201,6 @@ class TSDataWrap(DatasetWrap):
                 )
 
         return max_length
-
-
     # Prepare samples
     def _prepare_samples(self, samples, target_length):
         processed = []
@@ -261,11 +257,7 @@ class TSDataWrap(DatasetWrap):
 
         for dim in sample:
             # Convert to tensor
-            dim = torch.as_tensor(
-                dim,
-                dtype=torch.float32
-            )
-
+            dim = torch.as_tensor(dim,dtype=torch.float32)
             length = dim.shape[0]
 
             # Pad shorter sequences
@@ -282,7 +274,6 @@ class TSDataWrap(DatasetWrap):
             # Truncate longer sequences (safety check)
             elif length > target_length:
                 dim = dim[:target_length]
-
             padded.append(dim)
 
         return padded
@@ -293,28 +284,19 @@ class TSDataWrap(DatasetWrap):
         truncated = []
 
         for dim in sample:
-            dim = torch.as_tensor(
-                dim,
-                dtype=torch.float32
-            )
-
+            dim = torch.as_tensor(dim,dtype=torch.float32)
             truncated.append(
                 dim[:target_length]
             )
 
         return truncated
-
-
+    
     # Interpolate Sample
     def _interpolate_sample(self, sample, target_length):
         interpolated = []
 
         for dim in sample:
-            tensor = torch.as_tensor(
-                dim,
-                dtype=torch.float32
-            )
-
+            tensor = torch.as_tensor(dim,dtype=torch.float32)
             tensor = tensor.unsqueeze(0).unsqueeze(0)
 
             tensor = F.interpolate(
