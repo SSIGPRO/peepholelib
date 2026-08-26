@@ -13,19 +13,15 @@ class TSDataset(Dataset):
         return len(self.X)
     def __getitem__(self, idx):
         x = self.X[idx]
-        return {
-            "timeseries": x,
-            "label": self.y[idx]
-        }
+        return {"timeseries": x,"label": self.y[idx]}
+    
 # UEA data wrapper
 class TSDataWrap(DatasetWrap):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         path = kwargs.get("path")
         if path is None:
-            raise ValueError(
-                "UEA dataset path must be provided."
-            )
+            raise ValueError("UEA dataset path must be provided.")
         self.root = Path(path)
         self.dataset_name = self.root.name
         self.label_map = None
@@ -36,19 +32,16 @@ class TSDataWrap(DatasetWrap):
         
         # Variable-length handling
         self.variable_length = kwargs.get("variable_length","pad")
-        valid_modes = {
+        valid_modes = [
             "auto",
             "pad",
             "truncate",
             "interpolate",
             "error"
-        }
+        ]
 
         if self.variable_length not in valid_modes:
-            raise ValueError(
-                f"Unknown variable_length mode: "
-                f"{self.variable_length}"
-            )
+            raise ValueError(f"Unknown variable_length mode: "f"{self.variable_length}")
         self.__dataset__ = {}
         #self.__load_data__()
         return 
@@ -101,9 +94,7 @@ class TSDataWrap(DatasetWrap):
                 if line.strip().lower() == "@data":
                     break
             else:
-                raise RuntimeError(
-                    f"No @data section found in {file_path}"
-                )
+                raise RuntimeError(f"No @data section found in {file_path}")
 
             # Read all data lines at once
             data_lines = f.readlines()
@@ -135,9 +126,7 @@ class TSDataWrap(DatasetWrap):
             raw_X.append(sample)
 
         if len(raw_X) == 0:
-            raise RuntimeError(
-                f"No samples parsed from {file_path}"
-            )
+            raise RuntimeError(f"No samples parsed from {file_path}")
 
         # Label Encoding
         if "TRAIN" in file_path.name.upper():
@@ -147,9 +136,7 @@ class TSDataWrap(DatasetWrap):
             }
 
         elif self.label_map is None:
-            raise RuntimeError(
-                f"No label map for {self.dataset_name}"
-            )
+            raise RuntimeError(f"No label map for {self.dataset_name}")
 
         y = torch.tensor(
             [self.label_map[label] for label in raw_y],
@@ -168,20 +155,10 @@ class TSDataWrap(DatasetWrap):
         min_length = min(lengths)
         max_length = max(lengths)
 
-        print("\nSequence length statistics")
-        print("--------------------------")
-        print("Minimum :", min_length)
-        print("Maximum :", max_length)
-
-        if min_length == max_length:
-            print("Dataset type : Equal-length")
+        if min_length == max_length: 
         else:
-            print("Dataset type : Variable-length")
-
             if self.variable_length == "error":
-                raise ValueError(
-                    "Variable-length dataset detected."
-                )
+                raise ValueError(f"Variable-length dataset detected.")
 
         return max_length
     # Prepare samples
@@ -210,10 +187,7 @@ class TSDataWrap(DatasetWrap):
                 processor = None
 
         else:
-            raise ValueError(
-                f"Unknown variable_length mode: "
-                f"{self.variable_length}"
-            )
+            raise ValueError(f"Unknown variable_length mode: "f"{self.variable_length}")
 
         # Process every sample
         for i, sample in enumerate(samples):
@@ -245,18 +219,12 @@ class TSDataWrap(DatasetWrap):
             if length < target_length:
                 padding = target_length - length
 
-                dim = F.pad(
-                    dim,
-                    (0, padding),
-                    mode="constant",
-                    value=0
-                )
+                dim = F.pad(dim,(0, padding),mode="constant",value=0)
 
             # Truncate longer sequences (safety check)
             elif length > target_length:
                 dim = dim[:target_length]
             padded.append(dim)
-
         return padded
 
     # Truncate Sample
@@ -265,10 +233,7 @@ class TSDataWrap(DatasetWrap):
 
         for dim in sample:
             dim = torch.as_tensor(dim,dtype=torch.float32)
-            truncated.append(
-                dim[:target_length]
-            )
-
+            truncated.append(dim[:target_length])
         return truncated
     
     # Interpolate Sample
@@ -289,5 +254,4 @@ class TSDataWrap(DatasetWrap):
             interpolated.append(
                 tensor.squeeze(0).squeeze(0)
             )
-
         return interpolated
