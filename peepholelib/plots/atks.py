@@ -11,7 +11,7 @@ from torcheval.metrics import BinaryAUROC as AUC
 
 def auc_fpr(**kwargs):
     '''
-    Compute and print OOD or AA AUC and `1 - FPR` at 95% TPR scores. Both metrics are computed over the same samples. The FPR is computed with the threshold taken at 95% TPR over the in-distribution scores, and is the fraction of out-of-distribution (or attacked) samples scored above it.
+    Compute and print OOD or AA AUC and FPR at 95% TPR scores. Both metrics are computed over the same samples. The FPR is computed with the threshold taken at 95% TPR over the in-distribution scores, and is the fraction of out-of-distribution (or attacked) samples scored above it.
 
     Args:
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
@@ -24,7 +24,7 @@ def auc_fpr(**kwargs):
 
     Returns:
     - aucs (dict(str:dict(str: float))): AUCs with first keys being the loader name and second-level key the score names.
-    - fprs (dict(str:dict(str: float))): `1 - FPR` at 95% TPR, with the same keys as `aucs`.
+    - fprs (dict(str:dict(str: float))): FPR at 95% TPR, with the same keys as `aucs`.
     '''
     scores = kwargs['scores']
     dss = kwargs['datasets']
@@ -66,13 +66,12 @@ def auc_fpr(**kwargs):
 
             auc = AUC().update(_scores, _labels).compute().item()
 
-            # computing 1-FPR@95 for each score type, using the threshold
-            # keeping 95% of the in-distribution samples
+            # computing FPR@95 for each score type
             _sorted, _ = torch.sort(s_ori, descending=True)
             _th = _sorted[ceil(0.95*_sorted.numel())-1]
-            fpr95 = 1 - (s_atk >= _th).float().mean().item()
+            fpr95 = (s_atk > _th).float().mean().item()
 
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}, 1-FPR@95: {fpr95:.4f}')
+            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}, FPR@95: {fpr95:.4f}')
             aucs[ds_key][score_name] = auc
             fprs[ds_key][score_name] = fpr95
 
