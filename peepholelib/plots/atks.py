@@ -9,9 +9,9 @@ from sklearn.metrics import roc_curve, roc_auc_score, auc
 import torch
 from torcheval.metrics import BinaryAUROC as AUC
 
-def auc_atks(**kwargs):
+def auc_fpr(**kwargs):
     '''
-    Compute and print OOD or AA AUC scores.
+    Compute and print OOD or AA AUC and FPR at 95% TPR scores. Both metrics are computed over the same samples. The FPR is computed with the threshold taken at 95% TPR over the in-distribution scores, and is the fraction of out-of-distribution (or attacked) samples scored above it.
 
     Args:
     - scores (dict(str:dict(str: torch.tensor))): Two-level dictionary with first keys being the loader name, seconde-level key the score names and values the scores (see peepholelib.utils.scores.py). 
@@ -21,6 +21,10 @@ def auc_atks(**kwargs):
     - ood_loaders (list[str]): out-of-distribution loaders to consider
 
     - verbose (bool): print progress messages.
+
+    Returns:
+    - aucs (dict(str:dict(str: float))): AUCs with first keys being the loader name and second-level key the score names.
+    - fprs (dict(str:dict(str: float))): FPR at 95% TPR, with the same keys as `aucs`.
     '''
     scores = kwargs['scores']
     dss = kwargs['datasets']
@@ -30,8 +34,10 @@ def auc_atks(**kwargs):
     verbose = kwargs.get('verbose', False)
 
     aucs = {}
+    fprs = {}
     for loader_n, ds_key in enumerate(atk_loaders):
         aucs[ds_key] = {}
+        fprs[ds_key] = {}
         
         # save in-distribution and out-of-distribution scores for plotting
         for score_n, score_name in enumerate(ori_loaders.keys()):
@@ -59,7 +65,14 @@ def auc_atks(**kwargs):
             _scores = torch.hstack((s_ori, s_atk))
 
             auc = AUC().update(_scores, _labels).compute().item()
-            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}')
-            aucs[ds_key][score_name] = auc
 
-    return aucs 
+            # computing FPR@95 for each score type
+            _sorted, _ = torch.sort(s_ori, descending=True)
+            _th = _sorted[ceil(0.95*_sorted.numel())-1]
+            fpr95 = (s_atk > _th).float().mean().item()
+
+            if verbose: print(f'AUC for {ds_key} {score_name} split: {auc:.4f}, FPR@95: {fpr95:.4f}')
+            aucs[ds_key][score_name] = auc
+            fprs[ds_key][score_name] = fpr95
+
+    return aucs, fprs

@@ -5,9 +5,55 @@ from sklearn.metrics import roc_curve
 # torch stuff
 import torch
 
-def CAM_score(**kwargs):
+def CAM_lin_score(**kwargs):
     '''
-    Compute the CAM confidence score `c` for safe and unsafe samples. For each entry in `unsafe_loaders`, `tau` is calibrated per class using `safe_loader_train` and all corresponding unsafe train loaders via a ROC-based Youden's J criterion (Section C.2 of the supplementary material of Rossolini et al., IEEE TSE 2023), then scores are computed for `safe_loader_test` and the unsafe test loader as `c = exp(-h*ln(2)/tau_y_hat)` in [0, 1]. Safe-test scores are stored under the first unsafe-train key (same convention as `DMD_score()`). `h` for `safe_loader_train` and `safe_loader_test` is accumulated once, outside the loop over unsafe pairs. For each class, calibration unsafe samples are drawn equally from all unsafe train loaders so that the total unsafe count matches the safe count.
+    Compute the CAM linear score of all samples in `phs._phs[`loaders`]`. The score is `1 - eta`, with `eta` the cost of the model's predicted class averaged over `target_modules`, so that higher values indicate samples better covered by the trusted signature. Assumes the costs lie in [0, 1] (`normalize=True` in the driller).
+
+    Args:
+    - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets corresponding to `peepholes`. Used to retrieve the model's predicted class (`'pred'` key) for each sample.
+    - peepholes (peepholelib.peepholes.peepholes.Peepholes): Peepholes containing the MRC cost `eta` for each loader and layer.
+    - loaders (list[str]): Loaders to consider, if 'None', gets all loaders in 'peepholes._phs'. Defaults to 'None'.
+    - target_modules (list[str]): Layers whose `eta` values are averaged. Defaults to all modules in `peepholes` for the first loader.
+    - append_scores (dict): Append the scores in this dictionary to the scores computed in this function. Overwrite if same keys.
+    - score_name (str): Key under which scores are stored for each loader. Defaults to `'CAM-lin'`.
+
+    Returns:
+    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionary with the first key being the loaders, and second being the score name. If 'append_scores' is passed, the dictionaries are appended.
+    '''
+    dss = kwargs['datasets']
+    phs = kwargs['peepholes']
+    loaders = kwargs.get('loaders', None)
+    target_modules = kwargs.get('target_modules', None)
+    append_scores = kwargs.get('append_scores', None)
+    score_name = kwargs.get('score_name', 'CAM-lin')
+
+    # parse arguments
+    if loaders == None: loaders = list(phs._phs.keys())
+    if target_modules == None: target_modules = list(phs._phs[loaders[0]].keys())
+
+    # create the return dictionary.
+    if append_scores != None:
+        ret = dict(append_scores)
+    else:
+        ret = {}
+
+    for ds_key in loaders:
+        if not ds_key in ret:
+            ret[ds_key] = dict()
+
+    #-----------
+    # computations
+    #-----------
+    for ds_key in loaders:
+        h = sum(phs._phs[ds_key][layer] for layer in target_modules)/len(target_modules)
+        pred = dss._dss[ds_key][:]['pred']
+        ret[ds_key][score_name] = 1 - h.gather(1, pred.unsqueeze(1)).squeeze(1)
+
+    return ret
+
+def CAM_exp_score(**kwargs):
+    '''
+    Compute the CAM confidence score `c` for safe and unsafe samples. For each entry in `unsafe_loaders`, `tau` is calibrated per class using `safe_loader_train` and all corresponding unsafe train loaders via a AUC. Safe-test scores are stored under the first unsafe-train key. For each class, calibration unsafe samples are drawn equally from all unsafe train loaders so that the total unsafe count matches the safe count.
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets corresponding to `peepholes`. Used to retrieve the model's predicted class (`'pred'` key) for each sample.
@@ -72,7 +118,8 @@ def CAM_score(**kwargs):
             n_safe_i = hi_safe.shape[0]
 
             if n_safe_i == 0:
-                raise RuntimeError(f'No samples predicted as class {i} in loader "{safe_loader_train}" to calibrate its threshold.')
+                tau[i] = float('nan')
+                continue
 
             # draw n_safe_i // n_train samples from each unsafe train loader
             n_per_loader = n_safe_i // n_train
@@ -101,7 +148,7 @@ def CAM_score(**kwargs):
         if nan_mask.any():
             tau[nan_mask] = tau[~nan_mask].mean()
 
-        # score safe test samples (stored under first unsafe train key, as in DMD_score)
+        # score safe test samples
         ret[unsafe_train_loaders[0]][score_name] = torch.exp(-h_pred_safe_test * math.log(2) / tau[pred_safe_test])
 
         # score unsafe test samples
