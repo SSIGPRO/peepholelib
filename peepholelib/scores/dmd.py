@@ -1,392 +1,533 @@
-# general python stuff
-from math import floor
+from math import floor, ceil
 from sklearn.linear_model import LogisticRegressionCV
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
-# torch stuff
 import torch
 from torch.utils.data import DataLoader
+from peepholelib.scores.score import Score
+from peepholelib.scores.utils import pair_score_name
 
-def DMD_base(**kwargs):
+
+class DMDBase(Score):
     '''
-    Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
-    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - layer (str): string indicating the layer used for the score computation
-    - id
-    - driller (peepholelib.peepholes.DeepMahalnobisDistance.DMD): istance of the classifier used to compute the score
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
+    Compute the DMD score based on the pre-logits activations (input activations of the last layer). `fit()` must be called once before scoring.
 
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
-
-    loaders = kwargs.get('loaders')
-    ds = kwargs.get('dataset')
-    driller = kwargs.get('driller')
-    m = kwargs.get('magnitude', 0)
-    append_scores = kwargs.get('append_scores', None)
-    bs = kwargs.get('bs', 256)
-    n_threads = kwargs.get('n_threads', 1)
-    act_direction = kwargs.get('act_direction')
-
-    score_name = 'DMD-B'
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else: ret = {}
-
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    std = driller.std_transform
-    driller.model._model.eval()
-
-    for ds_key in loaders:
-
-        ret[ds_key][score_name] = torch.zeros(len(ds._dss[ds_key][:]['image']))
-
-        dl_dss = DataLoader(dataset=ds._dss[ds_key], batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads)
-        
-        for j, _dss in tqdm(enumerate(dl_dss), total=len(dl_dss), desc="Batches"):
-            
-            data = driller.parser(dss = _dss)
-
-            data = data.to(driller.device)
-            if m != 0: 
-                data.requires_grad_(True)
-            n_samples = data.shape[0]
-
-            driller.model._model.zero_grad()
-            _ = driller.model(data.to(driller.device))
-          
-            output = driller.parser_act(driller.model._acts[f'{act_direction}_activations'][driller._layer])
-            
-            gaussian_score = torch.zeros(n_samples, driller.nl_model, device=driller.device)
-
-            for i in range(driller.nl_model):
-                zero_f = output - driller._means[i]
-                term_gau = -0.5*torch.mm(torch.mm(zero_f, driller._precision), zero_f.t()).diag()
-                gaussian_score[:,i] = term_gau
-
-            if m != 0:
-
-                # Input_processing
-                sample_pred = gaussian_score.max(1)[1]
-                
-                batch_sample_mean = driller._means[sample_pred]
-                zero_f = output - batch_sample_mean
-                pure_gau = -0.5*torch.mm(torch.mm(zero_f, driller._precision), zero_f.t()).diag()
-                loss = torch.mean(-pure_gau)
-                loss.backward()
-                
-                gradient = torch.ge(data.grad.data, 0)
-                gradient = (gradient.float() - 0.5) * 2
-
-                # TODO: Still think this could be simpler
-                # TODO: this is 3 because the activation are reshaped to have 3 dimensions.
-                # I suspect this is specific for the models used in the reference code
-                # The std values should probablu reflect the number of dimensions
-                for i in range(3):
-                    gradient.index_copy_(1, torch.LongTensor([i]).to(driller.device), gradient.index_select(1, torch.LongTensor([i]).to(driller.device)) / (std[i]))
-
-                tempInputs = torch.add(data.data, gradient, alpha=-m)
-                
-                with torch.no_grad():
-                    _ = driller.model(tempInputs.to(driller.device))
-                    
-                output = driller.parser_act(driller.model._acts[f'{act_direction}_activations'][driller._layer])
-
-                noise_gaussian_score = torch.zeros(n_samples, driller.nl_model, device=driller.device)
-                for i in range(driller.nl_model):
-                    zero_f = output - driller._means[i]
-                    term_gau = -0.5*torch.mm(torch.mm(zero_f, driller._precision), zero_f.t()).diag()
-                    noise_gaussian_score[:, i] = term_gau
-
-            start = j * bs
-            end = start + n_samples
-            scores = (
-                torch.max(noise_gaussian_score, dim=1)[0] if m != 0 
-                else torch.max(gaussian_score, dim=1)[0]
-            )
-            
-            ret[ds_key][score_name][start:end] = scores.detach().cpu()
-
-    return ret
-
-def DMD_plus(**kwargs):
-    '''
-    Compute the DMD score based on the pre-logits activation(input activations of the last layer). In this case no training is needed and no backpropagation to compute the score
-    - coreavg (peepholelib.coreVectors.CoreVectors): corevectors respective to the `phs`.
-    - layer (str): string indicating the layer used for the score computation
-    - id
-    - driller (peepholelib.peepholes.DeepMahalnobisDistance.DMD): istance of the classifier used to compute the score
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - verbose (bool): print progress messages.
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
-
-    id_loader = kwargs.get('id_loader', 'test')
-    ood_loaders = kwargs.get('ood_loaders')
-    device = kwargs.get('device')
-    layer = kwargs.get('layer')
-    cvs = kwargs.get('coreavg')
-    driller = kwargs.get('driller')
-    append_scores = kwargs.get('append_scores', None)
-
-    score_name = 'dmd_plus'
-
-    data_ori = cvs._corevds[id_loader][layer].to(device)  
-    
-    data_ori /= torch.linalg.vector_norm(data_ori, ord=2, dim=1, keepdim=True) 
-    
-    num_classes = driller.nl_model
-    num_samples = data_ori.shape[0]
-
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else: ret = {}
-
-    if not id_loader in ret: ret[id_loader] = dict()
-
-    for ds_key in ood_loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
-
-    # computation
-
-    class_scores = torch.zeros((num_samples, num_classes))
-    for c in range(num_classes):
-        tensor = data_ori - driller._means[c].view(1, -1)
-        class_scores[:, c] = -torch.matmul(
-            torch.matmul(tensor, driller._precision), tensor.t()).diag()
-
-    ret[id_loader][score_name] = torch.max(class_scores, dim=1)[0]
-
-    for ood in ood_loaders:
-        data_ood = cvs._corevds[ood][layer].to(device)
-        data_ood /= torch.linalg.vector_norm(data_ood, ord=2, dim=1, keepdim=True) 
-
-        class_scores = torch.zeros((num_samples, num_classes))
-        for c in range(num_classes):
-            tensor = data_ood - driller._means[c].view(1, -1)
-            class_scores[:, c] = -torch.matmul(torch.matmul(tensor, driller._precision), tensor.t()).diag()
-
-        ret[ood][score_name] = torch.max(class_scores, dim=1)[0]
-    
-    return ret
-
-def __DMD_score__(**kwargs):
-    '''
-    Compute the DMD score by training a linear regressor on two datasets.
+    Reference: Lee et al., https://arxiv.org/abs/1807.03888
 
     Args:
-    - train_data (torch.Tensor): train samples.
-    - train_label (torch.Tensor): train labels.
-    - test_data (torch.tensor): test samples.
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
-    '''
-    # TODO: fix docs
-
-    train_data = kwargs.get('train_data')
-    train_label = kwargs.get('train_label')
-    test_data = kwargs.get('test_data')
-
-    # You can use torch tensors for the LogisticRegressionCV, no need to numpy
-    lr = LogisticRegressionCV(n_jobs=-1,max_iter=5000).fit(train_data, train_label)
-
-    y_train = lr.predict_proba(train_data)[:, 1]
-    y_test = lr.predict_proba(test_data)[:, 1]
-
-    return y_train, y_test 
-
-def DMD_score(**kwargs):
-    '''
-    Compute the DMD score by training a linear regressor on two portions of the datasets. It considers on sample as positive samples, and many as negative ones, training one regressor for each negative loader.
-    Since the score of the positive samples change for each negative loader used in training, the scores of the positive samples are saved with the keys of the negative loaders used for training. It is confusing, and we need a beeter way to structure these scores.
-
-    Args:
-    - peepholes (peepholelib.peepholes.Peepholes): peepholes from which we compute the linear regressor.
-    - pos_loader_train (str): loader to consider as positive samples for training. Typically in-distribution for OOD or original samples for attacks.
-    - pos_loader_test (str): loader to consider as positive samples for testing.
-    - neg_loaders (dict{str: list[str]}): dictionary with keys for negative samples. The key correspond to the TEST loader, and the value is a list of loaders used as negative samples for training.
-    - target_modules (list[str]): list if target modules, as keys from the model `state_dict`. If 'None' uses all modules in 'peepholes._phs[pos_loader_train]'.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
+    - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
+    - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
+    - output_layer (str): classification head, as a key from the model `state_dict`. Should be the same one passed to `fit()`.
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
+    - batch_size (int): Defaults to 128.
+    - n_threads (int): dataloader workers. Defaults to 1.
+    - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
     - verbose (bool): print progress messages.
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
 
-    phs = kwargs['peepholes']
-    pos_loader_train = kwargs.get('pos_loader_train', 'val')
-    pos_loader_test = kwargs.get('pos_loader_test', 'test')
-    neg_loaders = kwargs['neg_loaders']
-    target_modules = kwargs.get('target_modules', None)
-    invert = kwargs.get('invert', False)
-    append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'DMD')
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'DMD-B')
+        Score.__init__(self, **kwargs)
 
-    # parse arguments
-    if target_modules == None: target_modules = list(phs._phs[pos_loader_train].keys())
+        # computed in fit()
+        self._means = None
+        self._precision = None
+        return
 
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else: ret = {}
+    def fit(self, **kwargs):
+        '''
+        Compute class-conditional means and shared precision matrix from the activations of the penultimate layer.
 
-    for ds_key in neg_loaders.keys():
-        if not ds_key in ret:
-            ret[ds_key] = dict()
+        The within-class scatter is accumulated in a single pass as `sum(x*x.T) - sum(n_c*mu_c*mu_c.T)`, so the activations do not need to be kept.
 
-        if not neg_loaders[ds_key][0] in ret:
-            ret[neg_loaders[ds_key][0]] = dict()
+        Args:
+        - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
+        - output_layer (str): classification head, as a key from the model `state_dict`. Its input activations are used as features.
+        - n_classes (int): number of classes.
+        - fit_key (str): loader key used for fitting. Defaults to `'train'`.
+        - batch_size (int): Defaults to 128.
+        - n_threads (int): dataloader workers. Defaults to 1.
+        - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
+        - label_key (str): key used to read the class label from the dataset. Defaults to `'label'`.
+        - verbose (bool): print progress messages.
+        '''
+        model = kwargs['model']
+        dss = kwargs['datasets']
+        layer = kwargs['output_layer']
+        n_classes = kwargs['n_classes']
+        fit_key = kwargs.get('fit_key', 'train')
+        bs = kwargs.get('batch_size', 128)
+        n_threads = kwargs.get('n_threads', 1)
+        input_key = kwargs.get('input_key', 'image')
+        label_key = kwargs.get('label_key', 'label')
+        verbose = kwargs.get('verbose', False)
 
-    #-----------
-    # computations
-    #-----------
+        device = model.device
 
-    # it would be better to stack fisrt then get the max
-    train_pos = torch.stack([phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
-    test_pos = torch.stack([phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        model.set_target_modules(target_modules=[layer])
+        model.set_activations(save_input=True, save_output=False)
+        model._model.eval()
 
-    if invert:
-        train_pos = 1 - train_pos
-        test_pos = 1 - test_pos
+        _dss = dss._dss[fit_key]
+        n_samples = len(_dss)
 
-    nps = len(train_pos) # number of positive samples
-
-    for neg_test_key, neg_train_loaders in neg_loaders.items():
-        nnl = len(neg_train_loaders) # number of negative loaders
-        nspnl = floor(nps/nnl) # number sampler per neg loader
-        
-        # get nspnl samples for each negative loader
-        train_neg = []
-        for i, nl in enumerate(neg_train_loaders):
-            _train_neg = torch.stack([phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
-            idx = torch.randperm(len(_train_neg))
-            train_neg.append(_train_neg[idx[i*nspnl:(i+1)*nspnl]])
-        train_neg = torch.vstack(train_neg)
-        if invert:
-            train_neg = 1 - train_neg
-
-        # train data and labels
-        train_data = torch.vstack((train_pos, train_neg))
-        train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
-
-        # test data
-        test_neg = torch.stack([phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
-        if invert:
-            test_neg = 1 - test_neg
-        test_data = torch.vstack((test_pos, test_neg))
-
-        _, y_test = __DMD_score__(
-                train_data = train_data,
-                train_label = train_label,
-                test_data = test_data,
+        dl = DataLoader(
+                _dss,
+                batch_size = bs,
+                shuffle = False,
+                collate_fn = lambda x: x,
+                num_workers = n_threads,
+                pin_memory = (device != 'cpu')
                 )
 
-        ret[neg_train_loaders[0]][score_name] = torch.tensor(y_test)[:len(test_pos)]
-        ret[neg_test_key][score_name] = torch.tensor(y_test)[len(test_pos):]
-    return ret
+        # dry run to get the number of features
+        with torch.no_grad():
+            sample = _dss[0:1]
+            _ = model(sample[input_key].to(device))
+            act0 = model._acts['in_activations'][layer]
+            n_features = act0.view(act0.shape[0], -1).shape[1]
+
+        counts = torch.zeros(n_classes, dtype=torch.long)
+        sums = torch.zeros(n_classes, n_features, dtype=torch.float64)
+        second_moment = torch.zeros(n_features, n_features, dtype=torch.float64)
+
+        for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} fit'):
+            inputs = data[input_key].to(device)
+            _labels = data[label_key].long()
+
+            with torch.no_grad():
+                _ = model(inputs)
+
+            acts = model._acts['in_activations'][layer]
+            acts = acts.view(acts.shape[0], -1).detach().cpu().double()
+
+            sums.index_add_(0, _labels, acts)
+            counts.index_add_(0, _labels, torch.ones_like(_labels, dtype=torch.long))
+            second_moment.addmm_(acts.t(), acts)
+
+        means = torch.zeros(n_classes, n_features)
+        non_empty = counts > 0
+        means[non_empty] = (sums[non_empty]/counts[non_empty].unsqueeze(1)).float()
+
+        # sum_i (x_i - mu_yi)*(x_i - mu_yi).T = sum_i x_i*x_i.T - sum_c n_c*mu_c*mu_c.T
+        _means = means.double()
+        covariance_matrix = (second_moment - (counts.unsqueeze(1)*_means).t()@_means)/n_samples
+
+        try:
+            precision = torch.linalg.pinv(covariance_matrix, hermitian=True).float()
+        except TypeError:
+            precision = torch.linalg.pinv(covariance_matrix).float()
+
+        self._means = means
+        self._precision = precision
+
+        self._save_fitting()
+
+        # reset the model to NOT get activations
+        model.set_activations(save_input=False, save_output=False)
+        return
+
+    def _compute(self, **kwargs):
+        if self._means is None:
+            raise RuntimeError(f'{self.name} statistics not computed. Please run fit() first.')
+
+        model = kwargs['model']
+        dss = kwargs['datasets']
+        layer = kwargs['output_layer']
+        loaders = kwargs.get('loaders') or list(dss._dss.keys())
+        bs = kwargs.get('batch_size', 128)
+        n_threads = kwargs.get('n_threads', 1)
+        input_key = kwargs.get('input_key', 'image')
+        verbose = kwargs.get('verbose', False)
+
+        device = model.device
+
+        means = self._means.to(device)
+        precision = self._precision.to(device)
+        n_classes = means.shape[0]
+
+        model.set_target_modules(target_modules=[layer])
+        model.set_activations(save_input=True, save_output=False)
+        model._model.eval()
+
+        for ds_key in loaders:
+            if self._is_computed(ds_key=ds_key):
+                if verbose: print(ds_key, self.name, 'already computed, skipping')
+                continue
+
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
+
+            _dss = dss._dss[ds_key]
+            n_samples = len(_dss)
+            gaussian_score = torch.empty(n_samples, n_classes)
+
+            dl = DataLoader(
+                    _dss,
+                    batch_size = bs,
+                    shuffle = False,
+                    collate_fn = lambda x: x,
+                    num_workers = n_threads
+                    )
+
+            write_ptr = 0
+            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} [{ds_key}]'):
+                inputs = data[input_key].to(device)
+                with torch.no_grad():
+                    _ = model(inputs)
+
+                acts = model._acts['in_activations'][layer]
+                acts = acts.view(acts.shape[0], -1)
+
+                bsz = acts.shape[0]
+                _gaussian_score = torch.zeros(bsz, n_classes, device=device)
+                for c in range(n_classes):
+                    zero_f = acts - means[c]
+                    _gaussian_score[:, c] = -0.5*(zero_f@precision@zero_f.t()).diag()
+
+                gaussian_score[write_ptr:write_ptr+bsz] = _gaussian_score.detach().cpu()
+                write_ptr += bsz
+
+            scores = gaussian_score.max(dim=1)[0].reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
+
+        # reset the model to NOT get activations
+        model.set_activations(save_input=False, save_output=False)
+
+        return self._df
 
 
-def DMD_score_conf(**kwargs):
 
-    """
-    Compute DMD-based confidence scores by training a linear regressor on a balanced subset of positive and negative samples from a given training loader, and then applying it to one or more test loaders.
+    def _save_fitting(self, **kwargs):
+        self.path.mkdir(parents=True, exist_ok=True)
+        torch.save({
+            'means': self._means,
+            'precision': self._precision,
+            }, self._fit_file)
+        return
 
-    For the training loader, samples are split into:
-        - positives: ds._dss[loader_train]['result'] == 1
-        - negatives: ds._dss[loader_train]['result'] == 0
+    def load(self, **kwargs):
+        if not self._fit_file.exists():
+            return 0
 
-    A subset of positives is randomly selected to match the number of negatives (class balancing). For each sample and each target module, the maximum activation over peepholes is used as feature. A linear regressor
-    (__DMD_score__) is then trained on these features and labels.
+        fitting = torch.load(self._fit_file, weights_only=False)
+        self._means = fitting['means']
+        self._precision = fitting['precision']
+        return 1
 
-    The trained regressor is applied to all loaders in `test_loaders`, and the resulting scores are stored in a nested dictionary:
-        ret[loader_name][score_name] = torch.tensor(scores)
-
-    If an existing `append_scores` dictionary is provided, the new scores are added to (and overwrite keys in) that dictionary.
+class DMDPlus(Score):
+    '''
+    Compute the DMD+ score from L2-normalized corevectors, using the means and precision of a fitted `DeepMahalanobisDistance` driller.
 
     Args:
-        peepholes (peepholelib.peepholes.Peepholes):
-            Peepholes object from which features (peepholes) are extracted.
-        dataset (peepholelib.datasets.DatasetWrap):
-            Dataset wrapper that provides labels in `dataset._dss`.
-        loader_train (str, optional):
-            Name of the loader used to define positive/negative training
-            samples. Defaults to 'train'.
-        test_loaders (Iterable[str]):
-            Iterable of loader names on which to compute test scores.
-        target_modules (list[str], optional):
-            List of target module keys from the model `state_dict`. If None,
-            all modules found in `peepholes._phs[loader_train]` are used.
-        append_scores (dict, optional):
-            Existing scores dictionary to which the new scores are appended.
-            If provided, entries with the same keys are overwritten.
-        score_name (str, optional):
-            Name under which to store the scores for each loader. Defaults to
-            'DMD-in'.
-        verbose (bool, optional):
-            If True, allows printing of progress messages (currently unused).
+    - coreavg (peepholelib.coreVectors.coreVectors.CoreVectors): corevectors.
+    - driller (peepholelib.peepholes.DeepMahalanobisDistance.DMD.DeepMahalanobisDistance): fitted driller.
+    - layer (str): module used for the score computation.
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `coreavg._corevds`. Defaults to `None`.
+    - device (torch.device): device to perform the computations.
+    - verbose (bool): print progress messages.
+    '''
 
-    Returns:
-        dict[str, dict[str, torch.Tensor]]:
-            Nested dictionary of scores, where the first key is the loader
-            name and the second key is `score_name`. Each value is a tensor
-            of scores for the corresponding loader.
-    """
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'dmd_plus')
+        Score.__init__(self, **kwargs)
+        return
 
-    phs = kwargs['peepholes']
-    ds = kwargs['dataset']
-    loader_train = kwargs.get('loader_train', 'train')
-    test_loaders = kwargs.get('test_loaders')
-    target_modules = kwargs.get('target_modules', None)
-    append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'DMD-in')
+    def _compute(self, **kwargs):
+        cvs = kwargs['coreavg']
+        driller = kwargs['driller']
+        layer = kwargs['layer']
+        loaders = kwargs.get('loaders') or list(cvs._corevds.keys())
+        device = kwargs.get('device')
+        verbose = kwargs.get('verbose', False)
 
-    # parse arguments
-    if target_modules == None: target_modules = list(phs._phs[loader_train].keys())
+        n_classes = driller.nl_model
 
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else: ret = {}
+        for ds_key in loaders:
+            if self._is_computed(ds_key=ds_key):
+                if verbose: print(ds_key, self.name, 'already computed, skipping')
+                continue
 
-    #-----------
-    # computations
-    #-----------
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
-    # it would be better to stack fisrt then get the max
-    idx_neg = torch.argwhere(ds._dss[loader_train]['result']==0)
-    idx_pos = torch.argwhere(ds._dss[loader_train]['result']==1)
+            _cvs = cvs._corevds[ds_key][layer].to(device)
+            _cvs_norm = _cvs/_cvs.norm(p=2, dim=1, keepdim=True)
 
-    perm = torch.randperm(len(idx_pos))[:len(idx_neg)]
+            n_samples = _cvs_norm.shape[0]
+            gaussian_score = torch.zeros(n_samples, n_classes)
+            for c in range(n_classes):
+                zero_f = _cvs_norm - driller._means[c].view(1, -1)
+                gaussian_score[:, c] = -(zero_f@driller._precision@zero_f.t()).diag()
 
-    idx_pos = idx_pos[perm]
-    
-    train_pos = torch.stack([phs._phs[loader_train][layer]['peepholes'].max(dim=1)[0][idx_pos] for layer in target_modules], dim=1).squeeze(dim=2)
-    train_neg = torch.stack([phs._phs[loader_train][layer]['peepholes'].max(dim=1)[0][idx_neg] for layer in target_modules], dim=1).squeeze(dim=2)
-    
-    train_data = torch.vstack((train_pos, train_neg))
-    train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+            scores = gaussian_score.max(dim=1)[0].detach().cpu().reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
 
-    for loader_test in test_loaders:
-        test_data = torch.stack([phs._phs[loader_test][layer]['peepholes'].max(dim=1)[0] for layer in target_modules], dim=1)
+        return self._df
 
-        _, y_test = __DMD_score__(
-                    train_data = train_data,
-                    train_label = train_label,
-                    test_data = test_data,
-                    )
-    
-        ret[loader_test][score_name] = torch.tensor(y_test)
 
-    return ret
+
+    def _save_fitting(self, **kwargs):
+        return
+
+    def load(self, **kwargs):
+        return 1
+
+class DMDScore(Score):
+    '''
+    Compute the DMD score by training a linear regressor on two portions of the datasets. It considers one loader as positive samples, and many as negative ones, training one regressor for each negative loader.
+
+    Since the scores of the positive samples change for each negative loader used in training, they are recorded under the name given by `peepholelib.scores.utils.pair_score_name()`, i.e. `<name>-<negative test loader>`.
+
+    Args:
+    - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
+    - pos_loader_test (str): loader to consider as positive samples for testing. Defaults to `'test'`.
+    - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. Should be the same ones passed to `fit()`.
+    - verbose (bool): print progress messages.
+    '''
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'DMD')
+        Score.__init__(self, **kwargs)
+
+        # computed in fit(), keyed by the negative TEST loader they will score
+        self._lrs = {}
+        self._scalers = {}
+
+        # set in fit(), so that a run with every pair already recorded is not
+        # mistaken for a run where fit() was never called
+        self._fitted = False
+        return
+
+    def fit(self, **kwargs):
+        '''
+        Train one logistic regressor per negative loader, on the positive samples of `pos_loader_train` against a balanced draw from the respective negative train loaders. The regressors are kept in `self._lrs`, keyed by the negative TEST loader they will be used to score.
+
+        Pairs whose scores are already in `self.df` are skipped.
+
+        Args:
+        - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which we compute the linear regressors.
+        - pos_loader_train (str): loader to consider as positive samples for training. Typically in-distribution for OOD or original samples for attacks. Defaults to `'val'`.
+        - neg_loaders (dict{str: list[str]}): dictionary with keys for negative samples. The key corresponds to the TEST loader, and the value is a list of loaders used as negative samples for training.
+        - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. If `None`, uses all modules in `peepholes._phs[pos_loader_train]`. Defaults to `None`.
+        - scaling (bool): standardize the features before fitting the regressor. Defaults to `False`.
+        - verbose (bool): print progress messages.
+        '''
+        phs = kwargs['peepholes']
+        pos_loader_train = kwargs.get('pos_loader_train', 'val')
+        neg_loaders = kwargs['neg_loaders']
+        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_loader_train].keys())
+        scaling = kwargs.get('scaling', False)
+        verbose = kwargs.get('verbose', False)
+
+        pending_neg = {
+                k: v for k, v in neg_loaders.items()
+                if not self._is_computed(ds_key=k, name=pair_score_name(name=self.name, loader=k))
+                }
+        if len(pending_neg) == 0:
+            self._fitted = True
+            return
+        print(f'{self.name}: {len(pending_neg)}/{len(neg_loaders)} negative loaders still to fit: {list(pending_neg.keys())}')
+
+        train_pos = torch.stack(
+                [phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        n_pos = len(train_pos)
+
+        for neg_test_key, neg_train_loaders in pending_neg.items():
+            if verbose: print('Fitting', self.name, 'for dataset', neg_test_key)
+
+            n_neg_loaders = len(neg_train_loaders)
+            n_per_loader = floor(n_pos/n_neg_loaders)
+
+            # get n_per_loader samples for each negative loader
+            train_neg = []
+            for nl in neg_train_loaders:
+                _train_neg = torch.stack(
+                        [phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+                idx = torch.randperm(len(_train_neg))
+                train_neg.append(_train_neg[idx[:n_per_loader]])
+            train_neg = torch.vstack(train_neg)
+
+            # train data and labels
+            train_data = torch.vstack((train_pos, train_neg))
+            train_label = torch.hstack(
+                    (torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+
+            if scaling:
+                self._scalers[neg_test_key] = StandardScaler()
+                train_data = self._scalers[neg_test_key].fit_transform(train_data)
+
+            # You can use torch tensors for the LogisticRegressionCV, no need to numpy
+            self._lrs[neg_test_key] = LogisticRegressionCV(n_jobs=-1, max_iter=5000).fit(train_data, train_label)
+
+        self._fitted = True
+
+        self._save_fitting()
+        return
+
+    def _compute(self, **kwargs):
+        if not self._fitted:
+            raise RuntimeError(f'{self.name} regressors not computed. Please run fit() first.')
+
+        phs = kwargs['peepholes']
+        pos_loader_test = kwargs.get('pos_loader_test', 'test')
+        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_loader_test].keys())
+        verbose = kwargs.get('verbose', False)
+
+        test_pos = torch.stack(
+                [phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+
+        for neg_test_key, lr in self._lrs.items():
+            name = pair_score_name(name=self.name, loader=neg_test_key)
+
+            if self._is_computed(ds_key=neg_test_key, name=name):
+                if verbose: print(neg_test_key, name, 'already computed, skipping')
+                continue
+
+            if verbose: print('Computing', name, 'for dataset', neg_test_key)
+
+            test_neg = torch.stack(
+                    [phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+            test_data = torch.vstack((test_pos, test_neg))
+
+            if neg_test_key in self._scalers:
+                test_data = self._scalers[neg_test_key].transform(test_data)
+
+            y_test = lr.predict_proba(test_data)[:, 1]
+
+            scores_pos = torch.tensor(y_test)[:len(test_pos)].reshape(-1)
+            scores_neg = torch.tensor(y_test)[len(test_pos):].reshape(-1)
+            self._record(ds_key=pos_loader_test, scores=scores_pos, name=name)
+            self._record(ds_key=neg_test_key, scores=scores_neg, name=name)
+
+        return self._df
+
+
+
+    def _save_fitting(self, **kwargs):
+        self.path.mkdir(parents=True, exist_ok=True)
+        torch.save({
+            'lrs': self._lrs,
+            'scalers': self._scalers,
+            }, self._fit_file)
+        return
+
+    def load(self, **kwargs):
+        if not self._fit_file.exists():
+            return 0
+
+        fitting = torch.load(self._fit_file, weights_only=False)
+        self._lrs = fitting['lrs']
+        self._scalers = fitting['scalers']
+        self._fitted = True
+        return 1
+
+class DMDScoreConf(Score):
+    '''
+    Compute DMD-based confidence scores with a linear regressor trained on a balanced subset of positive (`'result' == 1`) and negative (`'result' == 0`) samples of a single loader. For each sample and each target module, the maximum activation over peepholes is used as feature. `fit()` must be called once before scoring.
+
+    Args:
+    - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
+    - loaders (list[str]): loaders on which to compute the scores.
+    - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. Should be the same ones passed to `fit()`.
+    - verbose (bool): print progress messages.
+    '''
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'DMD-in')
+        Score.__init__(self, **kwargs)
+
+        # computed in fit()
+        self._lr = None
+        self._scaler = None
+        return
+
+    def fit(self, **kwargs):
+        '''
+        Train the logistic regressor on a balanced subset of correctly and incorrectly classified samples of `fit_key`.
+
+        Args:
+        - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets, providing the `result_key`.
+        - fit_key (str): loader used to define positive/negative training samples. Defaults to `'train'`.
+        - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. If `None`, uses all modules in `peepholes._phs[fit_key]`. Defaults to `None`.
+        - scaling (bool): standardize the features before fitting the regressor. Defaults to `False`.
+        - result_key (str): key used to read the correct classification flag from the dataset. Defaults to `'result'`.
+        - verbose (bool): print progress messages.
+        '''
+        phs = kwargs['peepholes']
+        dss = kwargs['datasets']
+        fit_key = kwargs.get('fit_key', 'train')
+        target_modules = kwargs.get('target_modules') or list(phs._phs[fit_key].keys())
+        scaling = kwargs.get('scaling', False)
+        result_key = kwargs.get('result_key', 'result')
+        verbose = kwargs.get('verbose', False)
+
+        idx_neg = (dss._dss[fit_key][result_key] == 0).argwhere().squeeze(1)
+        idx_pos = (dss._dss[fit_key][result_key] == 1).argwhere().squeeze(1)
+        idx_pos = idx_pos[torch.randperm(len(idx_pos))[:len(idx_neg)]]
+
+        if verbose: print(f'Fitting {self.name} on {len(idx_pos)} positive and {len(idx_neg)} negative samples of {fit_key}')
+
+        train_pos = torch.stack(
+                [phs._phs[fit_key][layer].max(dim=1)[0][idx_pos] for layer in target_modules], dim=1)
+        train_neg = torch.stack(
+                [phs._phs[fit_key][layer].max(dim=1)[0][idx_neg] for layer in target_modules], dim=1)
+
+        train_data = torch.vstack((train_pos, train_neg))
+        train_label = torch.hstack(
+                (torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+
+        if scaling:
+            self._scaler = StandardScaler()
+            train_data = self._scaler.fit_transform(train_data)
+
+        # You can use torch tensors for the LogisticRegressionCV, no need to numpy
+        self._lr = LogisticRegressionCV(n_jobs=-1, max_iter=5000).fit(train_data, train_label)
+
+        self._save_fitting()
+        return
+
+    def _compute(self, **kwargs):
+        if self._lr is None:
+            raise RuntimeError(f'{self.name} regressor not computed. Please run fit() first.')
+
+        phs = kwargs['peepholes']
+        loaders = kwargs.get('loaders') or list(phs._phs.keys())
+        target_modules = kwargs.get('target_modules') or list(phs._phs[loaders[0]].keys())
+        verbose = kwargs.get('verbose', False)
+
+        for ds_key in loaders:
+            if self._is_computed(ds_key=ds_key):
+                if verbose: print(ds_key, self.name, 'already computed, skipping')
+                continue
+
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
+
+            test_data = torch.stack(
+                    [phs._phs[ds_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+
+            if self._scaler is not None:
+                test_data = self._scaler.transform(test_data)
+
+            scores = torch.tensor(self._lr.predict_proba(test_data)[:, 1]).reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
+
+        return self._df
+
+    def _save_fitting(self, **kwargs):
+        self.path.mkdir(parents=True, exist_ok=True)
+        torch.save({
+            'lr': self._lr,
+            'scaler': self._scaler,
+            }, self._fit_file)
+        return
+
+    def load(self, **kwargs):
+        if not self._fit_file.exists():
+            return 0
+
+        fitting = torch.load(self._fit_file, weights_only=False)
+        self._lr = fitting['lr']
+        self._scaler = fitting['scaler']
+        return 1

@@ -1,67 +1,72 @@
-# torch stuff
-import torch
-from torch.utils.data import DataLoader
+from math import ceil
 from tqdm import tqdm
 
-def feature_squeezing_score(**kwargs):
+import torch
+from torch.utils.data import DataLoader
+from peepholelib.scores.score import Score
 
+
+class FeatureSqueezingScore(Score):
     '''
-    Compute the Feature Squeezing score. Only computes it to samples which were successfully attacked. 
+    Compute the Feature Squeezing score (https://arxiv.org/abs/1704.01155).
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
-    - loaders (list[str]): List of loaders in `datasets.keys()` to compute corevectors. If `None` uses `datasets._dss.keys()`. Defaults to `None`.
-    - detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): Detector used to analyse the input images
-    - device (torch.device): device to perform the computations. 
-    - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
-    - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - score_name (str): Name to use as key on the return dictionaty. Defaults to `Feature-Squeezing`. 
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
+    - detector (peepholelib.featureSqueezing.FeatureSqueezingDetector): detector used to analyse the input images.
+    - batch_size (int): batch size used to compute the scores. Defaults to 64.
+    - n_threads (int): `num_workers` passed to `torch.utils.data.DataLoader`. Defaults to 1.
+    - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
     - verbose (bool): print progress messages.
-
-    Returns
-    - ret (dict(str:dict(str:torch.tensor))): Scores as a two level dictionaty with the first key being the loaders, and second being the score name 'Proto-Class'. If 'append_scores' is passed, the dictionaries are appended.
     '''
 
-    dss = kwargs.get('datasets')
-    loaders = kwargs.get('loaders_ori', None)
-    detector = kwargs.get('detector') 
-    bs = kwargs.get('batch_size', 64)
-    n_threads = kwargs.get('n_threads', 1) 
-    append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'Feature-Squeezing')
-    verbose = kwargs.get('verbose', False)
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'Feature-Squeezing')
+        Score.__init__(self, **kwargs)
+        return
 
-    if loaders == None: loaders = dss._dss.keys()
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
+    def _compute(self, **kwargs):
+        dss = kwargs['datasets']
+        loaders = kwargs.get('loaders') or list(dss._dss.keys())
+        detector = kwargs['detector']
+        bs = kwargs.get('batch_size', 64)
+        n_threads = kwargs.get('n_threads', 1)
+        input_key = kwargs.get('input_key', 'image')
+        verbose = kwargs.get('verbose', False)
 
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
+        for ds_key in loaders:
+            if self._is_computed(ds_key=ds_key):
+                if verbose: print(ds_key, self.name, 'already computed, skipping')
+                continue
 
-    for ds_key in loaders:
-        n_samples = len(dss._dss[ds_key])
-        dl = DataLoader(
-                dss._dss[ds_key],
-                batch_size=bs,
-                shuffle=False,
-                collate_fn = lambda x:x,
-                num_workers=n_threads
-                )
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
-        if verbose: print(f'Applying FS to {ds_key}')
-        
-        # TODO: pre-allocate
-        # acc results
-        ori_list = []
-        for data in tqdm(dl):
-            output = detector(data['image'])
-            ori_list.append(output.detach().cpu())
+            _dss = dss._dss[ds_key]
+            n_samples = len(_dss)
+            distances = torch.empty(n_samples)
 
-        scores = torch.cat(ori_list, dim=0)
-        ret[ds_key][score_name] = (2-scores)/2
+            dl = DataLoader(
+                    _dss,
+                    batch_size = bs,
+                    shuffle = False,
+                    collate_fn = lambda x: x,
+                    num_workers = n_threads
+                    )
 
-    return ret
+            write_ptr = 0
+            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} [{ds_key}]'):
+                _distances = detector(data[input_key]).detach().cpu()
+                bsz = _distances.shape[0]
+                distances[write_ptr:write_ptr+bsz] = _distances
+                write_ptr += bsz
+
+            scores = ((2 - distances)/2).reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
+
+        return self._df
+
+    def _save_fitting(self, **kwargs):
+        return
+
+    def load(self, **kwargs):
+        return 1

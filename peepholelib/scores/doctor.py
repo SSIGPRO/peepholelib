@@ -1,94 +1,104 @@
-# python stuff
-from tqdm import tqdm
 from math import ceil
+from tqdm import tqdm
 
-# torch stuff
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.functional import softmax as sm
+from peepholelib.scores.score import Score
 
-def DOCTOR_score(**kwargs):
+
+class DOCTORScore(Score):
     '''
-    Compute DOCTOR score described in https://arxiv.org/pdf/2106.02395
+    Compute the DOCTOR score described in https://arxiv.org/pdf/2106.02395
+
+    When `magnitude` is 0 the scores are computed directly from the parsed outputs, otherwise the inputs are perturbed and passed through the model again.
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets.
-    - model (peepholelib.models.model_warp.ModelWrap): wrapped model, used to compute the logits.
-    - loaders (list[str]): loaders to consider, usually `['train', 'test', 'val']`, if `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
+    - model (peepholelib.models.model_wrap.ModelWrap): wrapped model, used to compute the logits of the perturbed inputs. Only required when `magnitude != 0`.
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
     - temperature (float): temperature factor. Defaults to 1.0.
-    - magnitude (float): magnitude of the adversarial perturbation.
-    - append_scores (dict): Append the scores form this dictionaty to the scores computed in this function. Overwrite if same keys.
-    - n_threads (int): number of workers used in the dataloader. Defaults to 1.
-    - batch_size (int): batch size used to compute the scores.
+    - magnitude (float): magnitude of the adversarial perturbation. Defaults to 0.0.
+    - batch_size (int): batch size used to compute the scores. Defaults to 128.
+    - n_threads (int): `num_workers` passed to `torch.utils.data.DataLoader`. Defaults to 32.
+    - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
+    - output_key (str): key used to read the model outputs from the dataset. Defaults to `'output'`.
     - verbose (bool): print progress messages.
     '''
 
-    dss = kwargs.get('datasets')
-    model = kwargs.get('model')
-    loaders = kwargs.get('loaders', None)
-    temperature = kwargs.get('temperature', 1.)
-    magnitude = kwargs.get('magnitude', 0.)
-    n_threads = kwargs.get('n_threads', 32)
-    bs = kwargs.get('batch_size', 128)
-    append_scores = kwargs.get('append_scores', None)
-    score_name = kwargs.get('score_name', 'DOCTOR')
-    verbose = kwargs.get('verbose', False)
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'DOCTOR')
+        Score.__init__(self, **kwargs)
+        return
 
-    # parse arguments
-    if loaders == None: loaders = list(dss._dss.keys())
+    def _compute(self, **kwargs):
+        dss = kwargs['datasets']
+        model = kwargs.get('model', None)
+        loaders = kwargs.get('loaders') or list(dss._dss.keys())
+        temperature = kwargs.get('temperature', 1.0)
+        magnitude = kwargs.get('magnitude', 0.0)
+        bs = kwargs.get('batch_size', 128)
+        n_threads = kwargs.get('n_threads', 32)
+        input_key = kwargs.get('input_key', 'image')
+        output_key = kwargs.get('output_key', 'output')
+        verbose = kwargs.get('verbose', False)
 
-    device = model.device
+        # the model is only used to re-compute the logits of the perturbed inputs
+        if magnitude != 0:
+            device = model.device
 
-    # create the return dictionary. 
-    if append_scores != None:
-        ret = dict(append_scores)
-    else:
-        ret = {}
-    
-    for ds_key in loaders:
-        if not ds_key in ret:
-            ret[ds_key] = dict()
+        for ds_key in loaders:
+            if self._is_computed(ds_key=ds_key):
+                if verbose: print(ds_key, self.name, 'already computed, skipping')
+                continue
 
-    for ds_key in loaders:
-        dssds = dss._dss[ds_key]
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
-        n_samples = len(dssds)
-        
-        ret[ds_key][score_name] = torch.empty(n_samples, dtype=torch.float32)
-        
-        dl_dss = DataLoader(dssds, batch_size=bs, collate_fn=lambda x: x, num_workers = n_threads, shuffle=False)
-        
-        write_ptr = 0
-    
-        for _dss in tqdm(dl_dss,total=ceil(n_samples/bs)):
-            inputs = _dss['image'].to(device)
-            
+            _dss = dss._dss[ds_key]
+            n_samples = len(_dss)
+
             if magnitude == 0:
-                output = _dss['output'].to(device)
+                logits = _dss[output_key]
             else:
-                inputs.requires_grad_(True)
-                model._model.zero_grad()
+                n_classes = _dss[0:1][output_key].shape[-1]
+                logits = torch.empty(n_samples, n_classes)
 
-                output = model(inputs)
-                scores = torch.sum(sm(output/temperature, dim=1)**2, dim=1)
-            
-                log_scores = torch.log(torch.clamp(scores, min=1e-12))
-                log_scores.sum().backward()
+                dl = DataLoader(
+                        _dss,
+                        batch_size = bs,
+                        shuffle = False,
+                        collate_fn = lambda x: x,
+                        num_workers = n_threads
+                        )
 
-                new_inputs = inputs + magnitude*torch.sign(inputs.grad)
-                new_inputs = new_inputs.clamp(0, 1).detach()
+                write_ptr = 0
+                for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} [{ds_key}]'):
+                    inputs = data[input_key].to(device)
+                    inputs.requires_grad_(True)
+                    model._model.zero_grad()
 
-                inputs.requires_grad_(False)
-                model._model.zero_grad(set_to_none=True)
-                with torch.no_grad():
-                    output = model(new_inputs)
+                    output = model(inputs)
+                    _scores = sm(output/temperature, dim=1).pow(2).sum(dim=1)
+                    _scores.clamp(min=1e-12).log().sum().backward()
 
-            scores = torch.sum(sm(output/temperature, dim=1)**2, dim=1)
-            bsz = scores.shape[0]
+                    new_inputs = (inputs + magnitude*inputs.grad.sign()).clamp(0, 1).detach()
 
-            ret[ds_key][score_name][write_ptr:write_ptr+bsz] = scores.detach().cpu()
+                    inputs.requires_grad_(False)
+                    model._model.zero_grad(set_to_none=True)
+                    with torch.no_grad():
+                        output = model(new_inputs)
 
-            write_ptr += bsz
-                
-    return ret       
+                    bsz = output.shape[0]
+                    logits[write_ptr:write_ptr+bsz] = output.detach().cpu()
+                    write_ptr += bsz
 
+            scores = sm(logits/temperature, dim=1).pow(2).sum(dim=1).detach().cpu().reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
+
+        return self._df
+
+    def _save_fitting(self, **kwargs):
+        return
+
+    def load(self, **kwargs):
+        return 1
