@@ -194,9 +194,9 @@ def lab_to_rgb(lab, device):
 	
 		return torch.reshape(srgb_pixels, lab.shape)
 
-def NLM_filtering_torch(image, kernel_size=11, std=4.0,kernel_size_mean=3, sub_filter_size=32):
+def NLM_filtering_torch(image, kernel_size=11, std=4.0,kernel_size_mean=3, sub_filter_size=32, device='cpu'):
     flat_imgs = image.flatten(start_dim=0, end_dim=1)
-    denoised = torch.stack([nlm2d(img,
+    denoised = torch.stack([nlm2d(img.to(device),
                                   kernel_size=kernel_size,
                                   std=std,
                                   kernel_size_mean=kernel_size_mean,
