@@ -2,7 +2,6 @@ import torch
 from torch.nn.functional import softmax as sm
 from peepholelib.scores.score import Score
 
-
 class ModelOutputScore(Score):
     '''
     Compute a score which is a function of the model outputs only (`datasets._dss[<loaders>][output_key]`). The `type` selects which function is applied to the outputs, among `self.score_fns`:

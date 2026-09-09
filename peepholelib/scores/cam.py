@@ -3,8 +3,6 @@ from sklearn.metrics import roc_curve
 
 import torch
 from peepholelib.scores.score import Score
-from peepholelib.scores.utils import pair_score_name
-
 
 class CAMLinScore(Score):
     '''
@@ -57,7 +55,7 @@ class CAMExpScore(Score):
     '''
     Compute the CAM confidence score `c` for positive (trusted) and negative samples. For each entry in `neg_loaders`, `tau` is calibrated per class using `pos_loader_train` and all corresponding negative train loaders via a ROC (Youden's J). Samples are balanced between negative positive loaders.
 
-    Since the scores of the positive test samples change for each negative loader used in the calibration, they are recorded under the name given by `peepholelib.scores.utils.pair_score_name()`, i.e. `<name>-<negative test loader>`.
+    Since the scores of the positive test samples change for each negative loader used in the calibration, they are recorded as `<name>-<negative test loader>`.
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets corresponding to `peepholes`. Used to retrieve the model's predicted class for each sample.
@@ -105,7 +103,7 @@ class CAMExpScore(Score):
 
         pending_neg = {
                 k: v for k, v in neg_loaders.items()
-                if not self._is_computed(ds_key=k, name=pair_score_name(name=self.name, loader=k))
+                if not self._is_computed(ds_key=k, name=f'{self.name}-{k}')
                 }
         if len(pending_neg) == 0:
             self._fitted = True
@@ -191,7 +189,7 @@ class CAMExpScore(Score):
         h_pred_pos_test = h_pos_test.gather(1, pred_pos_test.unsqueeze(1)).squeeze(1)
 
         for neg_test_key, tau in self._taus.items():
-            name = pair_score_name(name=self.name, loader=neg_test_key)
+            name = f'{self.name}-{neg_test_key}'
 
             if self._is_computed(ds_key=neg_test_key, name=name):
                 if verbose: print(neg_test_key, name, 'already computed, skipping')

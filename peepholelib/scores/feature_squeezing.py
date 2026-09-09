@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
 
-
 class FeatureSqueezingScore(Score):
     '''
     Compute the Feature Squeezing score (https://arxiv.org/abs/1704.01155).

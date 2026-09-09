@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 from torch.nn.functional import softmax as sm
 from peepholelib.scores.score import Score
 
-
 class DOCTORScore(Score):
     '''
     Compute the DOCTOR score described in https://arxiv.org/pdf/2106.02395

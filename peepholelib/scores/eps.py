@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
 
-
 class EPSScore(Score):
     '''
     Compute the EPS score, the MMD between the expected diffusion score of a sample and the one of a set of reference (in-distribution) samples. `fit()` must be called once before scoring.

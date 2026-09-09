@@ -6,8 +6,6 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
-from peepholelib.scores.utils import pair_score_name
-
 
 class DMDBase(Score):
     '''
@@ -197,8 +195,6 @@ class DMDBase(Score):
 
         return self._df
 
-
-
     def _save_fitting(self, **kwargs):
         self.path.mkdir(parents=True, exist_ok=True)
         torch.save({
@@ -264,8 +260,6 @@ class DMDPlus(Score):
 
         return self._df
 
-
-
     def _save_fitting(self, **kwargs):
         return
 
@@ -276,7 +270,7 @@ class DMDScore(Score):
     '''
     Compute the DMD score with one linear regressor per negative loader, trained on the positive samples of `pos_loader_train` against a balanced draw of the negative ones.
 
-    Since the scores of the positive samples change for each negative loader used in training, they are recorded under the name given by `peepholelib.scores.utils.pair_score_name()`, i.e. `<name>-<negative test loader>`.
+    Since the scores of the positive samples change for each negative loader used in training, they are recorded as `<name>-<negative test loader>`.
 
     Args:
     - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
@@ -321,15 +315,14 @@ class DMDScore(Score):
 
         pending_neg = {
                 k: v for k, v in neg_loaders.items()
-                if not self._is_computed(ds_key=k, name=pair_score_name(name=self.name, loader=k))
+                if not self._is_computed(ds_key=k, name=f'{self.name}-{k}')
                 }
         if len(pending_neg) == 0:
             self._fitted = True
             return
         print(f'{self.name}: {len(pending_neg)}/{len(neg_loaders)} negative loaders still to fit: {list(pending_neg.keys())}')
 
-        train_pos = torch.stack(
-                [phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        train_pos = torch.stack([phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
         n_pos = len(train_pos)
 
         for neg_test_key, neg_train_loaders in pending_neg.items():
@@ -341,16 +334,14 @@ class DMDScore(Score):
             # get n_per_loader samples for each negative loader
             train_neg = []
             for nl in neg_train_loaders:
-                _train_neg = torch.stack(
-                        [phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+                _train_neg = torch.stack([phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
                 idx = torch.randperm(len(_train_neg))
                 train_neg.append(_train_neg[idx[:n_per_loader]])
             train_neg = torch.vstack(train_neg)
 
             # train data and labels
             train_data = torch.vstack((train_pos, train_neg))
-            train_label = torch.hstack(
-                    (torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+            train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
 
             if scaling:
                 self._scalers[neg_test_key] = StandardScaler()
@@ -372,11 +363,10 @@ class DMDScore(Score):
         target_modules = kwargs.get('target_modules') or list(phs._phs[pos_loader_test].keys())
         verbose = kwargs.get('verbose', False)
 
-        test_pos = torch.stack(
-                [phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_pos = torch.stack([phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
         for neg_test_key, lr in self._lrs.items():
-            name = pair_score_name(name=self.name, loader=neg_test_key)
+            name = f'{self.name}-{neg_test_key}'
 
             if self._is_computed(ds_key=neg_test_key, name=name):
                 if verbose: print(neg_test_key, name, 'already computed, skipping')
@@ -384,8 +374,7 @@ class DMDScore(Score):
 
             if verbose: print('Computing', name, 'for dataset', neg_test_key)
 
-            test_neg = torch.stack(
-                    [phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+            test_neg = torch.stack([phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
             test_data = torch.vstack((test_pos, test_neg))
 
             if neg_test_key in self._scalers:
@@ -399,8 +388,6 @@ class DMDScore(Score):
             self._record(ds_key=neg_test_key, scores=scores_neg, name=name)
 
         return self._df
-
-
 
     def _save_fitting(self, **kwargs):
         self.path.mkdir(parents=True, exist_ok=True)
@@ -467,14 +454,11 @@ class DMDScoreConf(Score):
 
         if verbose: print(f'Fitting {self.name} on {len(idx_pos)} positive and {len(idx_neg)} negative samples of {fit_key}')
 
-        train_pos = torch.stack(
-                [phs._phs[fit_key][layer].max(dim=1)[0][idx_pos] for layer in target_modules], dim=1)
-        train_neg = torch.stack(
-                [phs._phs[fit_key][layer].max(dim=1)[0][idx_neg] for layer in target_modules], dim=1)
+        train_pos = torch.stack([phs._phs[fit_key][layer].max(dim=1)[0][idx_pos] for layer in target_modules], dim=1)
+        train_neg = torch.stack([phs._phs[fit_key][layer].max(dim=1)[0][idx_neg] for layer in target_modules], dim=1)
 
         train_data = torch.vstack((train_pos, train_neg))
-        train_label = torch.hstack(
-                (torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
+        train_label = torch.hstack((torch.ones(len(train_pos)), torch.zeros(len(train_neg))))
 
         if scaling:
             self._scaler = StandardScaler()
@@ -500,8 +484,7 @@ class DMDScoreConf(Score):
         for ds_key in loaders:
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
-            test_data = torch.stack(
-                    [phs._phs[ds_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+            test_data = torch.stack([phs._phs[ds_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
             if self._scaler is not None:
                 test_data = self._scaler.transform(test_data)

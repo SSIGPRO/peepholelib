@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-
 class Score(metaclass=abc.ABCMeta):
     '''
     Base class for scores. Scores are stored in a long-format `pandas.DataFrame` with columns `['dataset', 'score name', 'score value']`, one row per sample, saved at `self.path/self.name` with `torch.save()`. `compute()` skips the already computed `(dataset, score name)` pairs, so calling a score again only computes the missing loaders.

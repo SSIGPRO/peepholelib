@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
 
-
 class VIMScore(Score):
     '''
     Compute the ViM score. `fit()` must be called once before scoring.

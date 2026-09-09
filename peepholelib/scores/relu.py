@@ -2,7 +2,6 @@ import torch
 from torch.nn.functional import softmax as sm
 from peepholelib.scores.score import Score
 
-
 class RelUScore(Score):
     '''
     Compute the Relative Uncertainty score as described in https://arxiv.org/abs/2306.01710. `fit()` must be called once before scoring.

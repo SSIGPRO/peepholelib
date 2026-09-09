@@ -5,7 +5,6 @@ import torch
 from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
 
-
 class MahalanobisPlusScore(Score):
     '''
     Compute the Mahalanobis++ score on L2-normalized penultimate-layer features. `fit()` must be called once before scoring.

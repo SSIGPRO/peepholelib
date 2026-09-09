@@ -2,7 +2,6 @@ import torch
 from torch.nn.functional import softmax as sm
 from peepholelib.scores.score import Score
 
-
 class ProtoClassScore(Score):
     '''
     Compute the Proto-Class score of all conceptograms in `peepholes._phs[<loaders>]`, comparing each conceptogram with the protoclasses. Only the `target_modules` are considered. `fit()` must be called once before scoring.
