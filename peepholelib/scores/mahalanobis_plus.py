@@ -34,7 +34,7 @@ class MahalanobisPlusScore(Score):
 
     def fit(self, **kwargs):
         '''
-        Fit class-conditional means and shared precision matrix on L2-normalized penultimate-layer features. Identical to `peepholelib.scores.dmd.DMDBase.fit()` except features are L2-normalized before all statistics are computed.
+        Fit class-conditional means and shared precision matrix. Identical to `peepholelib.scores.dmd.DMDBase.fit()`, except that the features are L2-normalized before all statistics are computed.
 
         The within-class scatter is accumulated in a single pass as `sum(x*x.T) - sum(n_c*mu_c*mu_c.T)`, so the activations do not need to be kept.
 
@@ -120,7 +120,6 @@ class MahalanobisPlusScore(Score):
 
         self._means = means
         self._precision = precision
-
         self._save_fitting()
 
         # reset the model to NOT get activations

@@ -163,7 +163,6 @@ class EPSScore(Score):
         self._T_star = T_star
         self._beta_min = beta_min
         self._beta_max = beta_max
-
         self._save_fitting()
 
         if verbose: print(f'{self.name} reference computed ({len(self._ref_eps)} samples).')

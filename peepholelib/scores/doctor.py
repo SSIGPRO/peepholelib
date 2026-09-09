@@ -43,7 +43,7 @@ class DOCTORScore(Score):
         output_key = kwargs.get('output_key', 'output')
         verbose = kwargs.get('verbose', False)
 
-        # the model is only used to re-compute the logits of the perturbed inputs
+        # the model is only used with the perturbed inputs
         if magnitude != 0:
             device = model.device
 

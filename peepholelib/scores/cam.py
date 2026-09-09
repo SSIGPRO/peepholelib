@@ -8,7 +8,7 @@ from peepholelib.scores.utils import pair_score_name
 
 class CAMLinScore(Score):
     '''
-    Compute the CAM linear score of all samples in `peepholes._phs[<loaders>]`. The score is `1 - eta`, with `eta` the cost of the model's predicted class averaged over `target_modules`, so that higher values indicate samples better covered by the trusted signature. Assumes the costs lie in [0, 1] (`normalize=True` in the driller).
+    Compute the CAM linear score of all samples in `peepholes._phs[<loaders>]`. The score is `1 - eta`, with `eta` the cost of the model's predicted class averaged over `target_modules`, higher values indicate better coverage. Assumes the costs lie in [0, 1] (`normalize=True` in the driller).
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets corresponding to `peepholes`. Used to retrieve the model's predicted class for each sample.
@@ -48,8 +48,6 @@ class CAMLinScore(Score):
 
         return self._df
 
-
-
     def _save_fitting(self, **kwargs):
         return
 
@@ -58,7 +56,7 @@ class CAMLinScore(Score):
 
 class CAMExpScore(Score):
     '''
-    Compute the CAM confidence score `c` for positive (trusted) and negative samples. For each entry in `neg_loaders`, `tau` is calibrated per class using `pos_loader_train` and all corresponding negative train loaders via a ROC (Youden's J). For each class, calibration negative samples are drawn equally from all negative train loaders so that the total negative count matches the positive count.
+    Compute the CAM confidence score `c` for positive (trusted) and negative samples. For each entry in `neg_loaders`, `tau` is calibrated per class using `pos_loader_train` and all corresponding negative train loaders via a ROC (Youden's J). Samples are balanced between negative positive loaders.
 
     Since the scores of the positive test samples change for each negative loader used in the calibration, they are recorded under the name given by `peepholelib.scores.utils.pair_score_name()`, i.e. `<name>-<negative test loader>`.
 
@@ -78,14 +76,14 @@ class CAMExpScore(Score):
         # computed in fit(), keyed by the negative TEST loader they will score
         self._taus = {}
 
-        # set in fit(), so that a run with every pair already recorded is not
-        # mistaken for a run where fit() was never called
+        # set in fit()
         self._fitted = False
         return
 
     def fit(self, **kwargs):
         '''
-        Calibrate one `tau` vector (one threshold per class) for each negative loader, using the positive samples of `pos_loader_train` against the respective negative train loaders. The thresholds are kept in `self._taus`, keyed by the negative TEST loader they will be used to score.
+        Calibrate one `tau` vector (one threshold per class) for each negative loader against `pos_loader_train`.
+        The thresholds are kept in `self._taus`, keyed by the negative TEST loader they will be used to score.
 
         Pairs whose scores are already in `self.df` are skipped.
 
@@ -174,7 +172,6 @@ class CAMExpScore(Score):
             self._taus[neg_test_key] = tau
 
         self._fitted = True
-
         self._save_fitting()
         return
 

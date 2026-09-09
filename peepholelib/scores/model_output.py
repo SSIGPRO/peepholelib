@@ -78,7 +78,7 @@ class ModelOutputScore(Score):
 
     def predictive_entropy(self, **kwargs):
         '''
-        Predictive entropy, normalized by `log(n_classes)` and inverted, so that higher values indicate more confident samples.
+        Predictive entropy, normalized by `log(n_classes)` and inverted, higher values indicate more confident samples.
 
         Args:
         - output (torch.Tensor): model outputs, of shape `(n_samples, n_classes)`.

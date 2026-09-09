@@ -29,8 +29,7 @@ class VIMScore(Score):
         kwargs.setdefault('name', 'ViM')
         Score.__init__(self, **kwargs)
 
-        # computed in fit()
-        # u: classifier null point, U: principal subspace, alpha: scaling factor
+        # computed in fit(), the classifier null point, principal subspace and scaling factor
         self._u = None
         self._U = None
         self._alpha = None
@@ -40,7 +39,7 @@ class VIMScore(Score):
         '''
         Fit the ViM statistics: classifier null point `u`, principal subspace `U`, and `alpha`.
 
-        `u = -pinv(W) @ b` is the point in feature space that maps to zero logits, used to centre features before covariance estimation (following OpenOOD). The null space of the top-d principal components captures directions of low variance; a large projection onto it signals OOD.
+        `u = -pinv(W)@b` maps to zero logits, and is used to centre the features before the covariance estimation (following OpenOOD). The null space of the top-d principal components captures directions of low variance, a large projection onto it signals OOD.
 
         Args:
         - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
@@ -131,7 +130,6 @@ class VIMScore(Score):
         self._u = u
         self._U = U
         self._alpha = (max_logits.sum()/vlogits.sum()).item()
-
         self._save_fitting()
 
         # reset the model to NOT get activations

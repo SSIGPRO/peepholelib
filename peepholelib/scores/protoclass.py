@@ -5,7 +5,7 @@ from peepholelib.scores.score import Score
 
 class ProtoClassScore(Score):
     '''
-    Compute the Proto-Class score of all conceptograms in `peepholes._phs[<loaders>]`. `target_modules` are passed to `peepholes.get_conceptograms()` so the evaluation only considers the indicated modules. The score is computed by comparing the conceptogram with the protoclasses. `fit()` must be called once before scoring.
+    Compute the Proto-Class score of all conceptograms in `peepholes._phs[<loaders>]`, comparing each conceptogram with the protoclasses. Only the `target_modules` are considered. `fit()` must be called once before scoring.
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): datasets respective to the `peepholes`.
@@ -20,9 +20,7 @@ class ProtoClassScore(Score):
         kwargs.setdefault('name', 'Proto-Class')
         Score.__init__(self, **kwargs)
 
-        # computed in fit()
-        # proto: (n_classes, n_modules, n_classes), each element in the first dim
-        # is the protoclass of the respective label
+        # computed in fit(), of shape (n_classes, n_modules, n_classes)
         self.proto = None
         return
 
@@ -85,7 +83,6 @@ class ProtoClassScore(Score):
             proto[i] = _p
 
         self.proto = proto
-
         self._save_fitting()
         return
 

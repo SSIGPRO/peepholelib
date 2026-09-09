@@ -122,7 +122,6 @@ class DMDBase(Score):
 
         self._means = means
         self._precision = precision
-
         self._save_fitting()
 
         # reset the model to NOT get activations
@@ -275,7 +274,7 @@ class DMDPlus(Score):
 
 class DMDScore(Score):
     '''
-    Compute the DMD score by training a linear regressor on two portions of the datasets. It considers one loader as positive samples, and many as negative ones, training one regressor for each negative loader.
+    Compute the DMD score with one linear regressor per negative loader, trained on the positive samples of `pos_loader_train` against a balanced draw of the negative ones.
 
     Since the scores of the positive samples change for each negative loader used in training, they are recorded under the name given by `peepholelib.scores.utils.pair_score_name()`, i.e. `<name>-<negative test loader>`.
 
@@ -294,14 +293,14 @@ class DMDScore(Score):
         self._lrs = {}
         self._scalers = {}
 
-        # set in fit(), so that a run with every pair already recorded is not
-        # mistaken for a run where fit() was never called
+        # set in fit()
         self._fitted = False
         return
 
     def fit(self, **kwargs):
         '''
-        Train one logistic regressor per negative loader, on the positive samples of `pos_loader_train` against a balanced draw from the respective negative train loaders. The regressors are kept in `self._lrs`, keyed by the negative TEST loader they will be used to score.
+        Train one logistic regressor for each negative loader against `pos_loader_train`.
+        The regressors are kept in `self._lrs`, keyed by the negative TEST loader they will be used to score.
 
         Pairs whose scores are already in `self.df` are skipped.
 
@@ -361,7 +360,6 @@ class DMDScore(Score):
             self._lrs[neg_test_key] = LogisticRegressionCV(n_jobs=-1, max_iter=5000).fit(train_data, train_label)
 
         self._fitted = True
-
         self._save_fitting()
         return
 
@@ -424,7 +422,7 @@ class DMDScore(Score):
 
 class DMDScoreConf(Score):
     '''
-    Compute DMD-based confidence scores with a linear regressor trained on a balanced subset of positive (`'result' == 1`) and negative (`'result' == 0`) samples of a single loader. For each sample and each target module, the maximum activation over peepholes is used as feature. `fit()` must be called once before scoring.
+    Compute DMD-based confidence scores with a linear regressor trained on a balanced subset of correctly and miss-classified samples of a single loader. The features are the maximum activation over the peepholes of each target module. `fit()` must be called once before scoring.
 
     Args:
     - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
@@ -484,7 +482,6 @@ class DMDScoreConf(Score):
 
         # You can use torch tensors for the LogisticRegressionCV, no need to numpy
         self._lr = LogisticRegressionCV(n_jobs=-1, max_iter=5000).fit(train_data, train_label)
-
         self._save_fitting()
         return
 

@@ -27,7 +27,7 @@ class RelUScore(Score):
 
     def fit(self, **kwargs):
         '''
-        Fit the parameter matrix on the correctly and incorrectly classified samples of `fit_key`, and the score range used to normalize the scores.
+        Fit the parameter matrix on the correctly/miss-classified samples of `fit_key`, and the score range used to normalize.
 
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
@@ -71,7 +71,6 @@ class RelUScore(Score):
         self._params = params
         self._s_min = _scores.min()
         self._s_max = _scores.max()
-
         self._save_fitting()
         return
 
