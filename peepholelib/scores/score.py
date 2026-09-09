@@ -6,7 +6,9 @@ import torch
 
 class Score(metaclass=abc.ABCMeta):
     '''
-    Base class for scores. Scores are stored in a long-format `pandas.DataFrame` with columns `['dataset', 'score name', 'score value']`, one row per sample, saved at `self.path/self.name` with `torch.save()`. `compute()` skips the already computed `(dataset, score name)` pairs, so calling a score again only computes the missing loaders.
+    Base class for scores. Scores are stored in a long-format `pandas.DataFrame` with columns `['score name', 'loader', 'calib key', 'score value']`, one row per sample, saved at `self.path/self.name` with `torch.save()`. `compute()` skips the already computed `(score name, loader, calib key)` triplets, so calling a score again only computes the missing loaders.
+
+    The `'calib key'` column holds the negative loader a value was calibrated against, for the scores whose values depend on it (e.g. `CAMExpScore`, `DMDScore`), and is `None` for all the others. It disambiguates the several values a same sample gets under a same `'score name'`.
 
     Inheriting classes must implement `compute()` and `_save_fitting()`/`load()`. Scores which have a `fit()` save the fitted values at `self._fit_file` at the end of `fit()`, the ones which do not fit anything implement them as no-ops.
     '''
@@ -30,8 +32,9 @@ class Score(metaclass=abc.ABCMeta):
             self._df = torch.load(self._file, weights_only=False)
         else:
             self._df = pd.DataFrame({
-                'dataset': pd.Series(dtype=str),
                 'score name': pd.Series(dtype=str),
+                'loader': pd.Series(dtype=str),
+                'calib key': pd.Series(dtype=str),
                 'score value': pd.Series(dtype=float)
                 })
         return
@@ -42,12 +45,16 @@ class Score(metaclass=abc.ABCMeta):
 
         Args:
         - ds_key (str): loader key.
+        - calib_key (str): negative loader the score was calibrated against. Defaults to `None`.
         - name (str): score name. Defaults to `self.name`.
         '''
         ds_key = kwargs['ds_key']
+        calib_key = kwargs.get('calib_key')
         name = kwargs.get('name', self.name)
 
-        return ((self._df['dataset'] == ds_key) & (self._df['score name'] == name)).any()
+        calib = self._df['calib key'].isna() if calib_key is None else self._df['calib key'] == calib_key
+
+        return ((self._df['score name'] == name) & (self._df['loader'] == ds_key) & calib).any()
 
     def _record(self, **kwargs):
         '''
@@ -56,18 +63,21 @@ class Score(metaclass=abc.ABCMeta):
         Args:
         - ds_key (str): loader key.
         - scores (torch.Tensor|list[float]): one score per sample.
+        - calib_key (str): negative loader the score was calibrated against. Defaults to `None`.
         - name (str): score name. Defaults to `self.name`.
         '''
         ds_key = kwargs['ds_key']
         scores = kwargs['scores']
+        calib_key = kwargs.get('calib_key')
         name = kwargs.get('name', self.name)
 
         if hasattr(scores, 'tolist'):
             scores = scores.tolist()
 
         new_rows = pd.DataFrame({
-            'dataset': [ds_key]*len(scores),
             'score name': [name]*len(scores),
+            'loader': [ds_key]*len(scores),
+            'calib key': [calib_key]*len(scores),
             'score value': scores,
             })
         self._df = pd.concat([self._df, new_rows], ignore_index=True)
@@ -75,10 +85,6 @@ class Score(metaclass=abc.ABCMeta):
         self.path.mkdir(parents=True, exist_ok=True)
         torch.save(self._df, self._file)
         return
-
-    @property
-    def df(self):
-        return self._df
 
     @abc.abstractmethod
     def compute(self, **kwargs):

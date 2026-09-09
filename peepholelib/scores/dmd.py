@@ -270,7 +270,7 @@ class DMDScore(Score):
     '''
     Compute the DMD score with one linear regressor per negative loader, trained on the positive samples of `pos_train_loader` against a balanced draw of the negative ones.
 
-    Since the scores of the positive samples change for each negative loader used in training, they are recorded as `<name>-<negative test loader>`.
+    Since the scores of the positive samples change for each negative loader used in training, the negative test loader they were trained against is recorded in the `'calib key'` column.
 
     Args:
     - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
@@ -315,7 +315,7 @@ class DMDScore(Score):
 
         pending_neg = {
                 k: v for k, v in neg_keys.items()
-                if not self._is_computed(ds_key=k, name=f'{self.name}-{k}')
+                if not self._is_computed(ds_key=k, calib_key=k)
                 }
         if len(pending_neg) == 0:
             self._fitted = True
@@ -366,13 +366,11 @@ class DMDScore(Score):
         test_pos = torch.stack([phs._phs[pos_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
         for neg_test_key, lr in self._lrs.items():
-            name = f'{self.name}-{neg_test_key}'
-
-            if self._is_computed(ds_key=neg_test_key, name=name):
-                if verbose: print(neg_test_key, name, 'already computed, skipping')
+            if self._is_computed(ds_key=neg_test_key, calib_key=neg_test_key):
+                if verbose: print(self.name, neg_test_key, 'already computed, skipping')
                 continue
 
-            if verbose: print('Computing', name, 'for dataset', neg_test_key)
+            if verbose: print('Computing', self.name, 'for dataset', neg_test_key)
 
             test_neg = torch.stack([phs._phs[neg_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
             test_data = torch.vstack((test_pos, test_neg))
@@ -384,8 +382,8 @@ class DMDScore(Score):
 
             scores_pos = torch.tensor(y_test)[:len(test_pos)].reshape(-1)
             scores_neg = torch.tensor(y_test)[len(test_pos):].reshape(-1)
-            self._record(ds_key=pos_test_key, scores=scores_pos, name=name)
-            self._record(ds_key=neg_test_key, scores=scores_neg, name=name)
+            self._record(ds_key=pos_test_key, scores=scores_pos, calib_key=neg_test_key)
+            self._record(ds_key=neg_test_key, scores=scores_neg, calib_key=neg_test_key)
 
         return self._df
 

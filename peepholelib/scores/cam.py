@@ -55,7 +55,7 @@ class CAMExpScore(Score):
     '''
     Compute the CAM confidence score `c` for positive (trusted) and negative samples. For each entry in `neg_loaders`, `tau` is calibrated per class using `pos_train_loader` and all corresponding negative train loaders via a ROC (Youden's J). Samples are balanced between negative positive loaders.
 
-    Since the scores of the positive test samples change for each negative loader used in the calibration, they are recorded as `<name>-<negative test loader>`.
+    Since the scores of the positive test samples change for each negative loader used in the calibration, the negative test loader they were calibrated against is recorded in the `'calib key'` column.
 
     Args:
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets corresponding to `peepholes`. Used to retrieve the model's predicted class for each sample.
@@ -103,7 +103,7 @@ class CAMExpScore(Score):
 
         pending_neg = {
                 k: v for k, v in neg_keys.items()
-                if not self._is_computed(ds_key=k, name=f'{self.name}-{k}')
+                if not self._is_computed(ds_key=k, calib_key=k)
                 }
         if len(pending_neg) == 0:
             self._fitted = True
@@ -189,13 +189,11 @@ class CAMExpScore(Score):
         h_pred_pos_test = h_pos_test.gather(1, pred_pos_test.unsqueeze(1)).squeeze(1)
 
         for neg_test_key, tau in self._taus.items():
-            name = f'{self.name}-{neg_test_key}'
-
-            if self._is_computed(ds_key=neg_test_key, name=name):
-                if verbose: print(neg_test_key, name, 'already computed, skipping')
+            if self._is_computed(ds_key=neg_test_key, calib_key=neg_test_key):
+                if verbose: print(self.name, neg_test_key, 'already computed, skipping')
                 continue
 
-            if verbose: print('Computing', name, 'for dataset', neg_test_key)
+            if verbose: print('Computing', self.name, 'for dataset', neg_test_key)
 
             # score positive test samples
             scores_pos = (-h_pred_pos_test*math.log(2)/tau[pred_pos_test]).exp().detach().cpu().reshape(-1)
@@ -206,8 +204,8 @@ class CAMExpScore(Score):
             h_pred_neg_test = h_neg_test.gather(1, pred_neg_test.unsqueeze(1)).squeeze(1)
             scores_neg = (-h_pred_neg_test*math.log(2)/tau[pred_neg_test]).exp().detach().cpu().reshape(-1)
 
-            self._record(ds_key=pos_test_key, scores=scores_pos, name=name)
-            self._record(ds_key=neg_test_key, scores=scores_neg, name=name)
+            self._record(ds_key=pos_test_key, scores=scores_pos, calib_key=neg_test_key)
+            self._record(ds_key=neg_test_key, scores=scores_neg, calib_key=neg_test_key)
 
         return self._df
 
