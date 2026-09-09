@@ -268,13 +268,13 @@ class DMDPlus(Score):
 
 class DMDScore(Score):
     '''
-    Compute the DMD score with one linear regressor per negative loader, trained on the positive samples of `pos_loader_train` against a balanced draw of the negative ones.
+    Compute the DMD score with one linear regressor per negative loader, trained on the positive samples of `pos_train_loader` against a balanced draw of the negative ones.
 
     Since the scores of the positive samples change for each negative loader used in training, they are recorded as `<name>-<negative test loader>`.
 
     Args:
     - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which the features are extracted.
-    - pos_loader_test (str): loader to consider as positive samples for testing. Defaults to `'test'`.
+    - pos_test_loader (str): loader to consider as positive samples for testing. Defaults to `'test'`.
     - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. Should be the same ones passed to `fit()`.
     - verbose (bool): print progress messages.
     '''
@@ -293,47 +293,47 @@ class DMDScore(Score):
 
     def fit(self, **kwargs):
         '''
-        Train one logistic regressor for each negative loader against `pos_loader_train`.
+        Train one logistic regressor for each negative loader against `pos_train_loader`.
         The regressors are kept in `self._lrs`, keyed by the negative TEST loader they will be used to score.
 
         Pairs whose scores are already in `self.df` are skipped.
 
         Args:
         - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes from which we compute the linear regressors.
-        - pos_loader_train (str): loader to consider as positive samples for training. Typically in-distribution for OOD or original samples for attacks. Defaults to `'val'`.
+        - pos_train_loader (str): loader to consider as positive samples for training. Typically in-distribution for OOD or original samples for attacks. Defaults to `'val'`.
         - neg_loaders (dict{str: list[str]}): dictionary with keys for negative samples. The key corresponds to the TEST loader, and the value is a list of loaders used as negative samples for training.
-        - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. If `None`, uses all modules in `peepholes._phs[pos_loader_train]`. Defaults to `None`.
+        - target_modules (list[str]): list of target modules, as keys from the model `state_dict`. If `None`, uses all modules in `peepholes._phs[pos_train_loader]`. Defaults to `None`.
         - scaling (bool): standardize the features before fitting the regressor. Defaults to `False`.
         - verbose (bool): print progress messages.
         '''
         phs = kwargs['peepholes']
-        pos_loader_train = kwargs.get('pos_loader_train', 'val')
-        neg_loaders = kwargs['neg_loaders']
-        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_loader_train].keys())
+        pos_train_key = kwargs.get('pos_train_loader', 'val')
+        neg_keys = kwargs['neg_loaders']
+        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_train_key].keys())
         scaling = kwargs.get('scaling', False)
         verbose = kwargs.get('verbose', False)
 
         pending_neg = {
-                k: v for k, v in neg_loaders.items()
+                k: v for k, v in neg_keys.items()
                 if not self._is_computed(ds_key=k, name=f'{self.name}-{k}')
                 }
         if len(pending_neg) == 0:
             self._fitted = True
             return
-        print(f'{self.name}: {len(pending_neg)}/{len(neg_loaders)} negative loaders still to fit: {list(pending_neg.keys())}')
+        print(f'{self.name}: {len(pending_neg)}/{len(neg_keys)} negative loaders still to fit: {list(pending_neg.keys())}')
 
-        train_pos = torch.stack([phs._phs[pos_loader_train][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        train_pos = torch.stack([phs._phs[pos_train_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
         n_pos = len(train_pos)
 
-        for neg_test_key, neg_train_loaders in pending_neg.items():
+        for neg_test_key, neg_train_keys in pending_neg.items():
             if verbose: print('Fitting', self.name, 'for dataset', neg_test_key)
 
-            n_neg_loaders = len(neg_train_loaders)
-            n_per_loader = floor(n_pos/n_neg_loaders)
+            n_neg_keys = len(neg_train_keys)
+            n_per_loader = floor(n_pos/n_neg_keys)
 
             # get n_per_loader samples for each negative loader
             train_neg = []
-            for nl in neg_train_loaders:
+            for nl in neg_train_keys:
                 _train_neg = torch.stack([phs._phs[nl][layer].max(dim=1)[0] for layer in target_modules], dim=1)
                 idx = torch.randperm(len(_train_neg))
                 train_neg.append(_train_neg[idx[:n_per_loader]])
@@ -359,11 +359,11 @@ class DMDScore(Score):
             raise RuntimeError(f'{self.name} regressors not computed. Please run fit() first.')
 
         phs = kwargs['peepholes']
-        pos_loader_test = kwargs.get('pos_loader_test', 'test')
-        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_loader_test].keys())
+        pos_test_key = kwargs.get('pos_test_loader', 'test')
+        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_test_key].keys())
         verbose = kwargs.get('verbose', False)
 
-        test_pos = torch.stack([phs._phs[pos_loader_test][layer].max(dim=1)[0] for layer in target_modules], dim=1)
+        test_pos = torch.stack([phs._phs[pos_test_key][layer].max(dim=1)[0] for layer in target_modules], dim=1)
 
         for neg_test_key, lr in self._lrs.items():
             name = f'{self.name}-{neg_test_key}'
@@ -384,7 +384,7 @@ class DMDScore(Score):
 
             scores_pos = torch.tensor(y_test)[:len(test_pos)].reshape(-1)
             scores_neg = torch.tensor(y_test)[len(test_pos):].reshape(-1)
-            self._record(ds_key=pos_loader_test, scores=scores_pos, name=name)
+            self._record(ds_key=pos_test_key, scores=scores_pos, name=name)
             self._record(ds_key=neg_test_key, scores=scores_neg, name=name)
 
         return self._df
