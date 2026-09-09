@@ -55,7 +55,7 @@ def detection_metrics(**kwargs):
 
     def fpr_at_95(**kwargs):
         '''
-        Fraction of negative samples scored above the threshold taken at 95% TPR over the positive ones.
+        Fraction of negative samples scored above the threshold of the first operating point reaching at least 95% TPR. Tied scores move that point up, so the TPR it is taken at can exceed 95%.
         '''
         fpr = kwargs['fpr']
         tpr = kwargs['tpr']
