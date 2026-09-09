@@ -6,9 +6,6 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _pair, _quadruple
 from torch_nlm import nlm2d
 
-import cv2
-import numpy as np
-
 def bit_depth_torch(x, bits):
     precisions = 2**bits
     return reduce_precision_torch(x, precisions)
@@ -206,21 +203,3 @@ def NLM_filtering_torch(image, kernel_size=11, std=4.0,kernel_size_mean=3, sub_f
     output = denoised.view(list(image.shape))
     return output
 
-def NLM_filtering_cv(image, mean_t, std_t, h, hColor, templateWindowSize, searchWindowSize):
-    imgs = image * std_t + mean_t
-    imgs = imgs.permute(0, 2,3,1).cpu().numpy()*255
-    print(imgs.shape)
-    imgs = imgs.astype(np.uint8)
-    cv_list = [
-            cv2.fastNlMeansDenoisingColored(
-                img, None, h, hColor, templateWindowSize, searchWindowSize
-            )
-            for img in imgs
-            ]
-    out = torch.stack([
-                    torch.from_numpy(x).float().permute(2,0,1) / 255.0
-                    for x in cv_list
-                ], dim=0)
-    out = (out-mean_t)/std_t
-    return out
-    

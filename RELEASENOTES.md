@@ -12,7 +12,12 @@
 - Add `MRC` (Multi-Range Coverage) driller.
 
 ## Scores
-- Add `CAM_exp_score` and `CAM_lin_score`.
+- Scores are now classes inheriting `peepholelib.scores.score.Score`, replacing the free functions. Scores are recorded in a `pandas.DataFrame` with columns `['dataset', 'score name', 'score value']`, saved at `path/name`.
+- Scores which need fitting implement `fit()`, called before scoring as with the drillers (no `save()`/`load()`, the fits are lightweight).
+- Add `ViM`, `Mahalanobis++`, `EPS`, `MaxLogit`, `Energy`, and `PE` (predictive entropy) scores.
+- `MSP`, `MaxLogit`, `Energy` and `PE` are computed by a single `ModelOutputScore`, selected with the `type` argument.
+- `CAM_exp_score` and `CAM_lin_score` become `CAMExpScore` and `CAMLinScore` (`scores/cam.py`).
+- `DMDScore` and `CAMExpScore` record the scores of the positive loader under `<name>-<negative test loader>`, since they change for each negative loader.
 
 ## Training
 - Refactor training utilities: `trainingLoops`, `validationLoops`, `savingLoops` replaced by `train_loops`, `val_loops`, `test_loops`, `save_fns`, `load_fns`.
