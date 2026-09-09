@@ -7,9 +7,9 @@ import torch
 
 class Score(metaclass=abc.ABCMeta):
     '''
-    Base class for scores. Scores are stored in a long-format `pandas.DataFrame` with columns `['dataset', 'score name', 'score value']`, one row per sample, saved at `self.path/self.name` with `torch.save()`. Already computed `(dataset, score name)` pairs are skipped, so calling a score again only computes the missing loaders.
+    Base class for scores. Scores are stored in a long-format `pandas.DataFrame` with columns `['dataset', 'score name', 'score value']`, one row per sample, saved at `self.path/self.name` with `torch.save()`. `compute()` skips the already computed `(dataset, score name)` pairs, so calling a score again only computes the missing loaders.
 
-    Inheriting classes must implement `_compute()`, called by `__call__()`, and `_save_fitting()`/`load()`. Scores which have a `fit()` save the fitted values at `self._fit_file` at the end of `fit()`, the ones which do not fit anything implement them as no-ops.
+    Inheriting classes must implement `compute()` and `_save_fitting()`/`load()`. Scores which have a `fit()` save the fitted values at `self._fit_file` at the end of `fit()`, the ones which do not fit anything implement them as no-ops.
     '''
 
     def __init__(self, **kwargs):
@@ -50,22 +50,6 @@ class Score(metaclass=abc.ABCMeta):
 
         return ((self._df['dataset'] == ds_key) & (self._df['score name'] == name)).any()
 
-    def _get_pending_loaders(self, **kwargs):
-        '''
-        Return the loaders which are still to compute.
-
-        Args:
-        - loaders (list[str]): loaders to consider.
-        - name (str): score name. Defaults to `self.name`.
-        '''
-        loaders = kwargs['loaders']
-        name = kwargs.get('name', self.name)
-
-        pending = [k for k in loaders if not self._is_computed(ds_key=k, name=name)]
-        if pending:
-            print(f'{name}: {len(pending)}/{len(loaders)} loaders still to compute: {pending}')
-        return pending
-
     def _record(self, **kwargs):
         '''
         Append the scores of a loader to `self._df` and save it to disk.
@@ -93,55 +77,15 @@ class Score(metaclass=abc.ABCMeta):
         torch.save(self._df, self._file)
         return
 
-    def remove(self, **kwargs):
-        '''
-        Remove rows from `self._df` and save it to disk. At least one of `dataset` or `name` must be given.
-
-        Args:
-        - dataset (str): remove the rows of this loader.
-        - name (str): remove the rows of this score name.
-        '''
-        dataset = kwargs.get('dataset', None)
-        name = kwargs.get('name', None)
-
-        if dataset is None and name is None:
-            raise ValueError("Provide at least one of 'dataset' or 'name'")
-
-        mask = pd.Series(True, index=self._df.index)
-        if dataset is not None:
-            mask &= self._df['dataset'] == dataset
-        if name is not None:
-            mask &= self._df['score name'] == name
-
-        self._df = self._df[~mask].reset_index(drop=True)
-
-        self.path.mkdir(parents=True, exist_ok=True)
-        torch.save(self._df, self._file)
-        return
-
     @property
     def df(self):
         return self._df
 
-    def __call__(self, **kwargs):
-        '''
-        Compute the score, skipping the loaders which were already computed. All `kwargs` are forwarded to `self._compute()`.
-
-        Args:
-        - loaders (list[str]): loaders to consider. If given, it is filtered down to the pending ones before calling `self._compute()`. Scores which do not take a `loaders` argument (e.g. the ones taking pairs of loaders) do their own filtering within `_compute()`.
-        '''
-        loaders = kwargs.get('loaders', None)
-
-        if loaders is not None:
-            pending = self._get_pending_loaders(loaders=loaders)
-            if len(pending) == 0:
-                return self._df
-            kwargs = {**kwargs, 'loaders': pending}
-
-        return self._compute(**kwargs)
-
     @abc.abstractmethod
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
+        '''
+        Compute the score, skipping the loaders which are already in `self._df`, and return it.
+        '''
         raise NotImplementedError()
 
     @abc.abstractmethod

@@ -31,7 +31,7 @@ class DOCTORScore(Score):
         Score.__init__(self, **kwargs)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         dss = kwargs['datasets']
         model = kwargs.get('model', None)
         loaders = kwargs.get('loaders') or list(dss._dss.keys())
@@ -43,15 +43,14 @@ class DOCTORScore(Score):
         output_key = kwargs.get('output_key', 'output')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+
         # the model is only used with the perturbed inputs
         if magnitude != 0:
             device = model.device
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _dss = dss._dss[ds_key]

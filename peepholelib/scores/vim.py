@@ -136,7 +136,7 @@ class VIMScore(Score):
         model.set_activations(save_input=False, save_output=False)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self._u is None:
             raise RuntimeError(f'{self.name} statistics not computed. Please run fit() first.')
 
@@ -150,6 +150,11 @@ class VIMScore(Score):
         output_key = kwargs.get('output_key', 'output')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+        if len(loaders) == 0:
+            return self._df
+
         device = model.device
 
         u = self._u.to(device)
@@ -161,10 +166,6 @@ class VIMScore(Score):
         model._model.eval()
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _dss = dss._dss[ds_key]

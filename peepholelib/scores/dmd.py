@@ -128,7 +128,7 @@ class DMDBase(Score):
         model.set_activations(save_input=False, save_output=False)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self._means is None:
             raise RuntimeError(f'{self.name} statistics not computed. Please run fit() first.')
 
@@ -141,6 +141,11 @@ class DMDBase(Score):
         input_key = kwargs.get('input_key', 'image')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+        if len(loaders) == 0:
+            return self._df
+
         device = model.device
 
         means = self._means.to(device)
@@ -152,10 +157,6 @@ class DMDBase(Score):
         model._model.eval()
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _dss = dss._dss[ds_key]
@@ -233,7 +234,7 @@ class DMDPlus(Score):
         Score.__init__(self, **kwargs)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         cvs = kwargs['coreavg']
         driller = kwargs['driller']
         layer = kwargs['layer']
@@ -241,13 +242,12 @@ class DMDPlus(Score):
         device = kwargs.get('device')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+
         n_classes = driller.nl_model
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _cvs = cvs._corevds[ds_key][layer].to(device)
@@ -363,7 +363,7 @@ class DMDScore(Score):
         self._save_fitting()
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if not self._fitted:
             raise RuntimeError(f'{self.name} regressors not computed. Please run fit() first.')
 
@@ -485,7 +485,7 @@ class DMDScoreConf(Score):
         self._save_fitting()
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self._lr is None:
             raise RuntimeError(f'{self.name} regressor not computed. Please run fit() first.')
 
@@ -494,11 +494,10 @@ class DMDScoreConf(Score):
         target_modules = kwargs.get('target_modules') or list(phs._phs[loaders[0]].keys())
         verbose = kwargs.get('verbose', False)
 
-        for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
 
+        for ds_key in loaders:
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             test_data = torch.stack(

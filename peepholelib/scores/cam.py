@@ -24,7 +24,7 @@ class CAMLinScore(Score):
         Score.__init__(self, **kwargs)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         dss = kwargs['datasets']
         phs = kwargs['peepholes']
         loaders = kwargs.get('loaders') or list(phs._phs.keys())
@@ -32,11 +32,10 @@ class CAMLinScore(Score):
         prediction_key = kwargs.get('prediction_key', 'pred')
         verbose = kwargs.get('verbose', False)
 
-        for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
 
+        for ds_key in loaders:
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             h = sum(phs._phs[ds_key][layer] for layer in target_modules)/len(target_modules)
@@ -175,7 +174,7 @@ class CAMExpScore(Score):
         self._save_fitting()
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if not self._fitted:
             raise RuntimeError(f'{self.name} thresholds not computed. Please run fit() first.')
 

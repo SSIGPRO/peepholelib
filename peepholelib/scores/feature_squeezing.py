@@ -25,7 +25,7 @@ class FeatureSqueezingScore(Score):
         Score.__init__(self, **kwargs)
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         dss = kwargs['datasets']
         loaders = kwargs.get('loaders') or list(dss._dss.keys())
         detector = kwargs['detector']
@@ -34,11 +34,10 @@ class FeatureSqueezingScore(Score):
         input_key = kwargs.get('input_key', 'image')
         verbose = kwargs.get('verbose', False)
 
-        for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
 
+        for ds_key in loaders:
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _dss = dss._dss[ds_key]

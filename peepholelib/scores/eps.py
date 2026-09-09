@@ -168,7 +168,7 @@ class EPSScore(Score):
         if verbose: print(f'{self.name} reference computed ({len(self._ref_eps)} samples).')
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self._ref_eps is None:
             raise RuntimeError(f'{self.name} reference not computed. Please run fit() first.')
 
@@ -182,6 +182,11 @@ class EPSScore(Score):
         device = kwargs.get('device', 'cpu')
         input_key = kwargs.get('input_key', 'image')
         verbose = kwargs.get('verbose', False)
+
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+        if len(loaders) == 0:
+            return self._df
 
         ref_eps = self._ref_eps.to(device)
         n_ref = ref_eps.shape[0]
@@ -197,10 +202,6 @@ class EPSScore(Score):
         ref_ref_term = ref_ref_sum/(n_ref**2)
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             _dss = dss._dss[ds_key]

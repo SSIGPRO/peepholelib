@@ -74,7 +74,7 @@ class RelUScore(Score):
         self._save_fitting()
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self._params is None:
             raise RuntimeError(f'{self.name} parameters not computed. Please run fit() first.')
 
@@ -84,15 +84,14 @@ class RelUScore(Score):
         output_key = kwargs.get('output_key', 'output')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+
         params = self._params.tril(diagonal=-1)
         params = params + params.T
         params = params/params.norm()
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             probs = sm(dss._dss[ds_key][output_key]/temperature, dim=-1)

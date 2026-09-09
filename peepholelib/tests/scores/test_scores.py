@@ -233,7 +233,7 @@ def check_cache(**kwargs):
     df = kwargs['df']
 
     _before = df['score value'].to_numpy().copy()
-    _after = score(**score_kwargs)['score value'].to_numpy()
+    _after = score.compute(**score_kwargs)['score value'].to_numpy()
 
     if len(_after) != len(_before):
         return f'{len(_after)} rows after re-calling, expected {len(_before)}'
@@ -263,8 +263,8 @@ def check_fitting_io(**kwargs):
         return 'load() returned 1 before fitting'
 
     try:
-        score._compute(**score_kwargs)
-        return '_compute() did not raise before fit()'
+        score.compute(**score_kwargs)
+        return 'compute() did not raise before fit()'
     except RuntimeError:
         pass
 
@@ -273,7 +273,7 @@ def check_fitting_io(**kwargs):
         return f'fit() did not write {score._fit_file.name}'
 
     torch.manual_seed(SEED)
-    _ref = score(**score_kwargs)['score value'].to_numpy().copy()
+    _ref = score.compute(**score_kwargs)['score value'].to_numpy().copy()
 
     # drop the scores, keep the fitting: a new instance must score from load() alone
     score._file.unlink()
@@ -282,7 +282,7 @@ def check_fitting_io(**kwargs):
         return 'load() did not return 1 with a saved fitting'
 
     torch.manual_seed(SEED)
-    _got = _score(**score_kwargs)['score value'].to_numpy()
+    _got = _score.compute(**score_kwargs)['score value'].to_numpy()
 
     if len(_got) != len(_ref):
         return f'{len(_got)} rows after load(), expected {len(_ref)}'
@@ -310,7 +310,7 @@ def check_other_loader(**kwargs):
         _fitting = score._fit_file.read_bytes()
 
         torch.manual_seed(SEED)
-        df = score(**{**score_kwargs, 'loaders': loaders})
+        df = score.compute(**{**score_kwargs, 'loaders': loaders})
 
         _values = df[df['dataset'] == other]['score value'].to_numpy().copy()
         return _values, _fitting, score._fit_file.read_bytes()
@@ -334,6 +334,43 @@ def check_other_loader(**kwargs):
         return f'"{other}" changed when computed before "{fit_key}", max |diff| = {abs(before_fit_key - alone).max():.2e}'
     return None
 
+def check_resume(**kwargs):
+    '''
+    A run with every pair already recorded must be a no-op, not an error. The pairwise scores fit one model per pair and skip the pairs already in `self.df`, so on such a run `fit()` has nothing to fit and leaves the fitted values empty: that must not be mistaken for a score which was never fitted.
+
+    Checked with the fitting file in place, where `load()` restores it, and with the fitting file deleted, where `fit()` is called and finds nothing pending.
+    '''
+    score_class = kwargs['score_class']
+    score_kwargs = kwargs['score_kwargs']
+    fit_kwargs = kwargs['fit_kwargs']
+    init_kwargs = kwargs.get('init_kwargs', {})
+    path = kwargs['path']
+
+    # first run: fit and score every pair
+    score = score_class(path=path/'resume', **init_kwargs)
+    score.fit(**fit_kwargs)
+    _ref = score.compute(**score_kwargs)['score value'].to_numpy().copy()
+
+    for _drop_fitting in [False, True]:
+        _score = score_class(path=path/'resume', **init_kwargs)
+        if _drop_fitting:
+            _score._fit_file.unlink()
+
+        _tag = 'without the fitting file' if _drop_fitting else 'with the fitting file'
+        if not _score.load():
+            _score.fit(**fit_kwargs)
+
+        try:
+            _got = _score.compute(**score_kwargs)['score value'].to_numpy()
+        except RuntimeError as e:
+            return f'resuming {_tag} raised: {e}'
+
+        if len(_got) != len(_ref):
+            return f'resuming {_tag} gave {len(_got)} rows, expected {len(_ref)}'
+        if (abs(_got - _ref) > 1e-9).any():
+            return f'resuming {_tag} changed the scores'
+    return None
+
 def check_extra_pair(**kwargs):
     '''
     The pairwise scores are fitted per pair. Fitting a second negative loader later must add it without touching the pair fitted first, and without refitting it.
@@ -349,7 +386,7 @@ def check_extra_pair(**kwargs):
 
     torch.manual_seed(SEED)
     score.fit(**fit_kwargs)
-    df = score(**score_kwargs)
+    df = score.compute(**score_kwargs)
 
     _names = sorted(set(df['score name']))
     _first = df[df['score name'] == _names[0]]['score value'].to_numpy().copy()
@@ -357,7 +394,7 @@ def check_extra_pair(**kwargs):
     # a second pair, fitted and scored on top of the first
     torch.manual_seed(SEED)
     score.fit(**{**fit_kwargs, 'neg_loaders': extra_neg_loaders})
-    df = score(**score_kwargs)
+    df = score.compute(**score_kwargs)
 
     _new_names = sorted(set(df['score name']))
     if len(_new_names) != len(_names) + len(extra_neg_loaders):
@@ -393,7 +430,7 @@ def run(**kwargs):
             score.fit(**fit_kwargs)
 
         torch.manual_seed(SEED)
-        df = score(**score_kwargs)
+        df = score.compute(**score_kwargs)
 
         errors = [
                 check_df(df=df, names=names, n_rows=n_rows),
@@ -427,6 +464,15 @@ def run(**kwargs):
 
     if extra_neg_loaders != None:
         with TemporaryDirectory(dir=path) as tmp:
+            errors.append(check_resume(
+                score_class = score_class,
+                init_kwargs = init_kwargs,
+                score_kwargs = score_kwargs,
+                fit_kwargs = fit_kwargs,
+                path = Path(tmp),
+                ))
+
+        with TemporaryDirectory(dir=path) as tmp:
             errors.append(check_extra_pair(
                 score_class = score_class,
                 init_kwargs = init_kwargs,
@@ -438,7 +484,7 @@ def run(**kwargs):
 
     errors = [e for e in errors if e != None]
     status = 'ok' if len(errors) == 0 else 'FAIL'
-    _extra = ' +other-loader' if other_loader != None else (' +extra-pair' if extra_neg_loaders != None else '')
+    _extra = ' +other-loader' if other_loader != None else (' +resume +extra-pair' if extra_neg_loaders != None else '')
     print(f'{name:24s} {status:5s} rows={n_rows:<5d} fit={"yes" if fit_kwargs != None else "no ":3s}{_extra}' +
           ('' if len(errors) == 0 else '\n' + '\n'.join(f'{"":26s}- {e}' for e in errors)))
     return len(errors)

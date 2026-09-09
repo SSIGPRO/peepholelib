@@ -86,7 +86,7 @@ class ProtoClassScore(Score):
         self._save_fitting()
         return
 
-    def _compute(self, **kwargs):
+    def compute(self, **kwargs):
         if self.proto is None:
             raise RuntimeError(f'{self.name} protoclasses not computed. Please run fit() first.')
 
@@ -97,6 +97,11 @@ class ProtoClassScore(Score):
         prediction_key = kwargs.get('prediction_key', 'pred')
         verbose = kwargs.get('verbose', False)
 
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+        if len(loaders) == 0:
+            return self._df
+
         # get conceptograms
         cpss = phs.get_conceptograms(
                 loaders = loaders,
@@ -105,10 +110,6 @@ class ProtoClassScore(Score):
                 )
 
         for ds_key in loaders:
-            if self._is_computed(ds_key=ds_key):
-                if verbose: print(ds_key, self.name, 'already computed, skipping')
-                continue
-
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
             cps = cpss[ds_key]
