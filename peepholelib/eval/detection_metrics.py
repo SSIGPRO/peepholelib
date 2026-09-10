@@ -64,6 +64,12 @@ def detection_metrics(**kwargs):
 
         return float(fpr[idx])
 
+    def det_error(**kwargs):
+        '''
+        Smallest balanced error over all the thresholds, `min(0.5*(1 - TPR) + 0.5*FPR)`. Unlike `'FPR@95'` it is not measured at a fixed TPR, so it stays informative when the positive samples cannot reach that TPR.
+        '''
+        return float((0.5*(1 - kwargs['tpr']) + 0.5*kwargs['fpr']).min())
+
     def aurc(**kwargs):
         '''
         Area under the risk-coverage curve.
@@ -85,6 +91,7 @@ def detection_metrics(**kwargs):
     metric_fns = {
             'AUROC': auroc,
             'FPR@95': fpr_at_95,
+            'DetError': det_error,
             'AURC': aurc,
             'E-AURC': e_aurc,
             }
