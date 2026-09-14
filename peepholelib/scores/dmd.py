@@ -1,31 +1,28 @@
-from math import floor, ceil
+from math import floor
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm
 
 import torch
-from torch.utils.data import DataLoader
 from peepholelib.scores.score import Score
 
 class DMDBase(Score):
     '''
-    Compute the DMD score based on the pre-logits activations (input activations of the last layer). `fit()` must be called once before scoring.
+    Compute the DMD score from the corevectors of a layer. `fit()` must be called once before scoring.
 
-    With `normalize=True` the features are L2-normalized before the statistics are computed and before scoring, which gives the Mahalanobis++ score.
+    The corevectors are taken as they were saved, so the score is agnostic to the dimensionality reduction used to compute them, the `Null` reducer included, and applies to any target module.
+
+    With `normalize=True` the corevectors are L2-normalized before the statistics are computed and before scoring, which gives the Mahalanobis++ score.
 
     References:
     - DMD: Lee et al., https://arxiv.org/abs/1807.03888
     - Mahalanobis++: https://arxiv.org/abs/2505.18032
 
     Args:
-    - normalize (bool): L2-normalize the features, giving the Mahalanobis++ score. Defaults to `False`.
-    - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
-    - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
-    - output_layer (str): classification head, as a key from the model `state_dict`. Should be the same one passed to `fit()`.
-    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `datasets._dss`. Defaults to `None`.
-    - batch_size (int): Defaults to 128.
-    - n_threads (int): dataloader workers. Defaults to 1.
-    - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
+    - normalize (bool): L2-normalize the corevectors, giving the Mahalanobis++ score. Defaults to `False`.
+    - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): corevectors.
+    - layer (str): target module whose corevectors are scored. Should be the same one passed to `fit()`.
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `corevectors._corevds`. Defaults to `None`.
+    - device (torch.device): device to perform the computations.
     - verbose (bool): print progress messages.
     '''
 
@@ -33,7 +30,7 @@ class DMDBase(Score):
         kwargs.setdefault('name', 'DMD-B')
         Score.__init__(self, **{k: v for k, v in kwargs.items() if k != 'normalize'})
 
-        # the features are L2-normalized in both fit() and compute(), so it belongs to the score
+        # the corevectors are L2-normalized in both fit() and compute(), so it belongs to the score
         self.normalize = kwargs.get('normalize', False)
 
         # computed in fit()
@@ -43,171 +40,94 @@ class DMDBase(Score):
 
     def fit(self, **kwargs):
         '''
-        Compute class-conditional means and shared precision matrix from the activations of the penultimate layer, L2-normalized when `self.normalize`.
-
-        The within-class scatter is accumulated in a single pass as `sum(x*x.T) - sum(n_c*mu_c*mu_c.T)`, so the activations do not need to be kept.
+        Compute the class-conditional means and the shared precision matrix from the corevectors of `fit_key`, L2-normalized when `self.normalize`.
 
         Args:
-        - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
-        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
-        - output_layer (str): classification head, as a key from the model `state_dict`. Its input activations are used as features.
+        - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): corevectors.
+        - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed datasets, providing the labels.
+        - layer (str): target module whose corevectors are used as features.
         - n_classes (int): number of classes.
         - fit_key (str): loader key used for fitting. Defaults to `'train'`.
-        - batch_size (int): Defaults to 128.
-        - n_threads (int): dataloader workers. Defaults to 1.
-        - input_key (str): key used to read the input images from the dataset. Defaults to `'image'`.
         - label_key (str): key used to read the class label from the dataset. Defaults to `'label'`.
+        - device (torch.device): device to perform the computations.
         - verbose (bool): print progress messages.
         '''
-        model = kwargs['model']
+        cvs = kwargs['corevectors']
         dss = kwargs['datasets']
-        layer = kwargs['output_layer']
+        layer = kwargs['layer']
         n_classes = kwargs['n_classes']
         fit_key = kwargs.get('fit_key', 'train')
-        bs = kwargs.get('batch_size', 128)
-        n_threads = kwargs.get('n_threads', 1)
-        input_key = kwargs.get('input_key', 'image')
         label_key = kwargs.get('label_key', 'label')
+        device = kwargs.get('device')
         verbose = kwargs.get('verbose', False)
 
-        device = model.device
+        if verbose: print('Fitting', self.name, 'on dataset', fit_key)
 
-        model.set_target_modules(target_modules=[layer])
-        model.set_activations(save_input=True, save_output=False)
-        model._model.eval()
+        _cvs = cvs._corevds[fit_key][layer].to(device).float()
 
-        _dss = dss._dss[fit_key]
-        n_samples = len(_dss)
+        if self.normalize:
+            _cvs = _cvs/_cvs.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
 
-        dl = DataLoader(
-                _dss,
-                batch_size = bs,
-                shuffle = False,
-                collate_fn = lambda x: x,
-                num_workers = n_threads,
-                pin_memory = (device != 'cpu')
-                )
+        labels = dss._dss[fit_key][:][label_key].long().to(_cvs.device)
+        n_samples, n_features = _cvs.shape
 
-        # dry run to get the number of features
-        with torch.no_grad():
-            sample = _dss[0:1]
-            _ = model(sample[input_key].to(device))
-            act0 = model._acts['in_activations'][layer]
-            n_features = act0.view(act0.shape[0], -1).shape[1]
+        counts = torch.zeros(n_classes, dtype=torch.long, device=_cvs.device)
+        sums = torch.zeros(n_classes, n_features, dtype=torch.float64, device=_cvs.device)
 
-        counts = torch.zeros(n_classes, dtype=torch.long)
-        sums = torch.zeros(n_classes, n_features, dtype=torch.float64)
-        second_moment = torch.zeros(n_features, n_features, dtype=torch.float64)
+        counts.index_add_(0, labels, torch.ones_like(labels))
+        sums.index_add_(0, labels, _cvs.double())
 
-        for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} fit'):
-            inputs = data[input_key].to(device)
-            _labels = data[label_key].long()
-
-            with torch.no_grad():
-                _ = model(inputs)
-
-            acts = model._acts['in_activations'][layer]
-            acts = acts.view(acts.shape[0], -1).detach().cpu()
-
-            if self.normalize:
-                acts = acts/acts.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
-
-            acts = acts.double()
-
-            sums.index_add_(0, _labels, acts)
-            counts.index_add_(0, _labels, torch.ones_like(_labels, dtype=torch.long))
-            second_moment.addmm_(acts.t(), acts)
-
-        means = torch.zeros(n_classes, n_features)
+        means = torch.zeros(n_classes, n_features, device=_cvs.device)
         non_empty = counts > 0
         means[non_empty] = (sums[non_empty]/counts[non_empty].unsqueeze(1)).float()
 
-        # sum_i (x_i - mu_yi)*(x_i - mu_yi).T = sum_i x_i*x_i.T - sum_c n_c*mu_c*mu_c.T
-        _means = means.double()
-        covariance_matrix = (second_moment - (counts.unsqueeze(1)*_means).t()@_means)/n_samples
+        centered = (_cvs - means[labels]).double()
+        covariance_matrix = centered.t()@centered/n_samples
 
         try:
             precision = torch.linalg.pinv(covariance_matrix, hermitian=True).float()
         except TypeError:
             precision = torch.linalg.pinv(covariance_matrix).float()
 
-        self._means = means
-        self._precision = precision
+        self._means = means.cpu()
+        self._precision = precision.cpu()
         self._save_fitting()
-
-        # reset the model to NOT get activations
-        model.set_activations(save_input=False, save_output=False)
         return
 
     def compute(self, **kwargs):
         if self._means is None:
             raise RuntimeError(f'{self.name} statistics not computed. Please run fit() first.')
 
-        model = kwargs['model']
-        dss = kwargs['datasets']
-        layer = kwargs['output_layer']
-        loaders = kwargs.get('loaders') or list(dss._dss.keys())
-        bs = kwargs.get('batch_size', 128)
-        n_threads = kwargs.get('n_threads', 1)
-        input_key = kwargs.get('input_key', 'image')
+        cvs = kwargs['corevectors']
+        layer = kwargs['layer']
+        loaders = kwargs.get('loaders') or list(cvs._corevds.keys())
+        device = kwargs.get('device')
         verbose = kwargs.get('verbose', False)
 
         # skip the loaders already computed
         loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
-        if len(loaders) == 0:
-            return self._df
-
-        device = model.device
 
         means = self._means.to(device)
         precision = self._precision.to(device)
         n_classes = means.shape[0]
 
-        model.set_target_modules(target_modules=[layer])
-        model.set_activations(save_input=True, save_output=False)
-        model._model.eval()
-
         for ds_key in loaders:
             if verbose: print('Computing', self.name, 'for dataset', ds_key)
 
-            _dss = dss._dss[ds_key]
-            n_samples = len(_dss)
-            gaussian_score = torch.empty(n_samples, n_classes)
+            _cvs = cvs._corevds[ds_key][layer].to(device).float()
 
-            dl = DataLoader(
-                    _dss,
-                    batch_size = bs,
-                    shuffle = False,
-                    collate_fn = lambda x: x,
-                    num_workers = n_threads
-                    )
+            if self.normalize:
+                _cvs = _cvs/_cvs.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
 
-            write_ptr = 0
-            for data in tqdm(dl, disable=not verbose, total=ceil(n_samples/bs), desc=f'{self.name} [{ds_key}]'):
-                inputs = data[input_key].to(device)
-                with torch.no_grad():
-                    _ = model(inputs)
+            gaussian_score = torch.zeros(len(_cvs), n_classes, device=_cvs.device)
+            for c in range(n_classes):
+                zero_f = _cvs - means[c]
 
-                acts = model._acts['in_activations'][layer]
-                acts = acts.view(acts.shape[0], -1)
+                # only the diagonal of zero_f@precision@zero_f.t() is needed
+                gaussian_score[:, c] = -0.5*((zero_f@precision)*zero_f).sum(dim=1)
 
-                if self.normalize:
-                    acts = acts/acts.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
-
-                bsz = acts.shape[0]
-                _gaussian_score = torch.zeros(bsz, n_classes, device=device)
-                for c in range(n_classes):
-                    zero_f = acts - means[c]
-                    _gaussian_score[:, c] = -0.5*(zero_f@precision@zero_f.t()).diag()
-
-                gaussian_score[write_ptr:write_ptr+bsz] = _gaussian_score.detach().cpu()
-                write_ptr += bsz
-
-            scores = gaussian_score.max(dim=1)[0].reshape(-1)
+            scores = gaussian_score.max(dim=1)[0].detach().cpu().reshape(-1)
             self._record(ds_key=ds_key, scores=scores)
-
-        # reset the model to NOT get activations
-        model.set_activations(save_input=False, save_output=False)
 
         return self._df
 
