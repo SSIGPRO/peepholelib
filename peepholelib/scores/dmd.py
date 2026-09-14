@@ -11,9 +11,14 @@ class DMDBase(Score):
     '''
     Compute the DMD score based on the pre-logits activations (input activations of the last layer). `fit()` must be called once before scoring.
 
-    Reference: Lee et al., https://arxiv.org/abs/1807.03888
+    With `normalize=True` the features are L2-normalized before the statistics are computed and before scoring, which gives the Mahalanobis++ score.
+
+    References:
+    - DMD: Lee et al., https://arxiv.org/abs/1807.03888
+    - Mahalanobis++: https://arxiv.org/abs/2505.18032
 
     Args:
+    - normalize (bool): L2-normalize the features, giving the Mahalanobis++ score. Defaults to `False`.
     - model (peepholelib.models.model_wrap.ModelWrap): wrapped model.
     - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): parsed dataset.
     - output_layer (str): classification head, as a key from the model `state_dict`. Should be the same one passed to `fit()`.
@@ -26,7 +31,10 @@ class DMDBase(Score):
 
     def __init__(self, **kwargs):
         kwargs.setdefault('name', 'DMD-B')
-        Score.__init__(self, **kwargs)
+        Score.__init__(self, **{k: v for k, v in kwargs.items() if k != 'normalize'})
+
+        # the features are L2-normalized in both fit() and compute(), so it belongs to the score
+        self.normalize = kwargs.get('normalize', False)
 
         # computed in fit()
         self._means = None
@@ -35,7 +43,7 @@ class DMDBase(Score):
 
     def fit(self, **kwargs):
         '''
-        Compute class-conditional means and shared precision matrix from the activations of the penultimate layer.
+        Compute class-conditional means and shared precision matrix from the activations of the penultimate layer, L2-normalized when `self.normalize`.
 
         The within-class scatter is accumulated in a single pass as `sum(x*x.T) - sum(n_c*mu_c*mu_c.T)`, so the activations do not need to be kept.
 
@@ -99,7 +107,12 @@ class DMDBase(Score):
                 _ = model(inputs)
 
             acts = model._acts['in_activations'][layer]
-            acts = acts.view(acts.shape[0], -1).detach().cpu().double()
+            acts = acts.view(acts.shape[0], -1).detach().cpu()
+
+            if self.normalize:
+                acts = acts/acts.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
+
+            acts = acts.double()
 
             sums.index_add_(0, _labels, acts)
             counts.index_add_(0, _labels, torch.ones_like(_labels, dtype=torch.long))
@@ -178,6 +191,9 @@ class DMDBase(Score):
                 acts = model._acts['in_activations'][layer]
                 acts = acts.view(acts.shape[0], -1)
 
+                if self.normalize:
+                    acts = acts/acts.norm(p=2, dim=1, keepdim=True).clamp(min=1e-12)
+
                 bsz = acts.shape[0]
                 _gaussian_score = torch.zeros(bsz, n_classes, device=device)
                 for c in range(n_classes):
@@ -200,6 +216,7 @@ class DMDBase(Score):
         torch.save({
             'means': self._means,
             'precision': self._precision,
+            'normalize': self.normalize,
             }, self._fit_file)
         return
 
@@ -208,62 +225,13 @@ class DMDBase(Score):
             return 0
 
         fitting = torch.load(self._fit_file, weights_only=False)
+
+        # the statistics are only valid for the features they were fitted on
+        if fitting['normalize'] != self.normalize:
+            raise RuntimeError(f'{self.name} was fitted with normalize={fitting["normalize"]}, but normalize={self.normalize} was passed. Please restart with normalize={fitting["normalize"]}.')
+
         self._means = fitting['means']
         self._precision = fitting['precision']
-        return 1
-
-class DMDPlus(Score):
-    '''
-    Compute the DMD+ score from L2-normalized corevectors, using the means and precision of a fitted `DeepMahalanobisDistance` driller.
-
-    Args:
-    - coreavg (peepholelib.coreVectors.coreVectors.CoreVectors): corevectors.
-    - driller (peepholelib.peepholes.DeepMahalanobisDistance.DMD.DeepMahalanobisDistance): fitted driller.
-    - layer (str): module used for the score computation.
-    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `coreavg._corevds`. Defaults to `None`.
-    - device (torch.device): device to perform the computations.
-    - verbose (bool): print progress messages.
-    '''
-
-    def __init__(self, **kwargs):
-        kwargs.setdefault('name', 'dmd_plus')
-        Score.__init__(self, **kwargs)
-        return
-
-    def compute(self, **kwargs):
-        cvs = kwargs['coreavg']
-        driller = kwargs['driller']
-        layer = kwargs['layer']
-        loaders = kwargs.get('loaders') or list(cvs._corevds.keys())
-        device = kwargs.get('device')
-        verbose = kwargs.get('verbose', False)
-
-        # skip the loaders already computed
-        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
-
-        n_classes = driller.nl_model
-
-        for ds_key in loaders:
-            if verbose: print('Computing', self.name, 'for dataset', ds_key)
-
-            _cvs = cvs._corevds[ds_key][layer].to(device)
-            _cvs_norm = _cvs/_cvs.norm(p=2, dim=1, keepdim=True)
-
-            n_samples = _cvs_norm.shape[0]
-            gaussian_score = torch.zeros(n_samples, n_classes)
-            for c in range(n_classes):
-                zero_f = _cvs_norm - driller._means[c].view(1, -1)
-                gaussian_score[:, c] = -(zero_f@driller._precision@zero_f.t()).diag()
-
-            scores = gaussian_score.max(dim=1)[0].detach().cpu().reshape(-1)
-            self._record(ds_key=ds_key, scores=scores)
-
-        return self._df
-
-    def _save_fitting(self, **kwargs):
-        return
-
-    def load(self, **kwargs):
         return 1
 
 class DMDScore(Score):
