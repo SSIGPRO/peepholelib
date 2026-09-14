@@ -3,3 +3,4 @@ build/
 *.ipynb_checkpoints*
 peepholelib.egg-info/
 *.vscode*
+__pycache__
