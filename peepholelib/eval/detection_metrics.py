@@ -31,21 +31,10 @@ def detection_metrics(**kwargs):
     scores = kwargs['scores']
     pos_key = kwargs['pos_loader']
     neg_keys = kwargs['neg_loaders']
-    metrics = kwargs.get('metrics')
-    dss = kwargs.get('datasets')
-    filter_key = kwargs.get('filter_key')
+    metrics = kwargs['metrics']
+    dss = kwargs['datasets']
+    filter_key = kwargs['filter_key']
     verbose = kwargs.get('verbose', False)
-
-    def risk_coverage(**kwargs):
-        '''
-        Risk of the accepted samples at each coverage, accepting the samples by decreasing score.
-        '''
-        values = kwargs['values']
-        labels = kwargs['labels']
-
-        order = values.argsort()[::-1]
-
-        return (1 - labels[order]).cumsum()/np.arange(1, len(labels)+1)
 
     def auroc(**kwargs):
         '''
@@ -74,7 +63,13 @@ def detection_metrics(**kwargs):
         '''
         Area under the risk-coverage curve.
         '''
-        return float(risk_coverage(**kwargs).mean())
+        values = kwargs['values']
+        labels = kwargs['labels']
+        order = values.argsort()[::-1]
+
+        rc =  (1 - labels[order]).cumsum()/np.arange(1, len(labels)+1).mean()
+
+        return rc
 
     def e_aurc(**kwargs):
         '''

@@ -8,10 +8,10 @@ def default_val_loop(self, **kwargs):
 
     Args:
     - epoch (int): current epoch index, passed by `Trainer._train_epoch`.
-    - dataset_key (str): key into `self._dls`/`self._iters` for the validation split. Defaults to `'val'`.
     """
     epoch = kwargs['epoch']
     dataset_key = kwargs.get('dataset_key', 'val')
+    save_every = kwargs.get('save_every', None)
 
     val_dl = self._dls[dataset_key]
     iter_val = self._iters[dataset_key]
@@ -73,7 +73,8 @@ def default_val_loop(self, **kwargs):
             print(f'  -> New best validation loss: {self.best_val_loss:.6f}')
     else:
         self.num_bad_epochs += 1
-
+    
+    stop = False
     # early stopping
     if self.num_bad_epochs > self.early_stopping_patience:
         if self.verbose:
@@ -81,6 +82,8 @@ def default_val_loop(self, **kwargs):
                 f'Early stopping: no improvement for {self.num_bad_epochs} epochs '
                 f'(patience={self.early_stopping_patience}).'
             )
-        return True
+        stop = True
 
-    return False
+    save = save_every != None and ((epoch+1)%save_every == 0)
+
+    return stop, save 
