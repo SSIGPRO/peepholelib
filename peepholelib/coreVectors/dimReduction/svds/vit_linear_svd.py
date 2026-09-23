@@ -36,14 +36,14 @@ class ViTLinearSVD(DRB):
         _layer = model._target_modules[layer]
         device = model.device
 
+        self.use_bias = _layer.bias is not None
         if file_path.exists():
             if verbose: print(f'File {file_path} exists. Loading from disk.')
             self._svd = torch.load(file_path, weights_only=True)
         else: 
             # computation
             W = _layer.weight
-            use_bias = _layer.bias is not None
-            if use_bias:
+            if self.use_bias:
                 W = torch.hstack((W, _layer.bias.reshape(-1, 1)))
             W = W.to(device)
             U, s, Vh = torch.svd_lowrank(W, q)
@@ -52,7 +52,6 @@ class ViTLinearSVD(DRB):
                     'U': U,
                     's': s,
                     'Vh': Vh.T,
-                    'use_bias': use_bias
                     }
 
             if verbose: print(f'saving {file_path}')
@@ -62,12 +61,6 @@ class ViTLinearSVD(DRB):
         self.reduct_m = self._svd['Vh'].detach().to(device)
         in_features = _layer.weight.shape[1]
         in_dim = self.reduct_m.shape[1]
-        if in_dim == in_features + 1:
-            self.use_bias = True
-        elif in_dim == in_features:
-            self.use_bias = False
-        else:
-            raise RuntimeError(f"Loaded SVD input dimension ({in_dim}) does not match layer input dimension ({in_features}) for layer {layer}.")
         
         return
         
