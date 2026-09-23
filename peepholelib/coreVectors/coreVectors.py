@@ -142,7 +142,7 @@ class CoreVectors():
             # compute corevectors 
             # ---------------------------------------
             if len(_mtc) == 0:
-                print(f'No new core vectors for {ds_key}, skipping')
+                if verbose: print(f'No new core vectors for {ds_key}, skipping')
                 self._corevds[ds_key] = _ModuleWiseStack(tds=_tds)
                 continue
     

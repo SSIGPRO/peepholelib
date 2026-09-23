@@ -48,11 +48,13 @@ class MRC(DrillBase):
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting MRC, usually 'train'. Defaults to 'train'.
         - label_key (str): Key used to read the class label from the dataset. Defaults to 'label'.
+        - trusted_only (bool): wheter to use only the trusted set (as defined in the paper) or all samples.
         '''
         _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         label_key = kwargs.get('label_key', 'label')
+        trusted_only = kwargs.get('trusted_only', True)
 
         dss = _dss._dss[loader]
         cvs = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module])
@@ -66,9 +68,11 @@ class MRC(DrillBase):
         # keep only correctly classified samples above the confidence threshold
         results = dss[:]['result'].to(self.device)
         confidence = dss[:]['output'].softmax(dim=1).max(dim=1).values.to(self.device)
-        mask = results & (confidence >= self.confidence_threshold)
-        cvs = cvs[mask]
-        labels = labels[mask]
+
+        if trusted_only:
+            mask = results & (confidence >= self.confidence_threshold)
+            cvs = cvs[mask]
+            labels = labels[mask]
 
         self._v_min = torch.zeros(self.nl_model, self.n_features, device=self.device)
         self._v_max = torch.zeros(self.nl_model, self.n_features, device=self.device)
