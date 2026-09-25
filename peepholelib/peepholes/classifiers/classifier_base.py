@@ -17,17 +17,13 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         self.label_key = kwargs.get('label_key', 'label')
         self.reducer = kwargs['reducer']
 
-<<<<<<< HEAD
         self.parser = self.reducer.parser 
-=======
-        self.parser = self.reducer.parser
-
->>>>>>> 0eef6bb (implement svg kernel svd (#127))
         # computed in inheriting classes 
         self._classifier = None
 
         # computer in compute_empirical_posteriors()
         self._empp = None
+        self._cluster_counts = None
 
         # defined in __init__(), used in save() and load()
         self._clas_path = None
@@ -40,23 +36,18 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         if self._empp_file.exists():
             self._empp = torch.load(self._empp_file, weights_only=True).to(self.device)
             self._empp = torch.load(self._empp_file).to(self.device)
-<<<<<<< HEAD
+            counts_file = self._empp_file.with_name(f'cluster_counts_{self.label_key}.pt')
+            if counts_file.exists():
+                self._cluster_counts = torch.load(counts_file).to(self.device)
         return 
 
     @abc.abstractmethod
     def save(self, **kwargs):
         if self._empp != None:
             torch.save(self._empp, self._empp_file)
-=======
-            ok = True
-        else:
-            ok = False
-        return ok 
-
-    @abc.abstractmethod
-    def save(self, **kwargs):
-        torch.save(self._empp, self._empp_file)
->>>>>>> 0eef6bb (implement svg kernel svd (#127))
+        if self._cluster_counts is not None:
+            counts_file = self._empp_file.with_name(f'cluster_counts_{self.label_key}.pt')
+            torch.save(self._cluster_counts.cpu(), counts_file)
         return 
 
     @abc.abstractmethod
@@ -78,23 +69,16 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
-<<<<<<< HEAD
         - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'.
-=======
-        - loader (str): Which loader used for computing the Empirical Posteriors, usually 'train'. Defaults to 'train'. 
-        - batch_size: Do the computation in batchs. Defaults to 512.
->>>>>>> 0eef6bb (implement svg kernel svd (#127))
+        - batch_size (int): Do the computation in batches. Defaults to 512.
         - verbose (Bool): Print progress messages. 
         '''
         
         dss = kwargs['datasets']
         cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
-<<<<<<< HEAD
-=======
         bs = kwargs.get('batch_size', 512)
         verbose = kwargs.get('verbose', False)
->>>>>>> 0eef6bb (implement svg kernel svd (#127))
 
         # pre-allocate empirical posteriors and cluster population counts
         _empp = torch.zeros(self.nl_class, self.nl_model)
@@ -120,8 +104,32 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
 
         # replace NaN with 0
         self._empp = torch.nan_to_num(_empp).to(self.device)
+        self._cluster_counts = _counts.squeeze(1).to(self.device)
         
         return 
+
+    def compute_cluster_counts(self, **kwargs):
+        """Count hard cluster assignments without changing the empirical posterior."""
+        cvs = kwargs['corevectors']
+        loader = kwargs.get('loader', 'train')
+
+        with torch.no_grad():
+            parsed = self.parser(cvs=cvs._corevds[loader][self.target_module])
+            data = parsed[0] if isinstance(parsed, tuple) else parsed
+            preds = self.predict(data.to(self.device))
+            preds = preds.detach().to(device='cpu', dtype=torch.long).reshape(-1)
+
+        self._cluster_counts = torch.bincount(preds, minlength=self.nl_class).to(self.device)
+        return self._cluster_counts
+
+    def save_cluster_counts(self):
+        """Save cluster populations without modifying the empirical posterior file."""
+        if self._cluster_counts is None:
+            raise RuntimeError('No cluster counts are available. Run compute_cluster_counts() first.')
+
+        counts_file = self._empp_file.with_name(f'cluster_counts_{self.label_key}.pt')
+        torch.save(self._cluster_counts.cpu(), counts_file)
+        return
     
     def _compute_concept_empirical_posteriors(self, **kwargs):
         '''
@@ -196,6 +204,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
 
         #_empp = torch.nan_to_num(_empp)
         self._empp = _empp
+        self._cluster_counts = _counts.squeeze(1).to(self.device)
         return
 
     def _compute_empirical_posteriors2(self, **kwargs):
@@ -257,6 +266,7 @@ class ClassifierBase(DrillBase, metaclass=abc.ABCMeta):
 
         #_empp = torch.nan_to_num(_empp)
         self._empp = _empp
+        self._cluster_counts = _counts.squeeze(1).to(self.device)
         return
     
     def __call__(self, **kwargs):
