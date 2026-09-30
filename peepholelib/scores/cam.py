@@ -25,10 +25,16 @@ class CAMLinScore(Score):
     def compute(self, **kwargs):
         dss = kwargs['datasets']
         phs = kwargs['peepholes']
-        loaders = kwargs.get('loaders') or list(phs._phs.keys())
-        target_modules = kwargs.get('target_modules') or list(phs._phs[loaders[0]].keys())
+        loaders = kwargs.get('loaders', None)
+        target_modules = kwargs.get('target_modules', None)
         prediction_key = kwargs.get('prediction_key', 'pred')
         verbose = kwargs.get('verbose', False)
+
+        if loaders == None:
+            loaders = list(phs._phs.keys())
+
+        if target_modules == None:
+            target_modules = list(phs._phs[loaders[0]].keys())
 
         # skip the loaders already computed
         loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
@@ -97,9 +103,12 @@ class CAMExpScore(Score):
         phs = kwargs['peepholes']
         pos_train_key = kwargs.get('pos_train_loader', 'val')
         neg_keys = kwargs['neg_loaders']
-        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_train_key].keys())
+        target_modules = kwargs.get('target_modules', None)
         prediction_key = kwargs.get('prediction_key', 'pred')
         verbose = kwargs.get('verbose', False)
+
+        if target_modules == None:
+            target_modules = list(phs._phs[pos_train_key].keys()
 
         pending_neg = {
                 k: v for k, v in neg_keys.items()
@@ -179,9 +188,12 @@ class CAMExpScore(Score):
         dss = kwargs['datasets']
         phs = kwargs['peepholes']
         pos_test_key = kwargs.get('pos_test_loader', 'test')
-        target_modules = kwargs.get('target_modules') or list(phs._phs[pos_test_key].keys())
+        target_modules = kwargs.get('target_modules', None)
         prediction_key = kwargs.get('prediction_key', 'pred')
         verbose = kwargs.get('verbose', False)
+
+        if target_modules == None:
+            target_modules = list(phs._phs[pos_test_key].keys()
 
         # accumulate h for the positive test loader once, outside the loop over negative pairs
         h_pos_test = sum(phs._phs[pos_test_key][layer] for layer in target_modules)
