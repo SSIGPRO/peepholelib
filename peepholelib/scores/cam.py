@@ -4,6 +4,55 @@ from sklearn.metrics import roc_curve
 import torch
 from peepholelib.scores.score import Score
 
+class CAMMaxScore(Score):
+    '''
+    Compute the CAM maximum score of all samples in `peepholes._phs[<loaders>]`. The per-class score is `1 - eta`, with `eta` the cost of each class averaged over `target_modules`, and the sample score is the maximum over all classes (the best-covered class), higher values indicate better coverage. Assumes the costs lie in [0, 1] (`normalize=True` in the driller).
+
+    Args:
+    - peepholes (peepholelib.peepholes.peepholes.Peepholes): peepholes containing the MRC cost `eta` for each loader and layer.
+    - loaders (list[str]): loaders to consider. If `None`, gets all loaders in `peepholes._phs`. Defaults to `None`.
+    - target_modules (list[str]): layers whose `eta` values are averaged. Defaults to all modules in `peepholes` for the first loader.
+    - verbose (bool): print progress messages.
+    '''
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'CAM-max')
+        Score.__init__(self, **kwargs)
+        return
+
+    def compute(self, **kwargs):
+        phs = kwargs['peepholes']
+        loaders = kwargs.get('loaders', None)
+        target_modules = kwargs.get('target_modules', None)
+        verbose = kwargs.get('verbose', False)
+
+        if loaders == None:
+            loaders = list(phs._phs.keys())
+
+        if target_modules == None:
+            target_modules = list(phs._phs[loaders[0]].keys())
+
+        # skip the loaders already computed
+        loaders = [k for k in loaders if not self._is_computed(ds_key=k)]
+
+        for ds_key in loaders:
+            if verbose: print('Computing', self.name, 'for dataset', ds_key)
+
+            h = sum(phs._phs[ds_key][layer] for layer in target_modules)/len(target_modules)
+
+            # score every class (1 - eta) and keep the maximum, i.e. the best-covered class
+            _scores = (1 - h).max(dim=1).values
+            scores = _scores.detach().cpu().reshape(-1)
+            self._record(ds_key=ds_key, scores=scores)
+
+        return self._df
+
+    def _save_fitting(self, **kwargs):
+        return
+
+    def load(self, **kwargs):
+        return 1
+
 class CAMLinScore(Score):
     '''
     Compute the CAM linear score of all samples in `peepholes._phs[<loaders>]`. The score is `1 - eta`, with `eta` the cost of the model's predicted class averaged over `target_modules`, higher values indicate better coverage. Assumes the costs lie in [0, 1] (`normalize=True` in the driller).
@@ -108,7 +157,7 @@ class CAMExpScore(Score):
         verbose = kwargs.get('verbose', False)
 
         if target_modules == None:
-            target_modules = list(phs._phs[pos_train_key].keys()
+            target_modules = list(phs._phs[pos_train_key].keys())
 
         pending_neg = {
                 k: v for k, v in neg_keys.items()
@@ -193,7 +242,7 @@ class CAMExpScore(Score):
         verbose = kwargs.get('verbose', False)
 
         if target_modules == None:
-            target_modules = list(phs._phs[pos_test_key].keys()
+            target_modules = list(phs._phs[pos_test_key].keys())
 
         # accumulate h for the positive test loader once, outside the loop over negative pairs
         h_pos_test = sum(phs._phs[pos_test_key][layer] for layer in target_modules)

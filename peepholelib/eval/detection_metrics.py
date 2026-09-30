@@ -31,9 +31,9 @@ def detection_metrics(**kwargs):
     scores = kwargs['scores']
     pos_key = kwargs['pos_loader']
     neg_keys = kwargs['neg_loaders']
-    metrics = kwargs['metrics']
-    dss = kwargs['datasets']
-    filter_key = kwargs['filter_key']
+    metrics = kwargs.get('metrics', None)
+    dss = kwargs.get('datasets', None)
+    filter_key = kwargs.get('filter_key', None)
     verbose = kwargs.get('verbose', False)
 
     def auroc(**kwargs):
@@ -91,7 +91,8 @@ def detection_metrics(**kwargs):
             'E-AURC': e_aurc,
             }
 
-    metrics = metrics or list(metric_fns.keys())
+    if metrics == None:
+        metrics = list(metric_fns.keys())
 
     unknown = [m for m in metrics if m not in metric_fns]
     if len(unknown) != 0:
