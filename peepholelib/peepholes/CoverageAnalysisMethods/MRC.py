@@ -3,6 +3,7 @@ from pathlib import Path
 
 # torch stuff
 import torch
+from torch.utils.data import DataLoader
 from peepholelib.peepholes.drill_base import DrillBase
 
 class MRC(DrillBase):
@@ -43,67 +44,87 @@ class MRC(DrillBase):
         '''
         Compute the DNN Signature for MRC (Algorithm 3).
 
+        The corevectors are read in batches with a `DataLoader`, so the full set is never held in
+        (GPU) memory at once. Two passes are made over the loader: the first accumulates the per-class
+        trusted range (`v_min`, `v_max`), the second accumulates the per-class sub-range frequencies
+        (`lambda`). Both passes are vectorized over the model classes.
+
         Args:
         - datasets (peepholelib.datasets.parsedDataset.ParsedDataset): Parsed datasets respective the `coreVectors`. Must contain `'result'` (correct classification flag) and `'output'` (raw model outputs) keys.
         - corevectors (peepholelib.coreVectors.coreVectors.CoreVectors): Corevectors respective the `datasets`.
         - loader (str): Which loader used for fitting MRC, usually 'train'. Defaults to 'train'.
         - label_key (str): Key used to read the class label from the dataset. Defaults to 'label'.
         - trusted_only (bool): wheter to use only the trusted set (as defined in the paper) or all samples.
+        - batch_size (int): Batch size of the corevectors `DataLoader`. Defaults to 1024.
+        - n_threads (int): `num_workers` passed to the `DataLoader`. Defaults to 1.
         '''
         _dss = kwargs['datasets']
         _cvs = kwargs['corevectors']
         loader = kwargs.get('loader', 'train')
         label_key = kwargs.get('label_key', 'label')
         trusted_only = kwargs.get('trusted_only', True)
+        bs = kwargs.get('batch_size', 1024)
+        n_threads = kwargs.get('n_threads', 1)
 
         dss = _dss._dss[loader]
-        cvs = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module])
 
-        if cvs.shape[1] != self.n_features:
-            raise RuntimeError(f'Something is weird...\n Data has shape {cvs.shape} after parsing corevectors with the parser {self.cv_parser}\nWhile n_features={self.n_features} was passed during construction.')
+        # validate the parsed corevector width on a single sample, before any allocation or iteration
+        _sample = self.cv_parser(cvs=_cvs._corevds[loader][self.target_module][0:1])
+        if _sample.shape[1] != self.n_features:
+            raise RuntimeError(f'Something is weird...\n Data has shape {_sample.shape} after parsing corevectors with the parser {self.cv_parser}\nWhile n_features={self.n_features} was passed during construction.')
 
-        cvs = cvs.to(self.device)
-        labels = dss[:][label_key].int().to(self.device)
+        # per-class v_min / v_max over the batched corevectors
+        self._v_min = torch.full((self.nl_model, self.n_features), float('inf'), device=self.device)
+        self._v_max = torch.full((self.nl_model, self.n_features), float('-inf'), device=self.device)
+        counts = torch.zeros(self.nl_model, device=self.device)
 
-        # keep only correctly classified samples above the confidence threshold
-        results = dss[:]['result'].to(self.device)
-        confidence = dss[:]['output'].softmax(dim=1).max(dim=1).values.to(self.device)
+        dss_dl = DataLoader(dss, batch_size=bs, collate_fn=lambda x: x, num_workers=n_threads)
+        cvs_dl = DataLoader(_cvs._corevds[loader], batch_size=bs, collate_fn=lambda x: x, num_workers=n_threads)
+        for _d, _c in zip(dss_dl, cvs_dl):
+            data = self.cv_parser(cvs=_c[self.target_module]).to(self.device)
+            labels = _d[label_key].long().to(self.device)
+            if trusted_only:
+                results = _d['result'].to(self.device)
+                confidence = _d['output'].softmax(dim=1).max(dim=1).values.to(self.device)
+                keep = results & (confidence >= self.confidence_threshold)
+                data, labels = data[keep], labels[keep]
+            if data.shape[0] == 0:
+                continue
+            idx = labels.unsqueeze(1).expand(-1, self.n_features)
+            self._v_min.scatter_reduce_(0, idx, data, reduce='amin', include_self=True)
+            self._v_max.scatter_reduce_(0, idx, data, reduce='amax', include_self=True)
+            counts.scatter_add_(0, labels, torch.ones_like(labels, dtype=counts.dtype))
 
-        if trusted_only:
-            mask = results & (confidence >= self.confidence_threshold)
-            cvs = cvs[mask]
-            labels = labels[mask]
+        empty = (counts == 0).nonzero(as_tuple=True)[0]
+        if len(empty) > 0:
+            raise RuntimeError(f'No samples for class(es) {empty.tolist()} in loader "{loader}". Cannot compute MRC signature for these classes.')
 
-        self._v_min = torch.zeros(self.nl_model, self.n_features, device=self.device)
-        self._v_max = torch.zeros(self.nl_model, self.n_features, device=self.device)
-        self._delta = torch.zeros(self.nl_model, self.n_features, device=self.device)
+        self._delta = (self._v_max - self._v_min)/self.Q
+
+        # avoid division by zero for neurons that are constant over a class
+        delta_safe = self._delta.clone()
+        delta_safe[delta_safe == 0] = 1
+
+        # per-class sub-range frequencies (lambda)
         self._lam = torch.zeros(self.nl_model, self.Q, self.n_features, device=self.device)
+        f_idx = torch.arange(self.n_features, device=self.device)
 
-        for i in range(self.nl_model):
-            data_i = cvs[labels == i]
-            n_i = data_i.shape[0]
+        for _d, _c in zip(dss_dl, cvs_dl):
+            data = self.cv_parser(cvs=_c[self.target_module]).to(self.device)
+            labels = _d[label_key].long().to(self.device)
+            if trusted_only:
+                results = _d['result'].to(self.device)
+                confidence = _d['output'].softmax(dim=1).max(dim=1).values.to(self.device)
+                keep = results & (confidence >= self.confidence_threshold)
+                data, labels = data[keep], labels[keep]
+            if data.shape[0] == 0:
+                continue
+            q_idx = (torch.ceil((data - self._v_min[labels])/delta_safe[labels]).long() - 1).clamp(min=0, max=self.Q - 1)
+            # flat index into (nl_model, Q, n_features): (class*Q + q)*n_features + feature
+            flat = ((labels.unsqueeze(1)*self.Q + q_idx)*self.n_features + f_idx).reshape(-1)
+            self._lam.view(-1).scatter_add_(0, flat, torch.ones(flat.numel(), device=self.device))
 
-            if n_i == 0:
-                raise RuntimeError(f'No samples for class {i} in loader "{loader}". Cannot compute MRC signature for this class.')
-
-            v_min = torch.amin(data_i, dim=0)
-            v_max = torch.amax(data_i, dim=0)
-            delta = (v_max - v_min)/self.Q
-
-            # avoid division by zero for neurons that are constant over S_i
-            delta_safe = delta.clone()
-            delta_safe[delta_safe == 0] = 1
-
-            q_idx = (torch.ceil((data_i - v_min)/delta_safe).long() - 1).clamp(min=0, max=self.Q - 1)
-
-            lam = torch.zeros(self.Q, self.n_features, device=self.device)
-            lam.scatter_add_(0, q_idx, torch.ones_like(data_i))
-            lam /= n_i
-
-            self._v_min[i] = v_min
-            self._v_max[i] = v_max
-            self._delta[i] = delta
-            self._lam[i] = lam
+        self._lam /= counts.view(self.nl_model, 1, 1)
         return
 
     def __call__(self, **kwargs):
