@@ -3,7 +3,8 @@ from pathlib import Path
 import torch
 import cupy as cp
 from cuml.decomposition import PCA
-
+from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator, PercentFormatter
 from peepholelib.peepholes.drill_base import DrillBase
 
 
@@ -14,8 +15,8 @@ class PCADriller(DrillBase):
     - n_components: defaults to 1; only PC1 is supported for now.
     - plot=True: saves a PC1 explained-variance bar chart after fitting.
     - label_key: defaults to 'label'. No clustering is performed yet.
-    - device: CUDA device used by cuML and PyTorch, defaults to 'cuda'.
-      Fitting requires cuML and CuPy. CPU fitting is not supported.
+    - device: passed through to DrillBase, like the other drillers.
+      Pass a CUDA device for fitting with cuML; CPU fitting is not supported.
 
     pcas[class_id] contains the mean, components, explained variance,
     explained variance ratio, and sample count. Components have shape
@@ -23,7 +24,6 @@ class PCADriller(DrillBase):
     """
 
     def __init__(self, *, n_components=1, plot=False, **kwargs):
-        kwargs.setdefault('device', 'cuda')
         super().__init__(**kwargs)
         self.device = torch.device(self.device)
         if n_components != 1:
@@ -85,7 +85,12 @@ class PCADriller(DrillBase):
             with torch.cuda.device(data.device), cp.cuda.Device(data.device.index):
 
                 torch.cuda.current_stream(data.device).synchronize()
-                pca = PCA(n_components=self.n_components, output_type='cupy')
+                pca = PCA(
+                    n_components=self.n_components,
+                    svd_solver="jacobi",
+                    iterated_power=100,
+                    output_type="cupy",
+                )                
                 pca.fit(cp.from_dlpack(samples), convert_dtype=False)
                 torch.cuda.synchronize(data.device)
                 pcas[class_id] = {
@@ -119,8 +124,6 @@ class PCADriller(DrillBase):
     def plot_explained_variance(self):
         """Save and return the path of the class-wise PC1 variance-ratio plot."""
         self._check_fitted()
-        from matplotlib import pyplot as plt
-        from matplotlib.ticker import MaxNLocator, PercentFormatter
 
         classes = list(range(self.nl_model))
         ratios = [self.pcas[j]['explained_variance_ratio'][0].item() for j in classes]
