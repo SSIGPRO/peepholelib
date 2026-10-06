@@ -69,8 +69,8 @@ class PCADriller(DrillBase):
         label_key = kwargs.get('label_key', self.label_key)
         datasets = kwargs['datasets']
         corevectors = kwargs['corevectors']
+        
         data = self._parse(corevectors._corevds[loader][self.target_module])
-        # cuML accepts float32/float64; promote half-precision inputs to float32.
         dtype = torch.float64 if data.dtype == torch.float64 else torch.float32
         data = data.to(device=self.device, dtype=dtype)
         labels = datasets._dss[loader][:][label_key].detach().to(data.device).reshape(-1)
