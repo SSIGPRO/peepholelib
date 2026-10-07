@@ -67,9 +67,9 @@ def detection_metrics(**kwargs):
         labels = kwargs['labels']
         order = values.argsort()[::-1]
 
-        rc =  (1 - labels[order]).cumsum()/np.arange(1, len(labels)+1).mean()
+        rc =  (1 - labels[order]).cumsum()/np.arange(1, len(labels)+1)
 
-        return rc
+        return rc.mean()
 
     def e_aurc(**kwargs):
         '''
