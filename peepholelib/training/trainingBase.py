@@ -47,7 +47,6 @@ class Trainer():
         - early_stopping_patience (int): stops the training if the validation loss does not improve for this amnount of epochs. Defaults to `inf`.
         - train_loop/val_loop/test_loop (callable): pluggable loop functions, default to `peepholelib.training.<train|val|test>_loops.default_<train|val|test>_loop`. Each accepts a `dataset_key` kwarg (default `'train'`/`'val'`/`'test'`) selecting which entry of `self._dls`/`self._iters` to use.
         - save_fn/load_fn: pluggable checkpoint function. Examples at `peepholelib.training.<save|load>_fns.py`.
-        - save_every (int): save the model every `save_every` training epochs. If `None` (Default) intermediate checkpoints are not saved.
         """
 
         # Preliminaries
@@ -107,7 +106,6 @@ class Trainer():
                 kwargs.get("load_fn", default_load),
                 self = self
                 )
-        self.save_every = kwargs.get("save_every", None)
         self.early_stopping_patience = kwargs.get("early_stopping_patience", float('inf'))
 
         # set file names
@@ -138,7 +136,6 @@ class Trainer():
         if self.best_model_file.exists():
             if self.verbose: print(f'Found best_model file {self.best_model_file.as_posix()}. Resume training')
             self.load_fn(file = self.best_model_file)
-            
         else:
             if self.verbose: print('No training ongoing, starting anew.')
             self.initial_epoch = 0
@@ -149,28 +146,10 @@ class Trainer():
         return
    
     def _train_epoch(self, epoch):
-        t0 = time()
         self.train_loop(epoch=epoch)
-        stop = self.val_loop(epoch=epoch)
+        stop, save = self.val_loop(epoch=epoch)
 
-        if self.save_every != None and self.save_every != 0:
-            if (epoch + 1) % self.save_every == 0:
-                self.save_fn(
-                        epoch = epoch,
-                        file = self.file.as_posix()+f'.{epoch}.pt',
-                        plot = True
-                        )
-
-        if self.verbose: 
-            print(
-                f'epoch {epoch} - train loss: {self.train_losses[epoch]:.4f} - '
-                f'val loss: {self.val_losses[epoch]:.4f} - '
-                f'train acc: {self.train_acc[epoch]*100:.2f} - '
-                f'val acc: {self.val_acc[epoch]*100:.2f} - '
-                f'time: {time()-t0:.2f}'
-            )
-
-        return stop 
+        return stop, save 
 
     def fit(self):
         if self.initial_epoch >= self.max_epochs:
@@ -180,7 +159,25 @@ class Trainer():
         if self.verbose: print('----- Training Model ----- ')
 
         for epoch in range(self.initial_epoch, self.max_epochs):
-            stop = self._train_epoch(epoch)
+            t0 = time()
+            stop, save = self._train_epoch(epoch)
+
+            if save:
+                self.save_fn(
+                        epoch = epoch,
+                        file = self.file.as_posix()+f'.{epoch}.pt',
+                        plot = True
+                        )
+
+            if self.verbose: 
+                print(
+                    f'epoch {epoch} - train loss: {self.train_losses[epoch]:.4f} - '
+                    f'val loss: {self.val_losses[epoch]:.4f} - '
+                    f'train acc: {self.train_acc[epoch]*100:.2f} - '
+                    f'val acc: {self.val_acc[epoch]*100:.2f} - '
+                    f'time: {time()-t0:.2f}'
+                )
+
             if stop: break
 
         return

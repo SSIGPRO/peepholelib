@@ -47,6 +47,7 @@ class Peepholes:
         - corevectors (peepholelib.coreVectors.coreVectors.coreVectors): corevectors respective the `datasets`.
         - loaders (list[str]): list of loaders, usually `['train', 'val', 'test']`. If `None` uses all loaders in `corevectors._corevds.keys()`. Defaults to dss `None`.
         - drillers (dict(str: peepholelib.peepholes.drill_base.DrillBase)):Dictionary where keys are the modules as in `model.state_dict` and values are classes extending `DrillBase`.
+        - label_key (str): key with label (target) in datasets.
         - names dict(str:str): Dictionary with key being the module name, and value being a name to append to the PTD file with the peepholes. Peepholes will be saved in a file with name `<loader>/<key>.<name>. If `None` it is ignored. Defaults to `None`.
         - batchsize (int): batchsize to process `corevectors` into `peepholes`. Defaults to 64.
         - retry_load_time (int): Time (in seconds) to wait before retrying loading an already existing PTD with peepholes. If `None` no further attempts are done. Defaults to `None`.
@@ -59,6 +60,7 @@ class Peepholes:
         cvs = kwargs['corevectors']
         loaders  = kwargs.get('loaders', None)
         self._drillers = kwargs['drillers']
+        label_key = kwargs.get('label_key', 'label')
         names = kwargs.get('names', None)
         bs = kwargs.get('batch_size', 64)
         rlt = kwargs.get('retry_load_time', None)
@@ -106,7 +108,7 @@ class Peepholes:
                     # dry run to get size and dtype
                     _cv = cvs._corevds[ds_key][mk][0:1]
                     _d = dss._dss[ds_key][0:1] 
-                    _ph = self._drillers[mk](cvs=_cv, dss=_d)
+                    _ph = self._drillers[mk](cvs=_cv, dss=_d, label_key=label_key)
 
                     # allocate peepholes 
                     _td[mk] = MMT.empty(shape=(n_samples,)+_ph.shape[1:], dtype=_ph.dtype)
@@ -144,7 +146,7 @@ class Peepholes:
                 _cvs = data[1]
                 phs = {mk: data[i+2] for i, mk in enumerate(_mtc)}
                 for mk in _mtc:
-                    phs[mk][mk] = self._drillers[mk](cvs=_cvs[mk], dss=_dss)
+                    phs[mk][mk] = self._drillers[mk](cvs=_cvs[mk], dss=_dss, label_key=label_key)
             
             # save as stacked
             self._phs[ds_key] = _ModuleWiseStack(tds=_tds)
