@@ -49,6 +49,7 @@ class ParsedDataset():
         - chunk_size (int | None): If set, split each loader into shards of at most `chunk_size` samples saved as separate files. If `None` (default) a single file is written as before.
         - batch_size (int): Creates dataloader to do computation in batch size. Defaults to 64.
         - n_threads (int): 'num_workers' passed to 'torch.utils.data.DataLoader'. Defaults to 1.
+        - dl_extra_kwargs (dict{str: value}): extra kwargs to pass to dataset_wraps dataloader apart from `batch_size`, `shuffle`, and `n_threads`. E.g. `collate_fn`. Defaults to `{}`.
         - verbose (bool): print progress messages.
         '''
         self.check_uncontexted()
@@ -59,6 +60,7 @@ class ParsedDataset():
         chunk_size = kwargs.get('chunk_size', None)
         bs = kwargs.get('batch_size', 64)
         n_threads = kwargs.get('n_threads', 1)
+        dl_extra_kwargs = kwargs.get('dl_extra_kwargs', {})
         verbose = kwargs.get('verbose', False)
 
         self.path.mkdir(parents=True, exist_ok=True)
@@ -82,7 +84,7 @@ class ParsedDataset():
                 _chunk_size = chunk_size if chunk_size is not None else n_samples
                 n_chunks = ceil(n_samples/_chunk_size)
 
-                sample = next(iter(DataLoader(dataset=ds_wrap.__dataset__[ds_key], batch_size=1, collate_fn=lambda x: x, shuffle=False)))
+                sample = next(iter(DataLoader(dataset=ds_wrap.__dataset__[ds_key], batch_size=1, **dl_extra_kwargs, shuffle=False)))
                 if keys_to_copy is None:
                     _ktc = list(sample.keys())
                 else:
@@ -135,8 +137,8 @@ class ParsedDataset():
                                 ds_wrap.__dataset__[ds_key],
                                 range(chunk_start, chunk_end)
                                 ),
-                            collate_fn = lambda x: x,
                             batch_size = bs,
+                            **dl_extra_kwargs,
                             shuffle = False
                             )
 
