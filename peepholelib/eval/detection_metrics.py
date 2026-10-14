@@ -67,6 +67,7 @@ def detection_metrics(**kwargs):
         labels = kwargs['labels']
         order = values.argsort()[::-1]
 
+        # risk at each coverage k: cumulative errors / k, averaged over all coverages
         rc =  (1 - labels[order]).cumsum()/np.arange(1, len(labels)+1)
 
         return rc.mean()

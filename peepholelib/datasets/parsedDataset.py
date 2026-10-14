@@ -137,6 +137,7 @@ class ParsedDataset():
                                 ds_wrap.__dataset__[ds_key],
                                 range(chunk_start, chunk_end)
                                 ),
+                            collate_fn = lambda x: x,
                             batch_size = bs,
                             **dl_extra_kwargs,
                             shuffle = False

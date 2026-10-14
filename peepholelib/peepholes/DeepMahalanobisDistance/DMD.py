@@ -3,6 +3,7 @@ import abc
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+from time import time
 
 # torch stuff
 import torch
@@ -129,6 +130,7 @@ class DeepMahalanobisDistance(DrillBase):
         self.model._model.zero_grad()
         _ = self.model(data.to(self.device))
         
+        t00 = time()
         if self.target_module == 'output':
             output = self.model(data.to(self.device))
         else:
@@ -142,6 +144,8 @@ class DeepMahalanobisDistance(DrillBase):
 
             gaussian_score[:,i] = term_gau.detach()
 
+        
+        t1 = 0 
         if magnitude != 0:
             # Input_processing
             sample_pred = gaussian_score.max(1)[1]
@@ -166,12 +170,15 @@ class DeepMahalanobisDistance(DrillBase):
                 output = self.model(tempInputs.to(self.device)) 
             else:
                 _parsed_act = self.act_parser(self.model._acts)[self.target_module]
+                t11 = time()
                 output = self.cv_parser(cvs=self.reducer(act_data=_parsed_act))
+                t1 = time()-t11 
 
             gaussian_score = torch.zeros(n_samples, self.nl_model, device=self.device)
             for i in range(self.nl_model):
                 zero_f = output - self._means[i]
                 term_gau = -0.5*torch.mm(torch.mm(zero_f, self._precision), zero_f.t()).diag()
                 gaussian_score[:, i] = term_gau
+        t0 = time() - t00
 
-        return gaussian_score
+        return gaussian_score, t0-t1
