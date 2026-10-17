@@ -36,7 +36,7 @@ class Trainer():
 
         - datasets (dict[str]: torch.utils.data.Dataset): dataset splits, e.g., `'train'`/`'val'`/`'test'`. A `DataLoader` is built once per key.
         - dataloader_kwargs (dict[str]: dict): kwargs for `torch.utils.data.DataLoader`, keyed by `dataset_key`, one dict per split (including `batch_size`, `shuffle`).
-        - iterations (dict[str]: int|"full"): number of iterations per epoch, keyed by `dataset_key`. `"full"` iterates over the whole split.
+        - iterations (dict[str]: int|"full"): number of iterations per epoch, keyed by `dataset_key`. `"full"` iterates over the whole split. A split with another value is shuffled by the trainer (unless it has a `sampler` or `batch_sampler`), so that the epochs do not iterate the same first samples.
         - in_parser (callable): function to map raw batch -> dict with tensors
         - out_parser (callable): function to map model output -> prediction tensor
         - loss_fn (callable)/loss_kwargs (dict): loss class and kwargs
@@ -69,9 +69,15 @@ class Trainer():
                 for _key, _ds in datasets.items()
                 }
 
+        # a split that is not iterated fully is shuffled, otherwise each epoch iterates the same first samples
         self._dls = {}
         for _key, _ds in datasets.items():
-            self._dls[_key] = DataLoader(dataset=_ds, **dataloader_kwargs[_key])
+            _kwargs = dict(dataloader_kwargs[_key])
+            if iterations[_key] != 'full' and 'sampler' not in _kwargs and 'batch_sampler' not in _kwargs:
+                if not _kwargs.get('shuffle', False) and self.verbose:
+                    print(f'Split \'{_key}\' is not iterated fully, shuffling it.')
+                _kwargs['shuffle'] = True
+            self._dls[_key] = DataLoader(dataset=_ds, **_kwargs)
 
         # Loss function
         _l = kwargs.get('loss_fn', torch.nn.CrossEntropyLoss)
