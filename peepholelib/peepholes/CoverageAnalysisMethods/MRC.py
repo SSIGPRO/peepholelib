@@ -65,11 +65,12 @@ class MRC(DrillBase):
         cvs = cvs.to(self.device)
         labels = dss[:][label_key].int().to(self.device)
 
-        # keep only correctly classified samples above the confidence threshold
-        results = dss[:]['result'].to(self.device)
-        confidence = dss[:]['output'].softmax(dim=1).max(dim=1).values.to(self.device)
+        
 
         if trusted_only:
+            # keep only correctly classified samples above the confidence threshold
+            results = dss[:]['result'].to(self.device)
+            confidence = dss[:]['output'].softmax(dim=1).max(dim=1).values.to(self.device)
             mask = results & (confidence >= self.confidence_threshold)
             cvs = cvs[mask]
             labels = labels[mask]
