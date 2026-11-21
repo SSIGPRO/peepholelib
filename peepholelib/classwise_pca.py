@@ -4,31 +4,37 @@ import torch
 
 
 class ClasswisePCA:
-    """Fit and save one PC1 vector per class at one model layer.
+    """Fit and save n_components principal vectors per class at one model layer.
 
     fit(activations=X, labels=y) accepts [N, D] features or [N, T, D]
-    tokens. By default tokens are flattened in order to [N, T * D],
+    tokens, or CNN feature maps [N, C, H, W] / [N, C, Z, H, W].
+    CNN maps always flatten channel and spatial axes into one feature vector
+    per sample; token_reduction only applies to three-dimensional inputs.
+    By default tokens are flattened in order to [N, T * D],
     retaining separate coordinates for each token position and feature.
     n_features defaults to None and is inferred during fit or restored by load.
-    An explicit n_features constrains the dimension after token selection.
+    An explicit n_features constrains the dimension after reduction/flattening.
     Alternatively, fit(model=wrap, datasets=ds) extracts training
     activations using ModelWrap and ParsedDataset.
 
-    save() writes <path>/<layer>/pca_vecs with all class PC1 vectors,
+    save() writes <path>/<layer>/pca_vecs with all retained class components,
     explained variance and absolute cosine similarities. Diagnostic PNG plots
     are saved alongside the archive.
     Model extraction filters by class before inference and holds only one
     class activation matrix at a time. full_pca=True computes exact PCA;
-    the default uses randomized PCA. Only PC1, the mean and diagnostics
+    the default uses randomized PCA. Only the requested components, the mean and diagnostics
     are retained, on CPU.
     """
 
     def __init__(self, *, path, layer, n_classes, n_features=None, device='cpu',
                  full_pca=False, svd_rank=11, niter=2, seed=0, token_reduction='flatten',
-                 activation_source='input', label_key='label'):
+                 activation_source='input', label_key='label', n_components=1):
         self.path = Path(path)
         self.target_module = layer
         self.n_classes = n_classes
+        if type(n_components) is not int or n_components < 1:
+            raise ValueError('n_components must be a positive integer.')
+        self.n_components = n_components
         self.n_features = n_features
         self.device = torch.device(device)
         if type(full_pca) is not bool:
@@ -62,7 +68,9 @@ class ClasswisePCA:
         if not isinstance(activations, torch.Tensor):
             raise ValueError('Pass a tensor of raw activations.')
         data = activations.detach()
-        if data.ndim == 3:
+        if data.ndim in (4, 5):
+            data = data.flatten(start_dim=1)
+        elif data.ndim == 3:
             if self.token_reduction == 'first':
                 data = data[:, 0, :]
             elif self.token_reduction == 'mean':
@@ -70,9 +78,9 @@ class ClasswisePCA:
             else:
                 data = data.flatten(start_dim=1)
         if data.ndim != 2 or data.shape[1] < 1:
-            raise ValueError('Expected nonempty features [N, D] after token selection.')
+            raise ValueError('Expected nonempty features [N, D] after reduction/flattening.')
         if self.n_features is not None and data.shape[1] != self.n_features:
-            raise ValueError(f'Expected [N, {self.n_features}] after token selection.')
+            raise ValueError(f'Expected [N, {self.n_features}] after reduction/flattening.')
         if not data.is_floating_point() or not torch.isfinite(data).all():
             raise ValueError('Activations must be finite floating-point values.')
         return data
@@ -129,6 +137,9 @@ class ClasswisePCA:
         dtype = torch.float64 if samples.dtype == torch.float64 else torch.float32
         samples = samples.to(device=self.device, dtype=dtype)
         n, d = samples.shape
+        if self.n_components > min(n - 1, d):
+            raise ValueError(f'Class {class_id}: n_components={self.n_components} exceeds '
+                             f'the centered PCA dimension {min(n - 1, d)}.')
         mean = samples.mean(dim=0)
         samples.sub_(mean)
         # Use all centered features for total variance, including in randomized mode.
@@ -150,13 +161,13 @@ class ClasswisePCA:
                     with torch.cuda.device(cuda_index):
                         torch.cuda.manual_seed(class_seed)
                 u, singular_values, v = torch.pca_lowrank(
-                    samples, q=min(self.svd_rank, n - 1, d),
+                    samples, q=min(max(self.svd_rank, self.n_components), n - 1, d),
                     center=False, niter=self.niter)
                 vh = v.T
-        s = singular_values[:1].cpu().clone()
+        s = singular_values[:self.n_components].cpu().clone()
         return {
             'mean': mean.cpu().clone(),
-            'components': vh[:1].cpu().clone(),
+            'components': vh[:self.n_components].cpu().clone(),
             'singular_values': s,
             'explained_variance': s.square() / (n - 1),
             'explained_variance_ratio': s.square() / total.cpu(),
@@ -170,7 +181,7 @@ class ClasswisePCA:
     @torch.no_grad()
     def fit(self, *, activations=None, labels=None, model=None, datasets=None,
             loader='train', input_key='image', label_key=None, batch_size=64):
-        """Fit one PC1 per class from raw training activations.
+        """Fit the requested principal components per class from raw training activations.
 
         Supply activations/labels OR model/datasets. Each class needs at least
         two observations and nonzero variance. Class IDs are 0..n_classes-1.
@@ -181,8 +192,9 @@ class ClasswisePCA:
         if activations is not None:
             if labels is None or model is not None or datasets is not None:
                 raise ValueError('Supply activations and labels, or model and datasets.')
-            if not isinstance(activations, torch.Tensor) or activations.ndim not in (2, 3):
-                raise ValueError('Pass activations as [N, D] or [N, T, D].')
+            if not isinstance(activations, torch.Tensor) or activations.ndim not in (2, 3, 4, 5):
+                raise ValueError('Pass activations as [N, D], [N, T, D], '
+                                 '[N, C, H, W], or [N, C, Z, H, W].')
             n_samples = len(activations)
             labels = torch.as_tensor(labels).detach().cpu().reshape(-1)
         else:
@@ -222,15 +234,19 @@ class ClasswisePCA:
 
     @property
     def pca_vecs(self):
-        """One unit PC1 vector per class, in class-ID order: [classes, features]."""
+        """Unit vectors: [classes, features] for PC1, otherwise [classes, PCs, features]."""
         self._check_fitted()
-        return torch.stack([self.pcas[c]['components'][0] for c in range(self.n_classes)])
+        vectors = torch.stack([self.pcas[c]['components'] for c in range(self.n_classes)])
+        return vectors[:, 0] if self.n_components == 1 else vectors
 
     @property
     def cosine_similarity_abs(self):
         """Absolute pairwise cosine similarities, invariant to PCA sign flips."""
-        vectors = torch.nn.functional.normalize(self.pca_vecs, dim=1)
-        return (vectors @ vectors.T).abs().clamp(0, 1)
+        vectors = torch.nn.functional.normalize(self.pca_vecs, dim=-1)
+        if self.n_components == 1:
+            return (vectors @ vectors.T).abs().clamp(0, 1)
+        vectors = vectors.permute(1, 0, 2)
+        return (vectors @ vectors.transpose(1, 2)).abs().clamp(0, 1)
 
     def _plots(self, ratios, cosine):
         """Render diagnostic PNGs for saving alongside the vector archive."""
@@ -244,25 +260,34 @@ class ClasswisePCA:
             FigureCanvasAgg(figure).print_png(buffer)
             return buffer.getvalue()
 
+        ratios = ratios[:, None] if ratios.ndim == 1 else ratios
+        cosine = cosine[None] if cosine.ndim == 2 else cosine
         figure = Figure(figsize=(max(8, min(20, self.n_classes * .3)), 4),
                         layout='constrained')
         ax = figure.subplots()
-        ax.bar(range(self.n_classes), ratios.tolist())
-        ax.set(xlabel='Class', ylabel='Variance explained by PC1', ylim=(0, 1),
-               title=f'PC1 explained variance by class — {self.target_module}')
+        width = .8 / self.n_components
+        positions = torch.arange(self.n_classes).numpy()
+        for component in range(self.n_components):
+            offset = (component - (self.n_components - 1) / 2) * width
+            ax.bar(positions + offset, ratios[:, component].tolist(), width=width,
+                   label=f'PC{component + 1}')
+        ax.set(xlabel='Class', ylabel='Explained variance', ylim=(0, 1),
+               title=f'Explained variance by class — {self.target_module}')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=20))
         ax.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+        ax.legend()
         explained_png = png(figure)
 
-        figure = Figure(figsize=(7, 6), layout='constrained')
-        ax = figure.subplots()
-        im = ax.imshow(cosine.numpy(), vmin=0, vmax=1, cmap='viridis',
-                       interpolation='nearest')
-        ax.set(xlabel='Class', ylabel='Class',
-               title=f'Absolute cosine similarity of PC1 — {self.target_module}')
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=20))
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=20))
-        figure.colorbar(im, ax=ax, label='|cos(PC1_i, PC1_j)|')
+        figure = Figure(figsize=(7 * self.n_components, 6), layout='constrained')
+        axes = figure.subplots(1, self.n_components, squeeze=False)[0]
+        for component, ax in enumerate(axes):
+            im = ax.imshow(cosine[component].numpy(), vmin=0, vmax=1, cmap='viridis',
+                           interpolation='nearest')
+            ax.set(xlabel='Class', ylabel='Class',
+                   title=f'Absolute cosine similarity of PC{component + 1} — {self.target_module}')
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=20))
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=20))
+            figure.colorbar(im, ax=ax, label=f'|cos(PC{component + 1}_i, PC{component + 1}_j)|')
         return {'explained_variance_png': explained_png,
                 'cosine_similarity_abs_png': png(figure)}
 
@@ -275,7 +300,8 @@ class ClasswisePCA:
         """
         self._check_fitted()
         state = {
-            'format_version': 8,
+            'format_version': 8 if self.n_components == 1 else 9,
+            'n_components': self.n_components,
             'solver': 'full' if self.full_pca else 'randomized',
             'full_pca': self.full_pca,
             'svd_rank': self.svd_rank,
@@ -294,7 +320,8 @@ class ClasswisePCA:
             'cosine_similarity_abs': self.cosine_similarity_abs.detach().cpu(),
         }
         for key in ('singular_values', 'explained_variance', 'explained_variance_ratio'):
-            state[key] = torch.cat([self.pcas[c][key] for c in range(self.n_classes)]).cpu()
+            values = torch.stack([self.pcas[c][key] for c in range(self.n_classes)]).cpu()
+            state[key] = values[:, 0] if self.n_components == 1 else values
         plots = self._plots(state['explained_variance_ratio'],
                             state['cosine_similarity_abs'])
         self._pca_folder.mkdir(parents=True, exist_ok=True)
@@ -305,12 +332,14 @@ class ClasswisePCA:
         return self._pca_path
 
     def load(self):
-        """Load all class PC1s from the single layer file; False if absent."""
+        """Load all retained class components; False if the layer file is absent."""
         if not self._pca_path.exists():
             return False
         state = torch.load(self._pca_path, weights_only=True, map_location='cpu')
-        if state.get('format_version') != 8:
+        if state.get('format_version') not in (8, 9):
             raise ValueError('Legacy PCA cache; refit with ClasswisePCA.')
+        if state.get('n_components', 1) != self.n_components:
+            raise ValueError('Saved PCA n_components does not match the requested count.')
         expected_solver = 'full' if self.full_pca else 'randomized'
         if state.get('solver') != expected_solver:
             raise ValueError(f'Saved PCA solver does not match {expected_solver!r}.')
@@ -326,19 +355,27 @@ class ClasswisePCA:
         saved_features = state['n_features']
         if type(saved_features) is not int or saved_features < 1:
             raise ValueError('Saved PCA n_features must be a positive integer.')
-        if (state['pca_vecs'].ndim != 2
-                or state['pca_vecs'].shape[1] != saved_features
-                or state['means'].shape != state['pca_vecs'].shape):
-            raise ValueError('Saved PCA dimensions do not match n_features.')
+        expected_shape = ((self.n_classes, saved_features) if self.n_components == 1 else
+                          (self.n_classes, self.n_components, saved_features))
+        if (tuple(state['pca_vecs'].shape) != expected_shape
+                or tuple(state['means'].shape) != (self.n_classes, saved_features)):
+            raise ValueError('Saved PCA dimensions do not match n_features/n_components.')
+        for key in ('singular_values', 'explained_variance', 'explained_variance_ratio'):
+            expected_stats = ((self.n_classes,) if self.n_components == 1 else
+                              (self.n_classes, self.n_components))
+            if tuple(state[key].shape) != expected_stats:
+                raise ValueError(f'Saved PCA {key} has invalid dimensions.')
         pcas = {}
         for c in range(self.n_classes):
             pcas[c] = {
                 'mean': state['means'][c].clone(),
-                'components': state['pca_vecs'][c:c+1].clone(),
+                'components': (state['pca_vecs'][c:c+1] if self.n_components == 1
+                               else state['pca_vecs'][c]).clone(),
                 'n_samples': state['n_samples'][c].item(),
             }
             for key in ('singular_values', 'explained_variance', 'explained_variance_ratio'):
-                pcas[c][key] = state[key][c:c+1].clone()
+                pcas[c][key] = (state[key][c:c+1] if self.n_components == 1
+                               else state[key][c]).clone()
         self.pcas = pcas
         self.n_features = saved_features
         self.label_key = state['label_key']
